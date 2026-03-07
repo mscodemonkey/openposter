@@ -46,6 +46,42 @@ function PosterGridIndexed({ items }: { items: PosterEntry[] }) {
   );
 }
 
+function relatedTypeLabel(p: PosterEntry): string {
+  if (p.media.type === "show") return "TV Show Box Set";
+  if (p.media.type === "collection") return "Movie Box Set";
+  return "Poster";
+}
+
+function relatedTargetHref(p: PosterEntry): string {
+  if (p.media.type === "show" && p.media.tmdb_id) return `/tv/${encodeURIComponent(String(p.media.tmdb_id))}/boxset`;
+  if (p.media.type === "collection" && p.media.tmdb_id) return `/movie/${encodeURIComponent(String(p.media.tmdb_id))}/boxset`;
+  return `/p/${encodeURIComponent(p.poster_id)}`;
+}
+
+function RelatedArtworkGrid({ items }: { items: PosterEntry[] }) {
+  return (
+    <div className="op-grid op-grid--posters op-mt-10">
+      {items.map((p) => {
+        const href = relatedTargetHref(p);
+        return (
+          <div key={p.poster_id} className="op-card">
+            <a className="op-link" href={href}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="op-img" src={p.assets.preview.url} alt={p.media.title || p.poster_id} />
+            </a>
+            <div className="op-poster-meta">
+              <a className="op-link" href={href}>
+                <div className="op-poster-title">{p.media.title || "(untitled)"}</div>
+                <div className="op-subtle op-text-sm">{relatedTypeLabel(p)}</div>
+              </a>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TedBoxSetDemo() {
   // NOTE: Reference layout inspired by mediux.pro/sets/41948 (willtong93)
   // These are downloaded assets stored locally under /public/demo/ted-boxset
@@ -154,7 +190,9 @@ function RelatedArtworkFromLinks({
         return;
       }
 
-      const posterLinks = links.filter((l) => typeof l.href === "string" && l.href.startsWith("/p/"));
+      const posterLinks = links.filter(
+        (l) => l.rel === "related" && typeof l.href === "string" && l.href.startsWith("/p/"),
+      );
       const posterIds = posterLinks.map((l) => decodeURIComponent(l.href.slice(3))).filter(Boolean);
 
       const fetched: PosterEntry[] = [];
@@ -176,7 +214,7 @@ function RelatedArtworkFromLinks({
   return (
     <section className="op-section">
       <h2 className="op-section-title">Related artwork</h2>
-      <PosterGridIndexed items={items} />
+      <RelatedArtworkGrid items={items} />
     </section>
   );
 }

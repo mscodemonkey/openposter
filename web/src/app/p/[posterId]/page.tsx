@@ -37,6 +37,14 @@ export default function PosterPage({
   params: Promise<{ posterId: string }>;
 }) {
   const { posterId } = use(params);
+  const decodedPosterId = useMemo(() => {
+    try {
+      return decodeURIComponent(posterId);
+    } catch {
+      return posterId;
+    }
+  }, [posterId]);
+
   const base = useMemo(() => INDEXER_BASE_URL.replace(/\/+$/, ""), []);
 
   const [poster, setPoster] = useState<PosterEntry | null>(null);
@@ -61,7 +69,7 @@ export default function PosterPage({
   useEffect(() => {
     void (async () => {
       try {
-        const r = await fetch(`${base}/v1/posters/${encodeURIComponent(posterId)}`);
+        const r = await fetch(`${base}/v1/posters/${encodeURIComponent(decodedPosterId)}`);
         if (!r.ok) throw new Error(`poster failed: ${r.status}`);
         const json = (await r.json()) as any;
         if (json?.error === "not_found") {
@@ -108,7 +116,7 @@ export default function PosterPage({
         setError(e?.message || String(e));
       }
     })();
-  }, [base, posterId]);
+  }, [base, decodedPosterId]);
 
   return (
     <div className="op-container">
@@ -290,7 +298,7 @@ export default function PosterPage({
                   setLinksStatus("Saved.");
 
                   // Re-fetch poster from indexer to update the page view.
-                  const pr = await fetch(`${base}/v1/posters/${encodeURIComponent(posterId)}`);
+                  const pr = await fetch(`${base}/v1/posters/${encodeURIComponent(decodedPosterId)}`);
                   if (pr.ok) {
                     const pjson = (await pr.json()) as PosterEntry;
                     setPoster(pjson);
