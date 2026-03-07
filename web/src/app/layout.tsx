@@ -26,7 +26,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <nav style={{ display: "flex", gap: 12, padding: 16, borderBottom: "1px solid #222" }}>
-          <a href="/">Browse</a>
+          <a href="/">Home</a>
+          <a href="/browse">Browse</a>
+          <a href="/creators">Creators</a>
           <a href="/connect">Connect node</a>
           <a href="/upload">Upload</a>
           <a href="/library">My library</a>

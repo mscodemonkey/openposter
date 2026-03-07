@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Query, Request
-from sqlalchemy import select
+from sqlalchemy import and_, desc, or_, select
 
 from ..db import IndexedPoster
+from ..pagination import decode_cursor, encode_cursor
 
 router = APIRouter()
 
@@ -24,8 +25,13 @@ async def search(
     MVP:
     - tmdb_id/type exact match
     - q performs a simple case-insensitive substring match on title
-    - cursor is accepted but ignored for now
+    - ordered by changed_at desc
+    - cursor is opaque (base64 json: {c:<changed_at>, p:<poster_id>})
     """
+
+    cur = decode_cursor(cursor) if cursor else None
+    cur_changed_at = cur.get("c") if isinstance(cur, dict) else None
+    cur_poster_id = cur.get("p") if isinstance(cur, dict) else None
 
     Session = request.app.state.Session
 
@@ -38,9 +44,25 @@ async def search(
         if q is not None and q.strip() != "":
             stmt = stmt.where(IndexedPoster.title.ilike(f"%{q.strip()}%"))
 
-        stmt = stmt.limit(limit)
+        if cur_changed_at and cur_poster_id:
+            stmt = stmt.where(
+                or_(
+                    IndexedPoster.changed_at < str(cur_changed_at),
+                    and_(
+                        IndexedPoster.changed_at == str(cur_changed_at),
+                        IndexedPoster.poster_id < str(cur_poster_id),
+                    ),
+                )
+            )
 
+        stmt = stmt.order_by(desc(IndexedPoster.changed_at), desc(IndexedPoster.poster_id)).limit(limit)
         rows = (await session.execute(stmt)).scalars().all()
 
     results = [json.loads(r.poster_json) for r in rows]
-    return {"results": results, "next_cursor": None}
+
+    next_cursor = None
+    if rows:
+        last = rows[-1]
+        next_cursor = encode_cursor({"c": last.changed_at, "p": last.poster_id})
+
+    return {"results": results, "next_cursor": next_cursor}

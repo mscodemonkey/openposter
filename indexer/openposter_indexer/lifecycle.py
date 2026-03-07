@@ -152,6 +152,7 @@ async def crawl_once(app: FastAPI) -> None:
                         title=(str(media.get("title")) if media.get("title") is not None else None),
                         year=(str(media.get("year")) if media.get("year") is not None else None),
                         creator_id=(str(creator.get("creator_id")) if creator.get("creator_id") is not None else None),
+                        creator_display_name=(str(creator.get("display_name")) if creator.get("display_name") is not None else None),
                         changed_at=changed_at or _now_rfc3339(),
                         poster_json=json.dumps(poster, separators=(",", ":")),
                     )
@@ -197,13 +198,24 @@ async def init_app_state(app: FastAPI) -> None:
             ("title", "ALTER TABLE indexed_posters ADD COLUMN title VARCHAR"),
             ("year", "ALTER TABLE indexed_posters ADD COLUMN year VARCHAR"),
             ("creator_id", "ALTER TABLE indexed_posters ADD COLUMN creator_id VARCHAR"),
+            ("creator_display_name", "ALTER TABLE indexed_posters ADD COLUMN creator_display_name VARCHAR"),
         ]:
             if col not in existing:
                 await conn.exec_driver_sql(ddl)
 
     # backfill denormalized columns for existing rows
     async with app.state.Session() as session:
-        rows = (await session.execute(select(IndexedPoster).where(IndexedPoster.title.is_(None)).limit(5000))).scalars().all()
+        rows = (
+            await session.execute(
+                select(IndexedPoster)
+                .where(
+                    (IndexedPoster.title.is_(None))
+                    | (IndexedPoster.creator_display_name.is_(None))
+                    | (IndexedPoster.creator_id.is_(None))
+                )
+                .limit(5000)
+            )
+        ).scalars().all()
         for r in rows:
             try:
                 poster = json.loads(r.poster_json)
@@ -212,6 +224,9 @@ async def init_app_state(app: FastAPI) -> None:
                 r.title = (str(media.get("title")) if media.get("title") is not None else None)
                 r.year = (str(media.get("year")) if media.get("year") is not None else None)
                 r.creator_id = (str(creator.get("creator_id")) if creator.get("creator_id") is not None else None)
+                r.creator_display_name = (
+                    str(creator.get("display_name")) if creator.get("display_name") is not None else None
+                )
             except Exception:
                 continue
         await session.commit()

@@ -24,6 +24,7 @@ class IndexedPoster(Base):
     title: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     year: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     creator_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    creator_display_name: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
 
     changed_at: Mapped[str] = mapped_column(String, index=True)
 
