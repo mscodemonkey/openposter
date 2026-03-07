@@ -225,7 +225,7 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
         <div>
           <h1 className="op-title-lg">{collection.media.title || "Movie Box Set"}</h1>
           <div className="op-subtle op-text-sm op-mt-6">
-            Rendered from indexer <code className="op-code">/v1/search</code>
+            Created by: <strong>{collection.creator.display_name}</strong>
           </div>
         </div>
       </div>

@@ -107,7 +107,13 @@
 }
 
 .op-grid--episode-cards {
-  grid-template-columns: repeat(3, 1fr);
+  /* Episode cards are short; pack them tightly rather than using wide 1fr columns */
+  grid-template-columns: repeat(auto-fill, max-content);
+  justify-content: start;
+}
+
+.op-grid--episode-cards .op-card {
+  width: fit-content;
 }
 
 /* Detail layout (poster page) */
