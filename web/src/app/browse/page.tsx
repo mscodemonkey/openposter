@@ -19,6 +19,7 @@ type FacetsResponse = {
 
 export default function BrowsePage() {
   const [creatorId, setCreatorId] = useState<string>("");
+  const [creatorQ, setCreatorQ] = useState<string>("");
   const [mediaType, setMediaType] = useState<string>("");
   const [tmdbId, setTmdbId] = useState<string>("");
   const [q, setQ] = useState<string>("");
@@ -37,12 +38,14 @@ export default function BrowsePage() {
 
   function syncUrl(next: {
     creatorId: string;
+    creatorQ: string;
     mediaType: string;
     tmdbId: string;
     q: string;
   }) {
     const sp = new URLSearchParams();
     if (next.creatorId) sp.set("creator_id", next.creatorId);
+    if (next.creatorQ) sp.set("creator_q", next.creatorQ);
     if (next.mediaType) sp.set("media_type", next.mediaType);
     if (next.tmdbId) sp.set("tmdb_id", next.tmdbId);
     if (next.q) sp.set("q", next.q);
@@ -56,11 +59,13 @@ export default function BrowsePage() {
     try {
       const sp = new URLSearchParams(window.location.search);
       setCreatorId(sp.get("creator_id") || "");
+      setCreatorQ(sp.get("creator_q") || "");
       setMediaType(sp.get("media_type") || "");
       setTmdbId(sp.get("tmdb_id") || "");
       setQ(sp.get("q") || "");
     } catch {
       setCreatorId("");
+      setCreatorQ("");
       setMediaType("");
       setTmdbId("");
       setQ("");
@@ -137,6 +142,7 @@ export default function BrowsePage() {
     try {
       syncUrl({
         creatorId,
+        creatorQ: creatorQ.trim(),
         mediaType,
         tmdbId: tmdbId.trim(),
         q: q.trim(),
@@ -147,7 +153,7 @@ export default function BrowsePage() {
 
     void loadFirst().catch((e) => setError(e?.message || String(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [creatorId, mediaType, tmdbId, q]);
+  }, [creatorId, creatorQ, mediaType, tmdbId, q]);
 
   return (
     <div className="op-container">
@@ -164,6 +170,7 @@ export default function BrowsePage() {
               className="op-btn op-btn--sm"
               onClick={() => {
                 setCreatorId("");
+                setCreatorQ("");
                 setMediaType("");
                 setTmdbId("");
                 setQ("");
@@ -194,6 +201,8 @@ export default function BrowsePage() {
               indexerBaseUrl={INDEXER_BASE_URL}
               value={creatorId}
               onChange={(v) => setCreatorId(v)}
+              query={creatorQ}
+              onQueryChange={(v) => setCreatorQ(v)}
               initialOptions={facets?.creators || []}
               label="Creator"
             />

@@ -19,6 +19,7 @@ export default function SearchPage() {
   const [q, setQ] = useState("");
   const [type, setType] = useState("");
   const [creatorId, setCreatorId] = useState("");
+  const [creatorQ, setCreatorQ] = useState("");
 
   const [facets, setFacets] = useState<FacetsResponse | null>(null);
 
@@ -45,6 +46,7 @@ export default function SearchPage() {
     if (q.trim() !== "") sp.set("q", q.trim());
     if (type.trim() !== "") sp.set("type", type.trim());
     if (creatorId.trim() !== "") sp.set("creator_id", creatorId.trim());
+    if (creatorQ.trim() !== "") sp.set("creator_q", creatorQ.trim());
     const qs = sp.toString();
     const next = qs ? `/search?${qs}` : "/search";
     window.history.replaceState(null, "", next);
@@ -88,6 +90,7 @@ export default function SearchPage() {
       setQ(sp.get("q") || "");
       setType(sp.get("type") || "");
       setCreatorId(sp.get("creator_id") || "");
+      setCreatorQ(sp.get("creator_q") || "");
     } catch {
       // ignore
     }
@@ -139,6 +142,8 @@ export default function SearchPage() {
               indexerBaseUrl={INDEXER_BASE_URL}
               value={creatorId}
               onChange={(v) => setCreatorId(v)}
+              query={creatorQ}
+              onQueryChange={(v) => setCreatorQ(v)}
               initialOptions={facets?.creators || []}
               label="Creator"
             />

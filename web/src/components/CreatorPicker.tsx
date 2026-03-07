@@ -22,18 +22,28 @@ export default function CreatorPicker({
   onChange,
   initialOptions,
   label,
+  query,
+  onQueryChange,
 }: {
   indexerBaseUrl: string;
   value: string;
   onChange: (creatorId: string) => void;
   initialOptions: CreatorOption[];
   label: string;
+  query?: string;
+  onQueryChange?: (q: string) => void;
 }) {
   const base = useMemo(() => indexerBaseUrl.replace(/\/+$/, ""), [indexerBaseUrl]);
 
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(query || "");
   const [options, setOptions] = useState<CreatorOption[]>(initialOptions);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // controlled query support (so parent can sync query to URL)
+    if (typeof query === "string" && query !== q) setQ(query);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   useEffect(() => {
     // If initialOptions changes (facets refresh), keep options in sync when not actively searching.
@@ -75,7 +85,11 @@ export default function CreatorPicker({
       <input
         className="op-input"
         value={q}
-        onChange={(e) => setQ(e.target.value)}
+        onChange={(e) => {
+          const next = e.target.value;
+          setQ(next);
+          onQueryChange?.(next);
+        }}
         placeholder="Search creators…"
       />
       <select
