@@ -50,8 +50,8 @@ function TedMovieBoxSetDemo() {
       <div className="op-row op-row--between">
         <div>
           <h1 className="op-title-lg">ted collection Movie Box Set</h1>
-          <div className="op-subtle op-text-sm op-mt-6">
-            Reference creator: <strong>willtong93</strong>
+          <div className="op-subtle op-mt-6 op-title-meta">
+            MOVIE BOX SET | 2012 | willtong93
           </div>
         </div>
         <a className="op-link op-text-sm" href="/tv/201834/boxset">
@@ -155,8 +155,8 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
         <div className="op-row op-row--between">
           <div>
             <h1 className="op-title-lg">{collection.media.title || "Movie Box Set"}</h1>
-            <div className="op-subtle op-text-sm op-mt-6">
-              Created by: <strong>{collection.creator.display_name}</strong>
+            <div className="op-subtle op-mt-6 op-title-meta">
+              MOVIE BOX SET{collection.media.year ? ` | ${collection.media.year}` : ""} | {collection.creator.display_name}
             </div>
           </div>
         </div>
