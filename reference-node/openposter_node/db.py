@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import Integer, String, DateTime
+from sqlalchemy import Integer, String, Text, DateTime
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -22,6 +22,11 @@ class Poster(Base):
 
     media_type: Mapped[str] = mapped_column(String)
     tmdb_id: Mapped[int] = mapped_column(Integer, index=True)
+    # TV grouping
+    show_tmdb_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    season_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    episode_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -32,6 +37,9 @@ class Poster(Base):
     attribution_license: Mapped[str] = mapped_column(String)
     attribution_redistribution: Mapped[str] = mapped_column(String)
     attribution_source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Optional creator-authored links (JSON array)
+    links_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     preview_hash: Mapped[str] = mapped_column(String)
     preview_bytes: Mapped[int] = mapped_column(Integer)

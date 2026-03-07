@@ -49,6 +49,10 @@ async def init_app_state(app: FastAPI) -> None:
             ("created_at", "ALTER TABLE posters ADD COLUMN created_at TEXT"),
             ("updated_at", "ALTER TABLE posters ADD COLUMN updated_at TEXT"),
             ("deleted_at", "ALTER TABLE posters ADD COLUMN deleted_at TEXT"),
+            ("show_tmdb_id", "ALTER TABLE posters ADD COLUMN show_tmdb_id INTEGER"),
+            ("season_number", "ALTER TABLE posters ADD COLUMN season_number INTEGER"),
+            ("episode_number", "ALTER TABLE posters ADD COLUMN episode_number INTEGER"),
+            ("links_json", "ALTER TABLE posters ADD COLUMN links_json TEXT"),
         ]:
             if name not in col_names:
                 await conn.exec_driver_sql(ddl)

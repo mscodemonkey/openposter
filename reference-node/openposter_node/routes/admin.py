@@ -55,10 +55,14 @@ async def admin_upload_poster(
     request: Request,
     tmdb_id: int = Form(...),
     media_type: str = Form(...),
+    show_tmdb_id: int | None = Form(None),
+    season_number: int | None = Form(None),
+    episode_number: int | None = Form(None),
     title: str | None = Form(None),
     year: int | None = Form(None),
     creator_id: str = Form(...),
     creator_display_name: str = Form(...),
+    links_json: str | None = Form(None),
     attribution_license: str = Form("all-rights-reserved"),
     attribution_redistribution: str = Form("mirrors-approved"),
     preview: UploadFile = File(...),
@@ -73,6 +77,20 @@ async def admin_upload_poster(
 
     if media_type not in {"movie", "show", "season", "episode", "collection"}:
         raise http_error(400, "invalid_request", "invalid media_type")
+
+    if media_type in {"season", "episode"} and show_tmdb_id is None:
+        raise http_error(400, "invalid_request", "show_tmdb_id is required for season/episode")
+
+    # validate links_json if provided
+    if links_json:
+        try:
+            import json as _json
+
+            v = _json.loads(links_json)
+            if not isinstance(v, list):
+                raise ValueError("links_json must be a JSON array")
+        except Exception as e:
+            raise http_error(400, "invalid_request", f"invalid links_json: {e}")
 
     cfg = request.app.state.cfg
     node_id = request.app.state.node_id
@@ -100,6 +118,9 @@ async def admin_upload_poster(
             deleted_at=None,
             media_type=media_type,
             tmdb_id=tmdb_id,
+            show_tmdb_id=show_tmdb_id,
+            season_number=season_number,
+            episode_number=episode_number,
             title=title,
             year=year,
             creator_id=creator_id,
@@ -108,6 +129,7 @@ async def admin_upload_poster(
             attribution_license=attribution_license,
             attribution_redistribution=attribution_redistribution,
             attribution_source_url=None,
+            links_json=links_json,
             preview_hash=preview_hash,
             preview_bytes=preview_bytes,
             preview_mime=preview_mime,

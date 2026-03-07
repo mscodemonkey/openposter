@@ -66,19 +66,35 @@ async def list_posters(
         mirror_preview_urls = [f"{m}/v1/blobs/{p.preview_hash}" for m in cfg.mirrors]
         mirror_full_urls = [f"{m}/v1/blobs/{p.full_hash}" for m in cfg.mirrors]
 
+        media = {
+            "type": p.media_type,
+            "tmdb_id": p.tmdb_id,
+            "title": p.title,
+            "year": p.year,
+        }
+        if p.show_tmdb_id is not None:
+            media["show_tmdb_id"] = p.show_tmdb_id
+        if p.season_number is not None:
+            media["season_number"] = p.season_number
+        if p.episode_number is not None:
+            media["episode_number"] = p.episode_number
+
+        links = None
+        if p.links_json:
+            try:
+                links = json.loads(p.links_json)
+            except Exception:
+                links = None
+
         entry = {
             "poster_id": p.poster_id,
-            "media": {
-                "type": p.media_type,
-                "tmdb_id": p.tmdb_id,
-                "title": p.title,
-                "year": p.year,
-            },
+            "media": media,
             "creator": {
                 "creator_id": p.creator_id,
                 "display_name": p.creator_display_name,
                 "home_node": p.creator_home_node,
             },
+            "links": links,
             "assets": {
                 "preview": {
                     "hash": p.preview_hash,

@@ -14,6 +14,13 @@ export type PosterEntry = {
     display_name: string;
     home_node: string;
   };
+  // Optional extension: creator-authored related links
+  links?: Array<{
+    rel: string;
+    href: string;
+    title?: string;
+    media?: { type?: string; tmdb_id?: number };
+  }> | null;
   assets: {
     preview: { url: string; hash: string; mime: string };
     full: { url: string; hash: string; mime: string; access: string };
