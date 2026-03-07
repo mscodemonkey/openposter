@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 
 from .config import load_config
-from .db import Base, IndexedPoster, NodeCursor, make_engine, make_sessionmaker
+from .db import Base, IndexedPoster, NodeCursor, NodeHealth, make_engine, make_sessionmaker
 
 
 def _now_rfc3339() -> str:
@@ -49,6 +49,18 @@ async def crawl_once(app: FastAPI) -> None:
                 cur = (await session.execute(select(NodeCursor).where(NodeCursor.node_url == node))).scalar_one_or_none()
                 since = cur.since if cur else None
 
+                nh = (await session.execute(select(NodeHealth).where(NodeHealth.node_url == node))).scalar_one_or_none()
+                if nh is None:
+                    nh = NodeHealth(
+                        node_url=node,
+                        status="unknown",
+                        last_crawled_at=None,
+                        last_seen_up=None,
+                        down_since=None,
+                        consecutive_failures="0",
+                    )
+                    session.add(nh)
+
                 params = {}
                 if since:
                     params["since"] = since
@@ -62,8 +74,22 @@ async def crawl_once(app: FastAPI) -> None:
                         r = await client.get(node + "/v1/changes", params=params)
                     r.raise_for_status()
                     payload = r.json()
+
+                    nh.status = "up"
+                    nh.last_seen_up = _now_rfc3339()
+                    nh.down_since = None
+                    nh.consecutive_failures = "0"
                 except Exception:
+                    # mark failure
+                    nh.last_crawled_at = _now_rfc3339()
+                    fails = int(nh.consecutive_failures or "0") + 1
+                    nh.consecutive_failures = str(fails)
+                    if nh.status != "down":
+                        nh.status = "down"
+                        nh.down_since = nh.down_since or _now_rfc3339()
                     continue
+
+                nh.last_crawled_at = _now_rfc3339()
 
                 changes = payload.get("changes", [])
                 next_since = payload.get("next_since")

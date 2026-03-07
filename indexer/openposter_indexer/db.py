@@ -32,6 +32,18 @@ class NodeCursor(Base):
     since: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class NodeHealth(Base):
+    __tablename__ = "node_health"
+
+    node_url: Mapped[str] = mapped_column(String, primary_key=True)
+
+    status: Mapped[str] = mapped_column(String)  # up|down|unknown
+    last_crawled_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_seen_up: Mapped[str | None] = mapped_column(String, nullable=True)
+    down_since: Mapped[str | None] = mapped_column(String, nullable=True)
+    consecutive_failures: Mapped[str] = mapped_column(String)  # store as string int for sqlite simplicity
+
+
 def make_engine(data_dir: Path):
     db_path = data_dir / "indexer.sqlite"
     return create_async_engine(f"sqlite+aiosqlite:///{db_path}", future=True)
