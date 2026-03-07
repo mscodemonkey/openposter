@@ -95,6 +95,7 @@ Services:
 - Node A: http://localhost:8081
 - Node B: http://localhost:8082
 - Mirror for A: http://localhost:8083
+- Directory (bootstrap): http://localhost:8084
 - Indexer: http://localhost:8090
 
 Then open:

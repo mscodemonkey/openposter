@@ -60,12 +60,33 @@ services:
     volumes:
       - ./data-mirror:/data
 
+  directory:
+    # A simple "directory" node that only exists to accept registrations and serve /v1/nodes.
+    # This is a bootstrap component for real-world testing.
+    build: .
+    ports:
+      - "8084:8080"
+    environment:
+      - OPENPOSTER_BASE_URL=http://localhost:8084
+      - OPENPOSTER_NODE_NAME=OpenPoster Directory
+      - OPENPOSTER_OPERATOR_NAME=Directory Operator
+      - OPENPOSTER_ADMIN_TOKEN=dev-admin
+      - OPENPOSTER_ALLOW_PRIVATE_NODES=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read(); print('ok')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - ./data-directory:/data
+
   indexer:
     build: ../indexer
     ports:
       - "8090:8090"
     environment:
-      - OPENPOSTER_INDEXER_SEEDS=http://node_a:8080
+      - OPENPOSTER_INDEXER_SEEDS=http://directory:8080
       - OPENPOSTER_INDEXER_POLL_SECONDS=10
     restart: unless-stopped
     healthcheck:

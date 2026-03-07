@@ -29,6 +29,23 @@ A proper "mirror sync" flow will be added later.
 
 The reference node can import `seed.json` on first run.
 
+## Uploading posters (beta helper)
+
+If you set `OPENPOSTER_ADMIN_TOKEN`, you can upload posters using the admin API.
+
+A small helper script is included:
+
+```bash
+python tools/upload_poster.py \
+  --base-url http://localhost:8081 \
+  --admin-token dev-admin \
+  --tmdb-id 2316 --media-type show \
+  --title "The Office" --year 2005 \
+  --creator-id cr_creator_a --creator-name "Creator A" \
+  --preview ./path/to/preview.jpg \
+  --full ./path/to/full.png
+```
+
 1) Place data under `reference-node/data-a/` (or `data/` for single-node).
 2) Use the helper script to append seed rows and copy blobs into the blob store:
 
