@@ -128,8 +128,10 @@ function TedBoxSetDemo() {
   const sortedSeasonGroups = [...seasonGroups].sort((a, b) => b.season - a.season);
 
   return (
-    <div>
-      <div className="op-row op-row--between">
+    <div className="op-page">
+      <div className="op-page-bg" style={{ backgroundImage: `url(${main[0]?.src})` }} />
+      <div className="op-page-content">
+        <div className="op-row op-row--between">
         <div>
           <h1 className="op-title-lg">ted (2024) Box Set</h1>
           <div className="op-subtle op-text-sm op-mt-6">
@@ -223,6 +225,7 @@ function TedBoxSetDemo() {
         </div>
       </section>
       </section>
+      </div>
     </div>
   );
 }
@@ -320,8 +323,10 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
   }
 
   return (
-    <div>
-      <div className="op-row op-row--between">
+    <div className="op-page">
+      <div className="op-page-bg" style={{ backgroundImage: `url(${data.show[0]?.assets.preview.url})` }} />
+      <div className="op-page-content">
+        <div className="op-row op-row--between">
         <div>
           <h1 className="op-title-lg">Ted (2024) Box Set</h1>
           <div className="op-subtle op-text-sm op-mt-6">
@@ -399,6 +404,7 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
       </section>
 
       <RelatedArtworkSection base={base} links={data.show[0]?.links || null} />
+      </div>
     </div>
   );
 }

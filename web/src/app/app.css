@@ -14,6 +14,31 @@
   padding: 24px;
 }
 
+/* Page background hero (50% opacity, fade out mid-page) */
+.op-page {
+  position: relative;
+}
+
+.op-page-content {
+  position: relative;
+  z-index: 1;
+}
+
+.op-page-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60vh;
+  background-size: cover;
+  background-position: center top;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 50%);
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 50%);
+}
+
 .op-container--narrow {
   max-width: 900px;
 }

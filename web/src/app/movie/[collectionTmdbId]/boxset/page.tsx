@@ -43,7 +43,10 @@ function TedMovieBoxSetDemo() {
   ];
 
   return (
-    <div>
+    <div className="op-page">
+      <div className="op-page-bg" style={{ backgroundImage: `url(${boxsetPosters[0]?.src})` }} />
+      <div className="op-page-content">
+        <div>
       <div className="op-row op-row--between">
         <div>
           <h1 className="op-title-lg">ted collection Movie Box Set</h1>
@@ -88,6 +91,8 @@ function TedMovieBoxSetDemo() {
           ))}
         </div>
       </section>
+        </div>
+      </div>
     </div>
   );
 }
@@ -143,31 +148,35 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
   if (!collection) return <TedMovieBoxSetDemo />;
 
   return (
-    <div>
-      <div className="op-row op-row--between">
-        <div>
-          <h1 className="op-title-lg">{collection.media.title || "Movie Box Set"}</h1>
-          <div className="op-subtle op-text-sm op-mt-6">
-            Created by: <strong>{collection.creator.display_name}</strong>
+    <div className="op-page">
+      <div className="op-page-bg" style={{ backgroundImage: `url(${collection.assets.preview.url})` }} />
+
+      <div className="op-page-content">
+        <div className="op-row op-row--between">
+          <div>
+            <h1 className="op-title-lg">{collection.media.title || "Movie Box Set"}</h1>
+            <div className="op-subtle op-text-sm op-mt-6">
+              Created by: <strong>{collection.creator.display_name}</strong>
+            </div>
           </div>
         </div>
+
+        <section className="op-section">
+          <h2 className="op-section-title">Box set poster</h2>
+          <PosterGridIndexed items={[collection]} />
+        </section>
+
+        <section className="op-section">
+          <h2 className="op-section-title">Movies</h2>
+          {movies.length === 0 ? (
+            <p className="op-subtle op-mt-12">No movies linked yet.</p>
+          ) : (
+            <PosterGridIndexed items={movies} />
+          )}
+        </section>
+
+        <RelatedArtworkSection base={base} links={collection.links || null} />
       </div>
-
-      <section className="op-section">
-        <h2 className="op-section-title">Box set poster</h2>
-        <PosterGridIndexed items={[collection]} />
-      </section>
-
-      <section className="op-section">
-        <h2 className="op-section-title">Movies</h2>
-        {movies.length === 0 ? (
-          <p className="op-subtle op-mt-12">No movies linked yet.</p>
-        ) : (
-          <PosterGridIndexed items={movies} />
-        )}
-      </section>
-
-      <RelatedArtworkSection base={base} links={collection.links || null} />
     </div>
   );
 }
