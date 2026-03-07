@@ -434,7 +434,51 @@ Rationale:
 
 ---
 
-## 5. Poster record
+## 5. Changes feed (for indexers)
+
+In a distributed network, it’s wasteful for indexers to repeatedly re-scan an entire node just to find what changed.
+
+The **changes feed** gives indexers a lightweight way to ask a node: “What posters have been added/updated since last time?”
+
+This endpoint is OPTIONAL in v1, but strongly recommended for nodes that want to be discoverable via indexers.
+
+### 5.1 Endpoint
+
+`GET /v1/changes`
+
+Query params:
+- `since` (optional, opaque cursor)
+- `limit` (optional, default 200; nodes MAY cap)
+
+### 5.2 Response
+
+```json
+{
+  "changes": [
+    {
+      "poster_id": "op:v1:opn_3c1f...:pst_8fa2c",
+      "changed_at": "2026-03-07T04:20:00Z",
+      "kind": "upsert"
+    },
+    {
+      "poster_id": "op:v1:opn_3c1f...:pst_deadbeef",
+      "changed_at": "2026-03-07T04:21:00Z",
+      "kind": "delete"
+    }
+  ],
+  "next_since": "opaque-or-null"
+}
+```
+
+Rules:
+- `since` and `next_since` MUST be treated as opaque by clients.
+- Nodes MAY return `delete` events when posters are removed; indexers SHOULD honour deletions.
+- If a node does not support deletions, it MAY omit `delete` events.
+- Indexers SHOULD fetch details for each change via `GET /v1/posters/{poster_id}`.
+
+---
+
+## 6. Poster record
 
 Search results are meant to be lightweight. When a client wants the full details for a specific piece of artwork (including signed metadata and all available variants), it fetches the **poster record**.
 
@@ -448,7 +492,7 @@ Same schema as a search result entry, but MAY include additional fields (tags, r
 
 ---
 
-## 6. Blob serving (content-addressed)
+## 7. Blob serving (content-addressed)
 
 A **blob** is the actual image bytes (JPEG/PNG) for a preview, poster, or background.
 
@@ -471,7 +515,7 @@ OpenPoster serves blobs by **SHA-256 hash**, not by “filename”. This makes b
 
 ---
 
-## 7. Premium access: key unwrap
+## 8. Premium access: key unwrap
 
 Premium works by distributing **encrypted blobs** and separately granting the **content key** to entitled users.
 
@@ -547,7 +591,7 @@ The node MUST:
 
 ---
 
-## 8. Token requirements (issuer → client)
+## 9. Token requirements (issuer → client)
 
 Tokens are how a client proves “this user is allowed to access premium content”.
 
@@ -590,7 +634,7 @@ Nodes MAY also support issuer introspection, but SHOULD work offline using token
 
 ---
 
-## 9. Errors (v1)
+## 10. Errors (v1)
 
 Consistent errors make it much easier for clients (and humans) to understand what went wrong. v1 standardises an error format so tools can show friendly messages and developers can debug quickly.
 
@@ -641,7 +685,7 @@ For field-level validation errors, `details` SHOULD follow:
 
 ---
 
-## 10. Security notes (v1)
+## 11. Security notes (v1)
 
 This section summarises the “gotchas” that matter in a federated network: how to avoid spoofed metadata, prevent accidental leakage of premium keys, and keep nodes from being overwhelmed.
 
@@ -653,7 +697,7 @@ This section summarises the “gotchas” that matter in a federated network: ho
 
 ---
 
-## 11. Open questions / extensions (non-normative)
+## 12. Open questions / extensions (non-normative)
 
 Not everything needs to be in v1. This section captures ideas we expect to add later (or keep optional) without bloating the core protocol.
 
@@ -665,7 +709,7 @@ Not everything needs to be in v1. This section captures ideas we expect to add l
 
 ---
 
-## 12. Minimal conformance checklist
+## 13. Minimal conformance checklist
 
 This checklist makes federation practical: it tells node operators and client authors which endpoints and behaviours are required for basic interoperability.
 
