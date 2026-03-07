@@ -180,7 +180,7 @@ function TedBoxSetDemo() {
                         className="op-img"
                         src={e.src}
                         alt={e.title}
-                        style={{ maxHeight: 220, objectFit: "cover" }}
+                        style={{ height: 100, width: "100%", objectFit: "cover" }}
                       />
                     </div>
                   ))}
@@ -364,7 +364,7 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
                           className="op-img"
                           src={p.assets.preview.url}
                           alt={p.media.title || p.poster_id}
-                          style={{ maxHeight: 220, objectFit: "cover" }}
+                          style={{ height: 100, width: "100%", objectFit: "cover" }}
                         />
                       </div>
                     ))}
