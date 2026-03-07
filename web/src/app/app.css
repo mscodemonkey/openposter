@@ -102,6 +102,10 @@
   grid-template-columns: repeat(5, 1fr);
 }
 
+.op-grid--strip {
+  grid-template-columns: repeat(6, 1fr);
+}
+
 /* Detail layout (poster page) */
 .op-grid--detail {
   grid-template-columns: 340px 1fr;
@@ -258,6 +262,21 @@
 
 .op-link:hover {
   text-decoration: underline;
+}
+
+.op-badge {
+  display: inline-block;
+  border: 1px solid #333;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.op-kv {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 6px 12px;
 }
 
 .op-pre {

@@ -14,7 +14,9 @@ type CreatorsResponse = {
   results: Array<{ creator_id: string; display_name: string | null }>;
 };
 
-const MEDIA_TYPES = ["", "movie", "show", "season", "episode", "collection"];
+type FacetsResponse = {
+  media_types: Array<{ type: string; count: number }>;
+};
 
 export default function BrowsePage() {
   const [creatorId, setCreatorId] = useState<string>("");
@@ -31,6 +33,7 @@ export default function BrowsePage() {
   const [error, setError] = useState<string | null>(null);
 
   const [creators, setCreators] = useState<CreatorsResponse | null>(null);
+  const [facets, setFacets] = useState<FacetsResponse | null>(null);
 
   const base = useMemo(() => INDEXER_BASE_URL.replace(/\/+$/, ""), []);
 
@@ -69,9 +72,16 @@ export default function BrowsePage() {
   useEffect(() => {
     void (async () => {
       try {
-        const r = await fetch(`${base}/v1/creators?limit=200`);
-        if (!r.ok) throw new Error(`creators failed: ${r.status}`);
-        setCreators((await r.json()) as CreatorsResponse);
+        const [cr, fc] = await Promise.all([
+          fetch(`${base}/v1/creators?limit=200`),
+          fetch(`${base}/v1/facets`),
+        ]);
+
+        if (!cr.ok) throw new Error(`creators failed: ${cr.status}`);
+        if (!fc.ok) throw new Error(`facets failed: ${fc.status}`);
+
+        setCreators((await cr.json()) as CreatorsResponse);
+        setFacets((await fc.json()) as FacetsResponse);
       } catch (e: any) {
         setError(e?.message || String(e));
       }
@@ -211,9 +221,10 @@ export default function BrowsePage() {
               value={mediaType}
               onChange={(e) => setMediaType(e.target.value)}
             >
-              {MEDIA_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t === "" ? "(any)" : t}
+              <option value="">(any)</option>
+              {(facets?.media_types || []).map((t) => (
+                <option key={t.type} value={t.type}>
+                  {t.type} ({t.count})
                 </option>
               ))}
             </select>
