@@ -107,13 +107,18 @@
 }
 
 .op-grid--episode-cards {
-  /* Episode cards are short; pack them tightly rather than using wide 1fr columns */
-  grid-template-columns: repeat(auto-fill, max-content);
-  justify-content: start;
+  /* Episode cards are short; render left-to-right and wrap naturally */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .op-grid--episode-cards .op-card {
-  width: fit-content;
+  flex: 0 0 auto;
+}
+
+.op-grid--episode-cards .op-img {
+  max-width: 260px;
 }
 
 /* Detail layout (poster page) */
