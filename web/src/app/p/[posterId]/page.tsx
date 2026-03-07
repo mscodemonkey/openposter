@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
+import { loadCreatorConnection } from "@/lib/storage";
 import type { PosterEntry, SearchResponse } from "@/lib/types";
 
 function PosterStrip({ items }: { items: PosterEntry[] }) {
@@ -37,6 +38,10 @@ export default function PosterPage({ params }: { params: { posterId: string } })
   const [moreByCreator, setMoreByCreator] = useState<PosterEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [linksDraft, setLinksDraft] = useState<string>("");
+  const [linksStatus, setLinksStatus] = useState<string | null>(null);
+  const [linksSaving, setLinksSaving] = useState<boolean>(false);
+
   useEffect(() => {
     void (async () => {
       try {
@@ -51,6 +56,7 @@ export default function PosterPage({ params }: { params: { posterId: string } })
 
         const p = json as PosterEntry;
         setPoster(p);
+        setLinksDraft(p.links ? JSON.stringify(p.links, null, 2) : "[]");
 
         // Pre-initialize related arrays for nicer loading states
         setSimilarByTmdb([]);
@@ -213,6 +219,90 @@ export default function PosterPage({ params }: { params: { posterId: string } })
               </div>
             </div>
           )}
+
+          <div className="op-section">
+            <h2 className="op-section-title">Creator tools</h2>
+            <p className="op-subtle op-text-sm op-mt-6">
+              Edit this posters related links (links are validated by the node: they must point to other posters by the same creator).
+            </p>
+
+            {(() => {
+              const conn = loadCreatorConnection();
+              const canEdit = conn && conn.nodeUrl.replace(/\/+$/, "") === poster.creator.home_node.replace(/\/+$/, "");
+
+              if (!conn) {
+                return (
+                  <div className="op-alert op-alert--info op-mt-12">
+                    Connect your creator node on <a className="op-link" href="/connect">/connect</a> to edit links.
+                  </div>
+                );
+              }
+
+              if (!canEdit) {
+                return (
+                  <div className="op-alert op-alert--info op-mt-12">
+                    Youre connected to <code className="op-code">{conn.nodeUrl}</code>, but this posters home node is{" "}
+                    <code className="op-code">{poster.creator.home_node}</code>. Connect to the correct node to edit links.
+                  </div>
+                );
+              }
+
+              const save = async () => {
+                setLinksStatus(null);
+                setLinksSaving(true);
+                try {
+                  // Validate JSON locally for nicer errors
+                  const parsed = JSON.parse(linksDraft);
+                  if (!Array.isArray(parsed)) throw new Error("links_json must be a JSON array");
+
+                  const url = `${conn.nodeUrl.replace(/\/+$/, "")}/v1/admin/posters/${encodeURIComponent(poster.poster_id)}/links`;
+                  const r = await fetch(url, {
+                    method: "PUT",
+                    headers: {
+                      authorization: `Bearer ${conn.adminToken}`,
+                      "content-type": "application/json",
+                    },
+                    body: JSON.stringify({ links_json: JSON.stringify(parsed) }),
+                  });
+
+                  const json = await r.json().catch(() => ({}));
+                  if (!r.ok || !json?.ok) {
+                    throw new Error(json?.message || json?.detail || `save failed: ${r.status}`);
+                  }
+
+                  setLinksStatus("Saved.");
+
+                  // Re-fetch poster from indexer to update the page view.
+                  const pr = await fetch(`${base}/v1/posters/${encodeURIComponent(posterId)}`);
+                  if (pr.ok) {
+                    const pjson = (await pr.json()) as PosterEntry;
+                    setPoster(pjson);
+                  }
+                } catch (e: any) {
+                  setLinksStatus(e?.message || String(e));
+                } finally {
+                  setLinksSaving(false);
+                }
+              };
+
+              return (
+                <div className="op-mt-12">
+                  <textarea
+                    className="op-input"
+                    style={{ minHeight: 180, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+                    value={linksDraft}
+                    onChange={(e) => setLinksDraft(e.target.value)}
+                  />
+                  <div className="op-row op-mt-10">
+                    <button className="op-btn" disabled={linksSaving} onClick={() => void save()}>
+                      {linksSaving ? "Saving…" : "Save links"}
+                    </button>
+                    {linksStatus && <span className="op-subtle op-text-sm">{linksStatus}</span>}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
 
           <div className="op-section">
             <div className="op-row op-row--between">
