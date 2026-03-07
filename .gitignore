@@ -27,3 +27,4 @@ reference-node/**/nodes.json
 reference-node/data-indexer/
 indexer/.venv/
 indexer/**/__pycache__/
+reference-node/tmp-upload/
