@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { PosterEntry } from "@/lib/types";
@@ -255,11 +255,13 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
 export default function TvBoxsetPage({
   params,
 }: {
-  params: { showTmdbId: string };
+  params: Promise<{ showTmdbId: string }>;
 }) {
+  const { showTmdbId } = use(params);
+
   return (
     <div className="op-container">
-      <TvBoxsetReal showTmdbId={params.showTmdbId} />
+      <TvBoxsetReal showTmdbId={showTmdbId} />
     </div>
   );
 }

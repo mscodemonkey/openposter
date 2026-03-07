@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { PosterEntry, SearchResponse } from "@/lib/types";
@@ -202,11 +202,13 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
 export default function MovieBoxsetPage({
   params,
 }: {
-  params: { collectionTmdbId: string };
+  params: Promise<{ collectionTmdbId: string }>;
 }) {
+  const { collectionTmdbId } = use(params);
+
   return (
     <div className="op-container">
-      <MovieBoxsetReal collectionTmdbId={params.collectionTmdbId} />
+      <MovieBoxsetReal collectionTmdbId={collectionTmdbId} />
     </div>
   );
 }

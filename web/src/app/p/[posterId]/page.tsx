@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
 import { loadCreatorConnection } from "@/lib/storage";
@@ -31,9 +31,13 @@ function PosterStrip({ items }: { items: PosterEntry[] }) {
   );
 }
 
-export default function PosterPage({ params }: { params: { posterId: string } }) {
+export default function PosterPage({
+  params,
+}: {
+  params: Promise<{ posterId: string }>;
+}) {
+  const { posterId } = use(params);
   const base = useMemo(() => INDEXER_BASE_URL.replace(/\/+$/, ""), []);
-  const posterId = params.posterId;
 
   const [poster, setPoster] = useState<PosterEntry | null>(null);
   const [similarByTmdb, setSimilarByTmdb] = useState<PosterEntry[] | null>(null);
