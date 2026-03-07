@@ -100,8 +100,9 @@ h3.op-section-title {
 }
 
 .op-title-lg {
-  font-size: 24px;
+  font-size: 3rem;
   font-weight: 700;
+  line-height: 1.05;
 }
 
 .op-stack {

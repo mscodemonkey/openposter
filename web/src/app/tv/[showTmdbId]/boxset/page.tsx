@@ -133,9 +133,9 @@ function TedBoxSetDemo() {
       <div className="op-page-content">
         <div className="op-row op-row--between">
         <div>
-          <h1 className="op-title-lg">ted (2024) Box Set</h1>
-          <div className="op-subtle op-text-sm op-mt-6">
-            Created by: <strong>willtong93</strong>
+          <h1 className="op-title-lg">ted</h1>
+          <div className="op-subtle op-mt-6" style={{ fontSize: "1rem" }}>
+            TV SHOW | 2024 | willtong93
           </div>
         </div>
       </div>
@@ -328,9 +328,9 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
       <div className="op-page-content">
         <div className="op-row op-row--between">
         <div>
-          <h1 className="op-title-lg">Ted (2024) Box Set</h1>
-          <div className="op-subtle op-text-sm op-mt-6">
-            Rendered from indexer <code className="op-code">/v1/tv_boxset</code>
+          <h1 className="op-title-lg">{data.show[0]?.media.title || "TV Box Set"}</h1>
+          <div className="op-subtle op-mt-6" style={{ fontSize: "1rem" }}>
+            TV SHOW{data.show[0]?.media.year ? ` | ${data.show[0].media.year}` : ""}{data.show[0]?.creator.display_name ? ` | ${data.show[0].creator.display_name}` : ""}
           </div>
         </div>
       </div>
