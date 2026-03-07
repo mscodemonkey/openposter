@@ -1,0 +1,1 @@
+"""OpenPoster reference node."""

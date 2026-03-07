@@ -1,0 +1,12 @@
+services:
+  openposter-node:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - OPENPOSTER_BASE_URL=http://localhost:8080
+      - OPENPOSTER_NODE_NAME=OpenPoster Reference Node
+      - OPENPOSTER_OPERATOR_NAME=OpenPoster
+      - OPENPOSTER_OPERATOR_CONTACT=mailto:admin@openposter.local
+    volumes:
+      - ./data:/data
