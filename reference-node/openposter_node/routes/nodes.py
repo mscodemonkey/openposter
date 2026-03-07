@@ -28,6 +28,7 @@ def _normalize_url(url: str) -> str:
 
 async def _validate_node(url: str) -> dict:
     # Minimal validation: fetch node descriptor.
+    # NOTE: this is not a complete SSRF defense; production deployments should harden this.
     desc_url = url + "/.well-known/openposter-node"
     try:
         async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
@@ -95,6 +96,19 @@ async def register_node(
 
     # Validate by fetching descriptor.
     _ = await _validate_node(url)
+
+    # Very basic anti-abuse rate limiting (per-process).
+    # This is a stopgap for beta testing; production should use a real rate limiter.
+    bucket = getattr(request.app.state, "nodes_reg_bucket", {"t": 0, "n": 0})
+    import time
+
+    now = int(time.time())
+    if now != bucket.get("t"):
+        bucket = {"t": now, "n": 0}
+    bucket["n"] += 1
+    request.app.state.nodes_reg_bucket = bucket
+    if bucket["n"] > 10:
+        raise http_error(429, "rate_limited", "too many registrations, slow down")
 
     cfg = request.app.state.cfg
     store_path = cfg.data_dir / "nodes.json"

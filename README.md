@@ -54,6 +54,8 @@ Creator nodes can trust multiple issuers (including self-issued).
 
 ## Quick start: run a node (reference implementation)
 
+For beta testing, you can run the reference node and (optionally) an indexer using Docker Compose.
+
 The reference node is intentionally minimal: it’s a working starting point and a compatibility target.
 
 ### Requirements
@@ -65,6 +67,19 @@ The reference node is intentionally minimal: it’s a working starting point and
 cd reference-node
 docker compose up --build
 ```
+
+### Multi-node + indexer (recommended for testing)
+
+```bash
+cd reference-node
+docker compose -f compose.multi.yml up --build
+```
+
+Services:
+- Node A: http://localhost:8081
+- Node B: http://localhost:8082
+- Mirror for A: http://localhost:8083
+- Indexer: http://localhost:8090
 
 Then open:
 - `http://localhost:8080/.well-known/openposter-node`

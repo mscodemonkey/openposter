@@ -14,6 +14,10 @@ from .routes.search import router as search_router
 
 app = FastAPI(title="OpenPoster Reference Node", version="0.1.0")
 
+@app.get("/v1/health")
+async def health():
+    return {"ok": True}
+
 attach_lifecycle(app)
 
 
