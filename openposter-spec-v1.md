@@ -241,6 +241,9 @@ Each asset (`assets.preview`, `assets.full`, and any variants) MUST include:
 - `bytes` (integer)
 - `mime` (`image/jpeg|image/png`)
 
+Assets MAY include:
+- `sources` (array of approved sources; see §4.3.8.1)
+
 Assets SHOULD include:
 - `width` / `height` (integers)
 - `kind`:
@@ -310,6 +313,43 @@ Poster Entry SHOULD include:
 `attribution` SHOULD include:
 - `source_url` (canonical page)
 - `author` / `author_url` if different from node operator
+
+Redistribution semantics:
+- `public-cache-ok`: any node MAY mirror/cache the blob and nodes MAY advertise mirror URLs freely.
+- `mirrors-approved`: only mirrors explicitly approved by the creator SHOULD be used/advertised.
+- `none`: clients SHOULD fetch blobs only from URLs hosted by the creator node (or creator-controlled infrastructure).
+
+#### 4.3.8.1 Approved mirrors (v1)
+
+To make `redistribution=mirrors-approved` work without a separate central approval registry, v1 defines **approved mirrors by signed advertisement**:
+
+- A Poster Entry MAY include `assets.*.sources[]` (in addition to the convenience `url` field).
+- `sources[]` entries are considered **approved** if they appear inside a **validly signed** Poster Entry.
+- Clients SHOULD prefer `sources[]` where `role="mirror"` only when `redistribution` permits it.
+
+`sources[]` schema:
+```json
+{
+  "sources": [
+    {
+      "url": "https://posters.example.com/v1/blobs/sha256:...",
+      "role": "origin"
+    },
+    {
+      "url": "https://mirror1.example.org/v1/blobs/sha256:...",
+      "role": "mirror",
+      "mirror_node": "https://mirror1.example.org"
+    }
+  ]
+}
+```
+
+Rules:
+- `assets.*.url` MUST be one of the URLs in `assets.*.sources[]` if `sources[]` is present.
+- If `redistribution = "mirrors-approved"`, nodes MUST NOT advertise mirror sources unless they intend to approve them.
+- Clients MUST NOT treat sources learned via unsigned/invalid metadata as approved mirrors.
+
+Future extension (non-normative): creator-issued mirror grants (tokens) for automated mirror syncing.
 
 #### 4.3.9 Signed metadata (REQUIRED for v1)
 
