@@ -173,7 +173,7 @@ export default function UploadPage() {
             className="op-input"
             value={linksJson}
             onChange={(e) => setLinksJson(e.target.value)}
-            placeholder='e.g. [{"rel":"related","href":"/movie/1703/boxset","title":"ted collection Movie Box Set"}]'
+            placeholder='e.g. [{"rel":"related","href":"/p/<other_poster_id>","title":"Related artwork"}]'
             rows={3}
           />
           <div className="op-subtle op-text-sm op-mt-6">

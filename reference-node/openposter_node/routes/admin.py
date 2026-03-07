@@ -82,13 +82,25 @@ async def admin_upload_poster(
         raise http_error(400, "invalid_request", "show_tmdb_id is required for season/episode")
 
     # validate links_json if provided
+    links_value = None
     if links_json:
         try:
             import json as _json
 
-            v = _json.loads(links_json)
-            if not isinstance(v, list):
+            links_value = _json.loads(links_json)
+            if not isinstance(links_value, list):
                 raise ValueError("links_json must be a JSON array")
+
+            # Enforce: links may only point to other content by the same creator.
+            # MVP enforcement: only allow links to other poster detail pages on THIS node:
+            #   {"href": "/p/<poster_id>", ...}
+            # and require that the target poster exists and has the same creator_id.
+            for item in links_value:
+                if not isinstance(item, dict):
+                    raise ValueError("each link must be an object")
+                href = item.get("href")
+                if not isinstance(href, str) or not href.startswith("/p/"):
+                    raise ValueError("links must use href like /p/<poster_id>")
         except Exception as e:
             raise http_error(400, "invalid_request", f"invalid links_json: {e}")
 
@@ -111,6 +123,25 @@ async def admin_upload_poster(
         if existing is not None:
             raise http_error(409, "invalid_request", "poster_id conflict")
 
+        # Enforce links point to other posters by same creator.
+        if links_value:
+            for item in links_value:
+                href = item.get("href")
+                target_id = href[len("/p/") :]
+                # Decode percent-encoding if any
+                try:
+                    from urllib.parse import unquote
+
+                    target_id = unquote(target_id)
+                except Exception:
+                    pass
+
+                target = await session.get(Poster, target_id)
+                if target is None or target.deleted_at is not None:
+                    raise http_error(400, "invalid_request", f"linked poster not found: {target_id}")
+                if target.creator_id != creator_id:
+                    raise http_error(400, "invalid_request", "links may only reference posters by the same creator")
+
         row = Poster(
             poster_id=poster_id,
             created_at=now,
@@ -129,7 +160,7 @@ async def admin_upload_poster(
             attribution_license=attribution_license,
             attribution_redistribution=attribution_redistribution,
             attribution_source_url=None,
-            links_json=links_json,
+            links_json=(None if not links_json else links_json),
             preview_hash=preview_hash,
             preview_bytes=preview_bytes,
             preview_mime=preview_mime,
