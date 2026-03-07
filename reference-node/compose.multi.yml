@@ -1,0 +1,37 @@
+services:
+  node_a:
+    build: .
+    ports:
+      - "8081:8080"
+    environment:
+      - OPENPOSTER_BASE_URL=http://localhost:8081
+      - OPENPOSTER_NODE_NAME=OpenPoster Node A
+      - OPENPOSTER_OPERATOR_NAME=Creator A
+    volumes:
+      - ./data-a:/data
+
+  node_b:
+    build: .
+    ports:
+      - "8082:8080"
+    environment:
+      - OPENPOSTER_BASE_URL=http://localhost:8082
+      - OPENPOSTER_NODE_NAME=OpenPoster Node B
+      - OPENPOSTER_OPERATOR_NAME=Creator B
+    volumes:
+      - ./data-b:/data
+
+  # A simple 'mirror' node for blob distribution testing.
+  # For now it just shares the blob store of node_a so clients can fetch blobs
+  # from a different origin. Later we'll implement proper mirror syncing.
+  mirror_for_a:
+    build: .
+    ports:
+      - "8083:8080"
+    environment:
+      - OPENPOSTER_BASE_URL=http://localhost:8083
+      - OPENPOSTER_NODE_NAME=Mirror for Node A
+      - OPENPOSTER_OPERATOR_NAME=Mirror Operator
+    volumes:
+      - ./data-a/blobs:/data/blobs
+      - ./data-mirror:/data

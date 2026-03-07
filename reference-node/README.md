@@ -11,6 +11,45 @@ docker compose up --build
 Then visit:
 - `http://localhost:8080/.well-known/openposter-node`
 
+## Run multiple local nodes (for federation/distribution testing)
+
+```bash
+docker compose -f compose.multi.yml up --build
+```
+
+This starts:
+- Node A: http://localhost:8081
+- Node B: http://localhost:8082
+- Mirror (for Node A blobs): http://localhost:8083
+
+The mirror currently shares Node A's blob directory to simulate distributed delivery.
+A proper "mirror sync" flow will be added later.
+
+## Seeding test data
+
+The reference node can import `seed.json` on first run.
+
+1) Place data under `reference-node/data-a/` (or `data/` for single-node).
+2) Use the helper script to append seed rows and copy blobs into the blob store:
+
+```bash
+python tools/make_seed.py \
+  --data-dir ./data-a \
+  --node-id opn_local_a \
+  --creator-id cr_creator_a \
+  --creator-name "Creator A" \
+  --creator-home-node "http://localhost:8081" \
+  --tmdb-id 603 \
+  --media-type movie \
+  --title "The Matrix" \
+  --year 1999 \
+  --preview ./examples/matrix_preview.jpg \
+  --full ./examples/matrix_full.jpg
+```
+
+Then start the node and query:
+- `GET http://localhost:8081/v1/search?tmdb_id=603`
+
 ## Data
 
 The container uses `/data` for persistence:
