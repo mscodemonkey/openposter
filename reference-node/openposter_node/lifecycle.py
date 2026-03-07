@@ -52,6 +52,13 @@ async def init_app_state(app: FastAPI) -> None:
             if name not in col_names:
                 await conn.exec_driver_sql(ddl)
 
+        # Backfill timestamps if they are missing (existing early DBs).
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        await conn.exec_driver_sql("UPDATE posters SET created_at = COALESCE(created_at, ?)", (now,))
+        await conn.exec_driver_sql("UPDATE posters SET updated_at = COALESCE(updated_at, ?)", (now,))
+
     # Seed sample data once (optional): if posters table empty and seed file exists
     seed = cfg.data_dir / "seed.json"
     if seed.exists():
