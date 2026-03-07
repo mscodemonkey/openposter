@@ -19,6 +19,7 @@ const MEDIA_TYPES = ["", "movie", "show", "season", "episode", "collection"];
 export default function BrowsePage() {
   const [creatorId, setCreatorId] = useState<string>("");
   const [mediaType, setMediaType] = useState<string>("");
+  const [copied, setCopied] = useState(false);
 
   const [items, setItems] = useState<PosterEntry[] | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -29,6 +30,15 @@ export default function BrowsePage() {
   const [creators, setCreators] = useState<CreatorsResponse | null>(null);
 
   const base = useMemo(() => INDEXER_BASE_URL.replace(/\/+$/, ""), []);
+
+  function syncUrl(next: { creatorId: string; mediaType: string }) {
+    const sp = new URLSearchParams();
+    if (next.creatorId) sp.set("creator_id", next.creatorId);
+    if (next.mediaType) sp.set("media_type", next.mediaType);
+    const qs = sp.toString();
+    const newUrl = qs ? `/browse?${qs}` : "/browse";
+    window.history.replaceState(null, "", newUrl);
+  }
 
   useEffect(() => {
     // parse query string on client
@@ -93,6 +103,13 @@ export default function BrowsePage() {
   }
 
   useEffect(() => {
+    // keep URL shareable
+    try {
+      syncUrl({ creatorId, mediaType });
+    } catch {
+      // ignore
+    }
+
     // once filters are set, load
     void loadFirst().catch((e) => setError(e?.message || String(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,7 +123,35 @@ export default function BrowsePage() {
       </p>
 
       <section className="op-section">
-        <h2 className="op-section-title">Filters</h2>
+        <div className="op-row op-row--between">
+          <h2 className="op-section-title">Filters</h2>
+          <div className="op-row">
+            <button
+              className="op-btn op-btn--sm"
+              onClick={() => {
+                setCreatorId("");
+                setMediaType("");
+              }}
+            >
+              Clear
+            </button>
+            <button
+              className="op-btn op-btn--sm"
+              onClick={() => {
+                try {
+                  void navigator.clipboard.writeText(window.location.href);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1200);
+                } catch {
+                  // ignore
+                }
+              }}
+            >
+              {copied ? "Copied" : "Copy link"}
+            </button>
+          </div>
+        </div>
+
         <div className="op-form-grid-2 op-mt-10">
           <label className="op-label">
             <div className="op-label-hint">Creator</div>

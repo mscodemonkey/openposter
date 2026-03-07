@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { IndexerNodesResponse, PosterEntry, SearchResponse } from "@/lib/types";
 
-type RecentResponse = { results: PosterEntry[] };
+type RecentResponse = { results: PosterEntry[]; next_cursor?: string | null };
 
 export default function Home() {
   const [tmdbId, setTmdbId] = useState<string>("");
@@ -13,6 +13,8 @@ export default function Home() {
   const [type, setType] = useState<string>("");
   const [search, setSearch] = useState<SearchResponse | null>(null);
   const [recent, setRecent] = useState<RecentResponse | null>(null);
+  const [recentCursor, setRecentCursor] = useState<string | null>(null);
+  const [loadingMoreRecent, setLoadingMoreRecent] = useState(false);
   const [nodes, setNodes] = useState<IndexerNodesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +45,30 @@ export default function Home() {
     const base = INDEXER_BASE_URL.replace(/\/+$/, "");
     const res = await fetch(base + "/v1/recent?limit=40");
     if (!res.ok) throw new Error(`recent failed: ${res.status}`);
-    setRecent((await res.json()) as RecentResponse);
+    const json = (await res.json()) as RecentResponse;
+    setRecent(json);
+    setRecentCursor(json.next_cursor || null);
+  }
+
+  async function loadMoreRecent() {
+    if (!recentCursor) return;
+    setLoadingMoreRecent(true);
+    setError(null);
+    try {
+      const base = INDEXER_BASE_URL.replace(/\/+$/, "");
+      const res = await fetch(
+        base + "/v1/recent?limit=40&cursor=" + encodeURIComponent(recentCursor)
+      );
+      if (!res.ok) throw new Error(`recent failed: ${res.status}`);
+      const json = (await res.json()) as RecentResponse;
+      setRecent((prev) => ({
+        results: [...(prev?.results || []), ...(json.results || [])],
+        next_cursor: json.next_cursor || null,
+      }));
+      setRecentCursor(json.next_cursor || null);
+    } finally {
+      setLoadingMoreRecent(false);
+    }
   }
 
   useEffect(() => {
@@ -129,9 +154,25 @@ export default function Home() {
             Browse all →
           </a>
         </div>
+
         {recent ? (
           recent.results.length > 0 ? (
-            <PosterGrid items={recent.results} cols={5} />
+            <>
+              <PosterGrid items={recent.results} cols={5} />
+              <div className="op-mt-16">
+                {recentCursor ? (
+                  <button
+                    className="op-btn"
+                    onClick={() => void loadMoreRecent().catch((e) => setError(e?.message || String(e)))}
+                    disabled={loadingMoreRecent}
+                  >
+                    {loadingMoreRecent ? "Loading…" : "Load more"}
+                  </button>
+                ) : (
+                  <div className="op-faint op-text-sm">End of list.</div>
+                )}
+              </div>
+            </>
           ) : (
             <p className="op-subtle op-mt-10">No recent posters.</p>
           )
