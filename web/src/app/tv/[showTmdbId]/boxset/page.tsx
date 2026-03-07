@@ -3,6 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
+import RelatedArtworkSection from "@/components/RelatedArtworkSection";
 import type { PosterEntry } from "@/lib/types";
 
 type PosterImg = { src: string; title: string };
@@ -397,7 +398,7 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
           })}
       </section>
 
-      <RelatedArtworkFromLinks base={base} links={data.show[0]?.links || null} />
+      <RelatedArtworkSection base={base} links={data.show[0]?.links || null} />
     </div>
   );
 }
