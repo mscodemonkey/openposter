@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .lifecycle import attach_lifecycle
 from .routes.creators import router as creators_router
@@ -11,6 +12,17 @@ from .routes.stats import router as stats_router
 from .routes.tv_boxset import router as tv_boxset_router
 
 app = FastAPI(title="OpenPoster Indexer", version="0.1.0")
+
+# CORS: the web UI is typically served from a different origin (e.g. http://localhost:3000)
+# than the indexer API (e.g. http://localhost:8090). Allow browser access.
+# MVP: allow all origins.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/v1/health")
 async def health():
