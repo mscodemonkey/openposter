@@ -131,12 +131,19 @@ Nodes MUST return JSON with at least:
 `GET /v1/search`
 
 Query params (v1 core):
-- `tmdb_id` (recommended primary key for movies/shows)
+- `tmdb_id` (recommended primary key for movies/shows; see also `type` semantics below)
 - `imdb_id` (optional)
 - `q` (optional text query)
 - `type` = `movie|show|season|episode|collection` (optional)
 - `limit` (optional, default 50; nodes MAY cap, recommended max 200)
 - `cursor` (optional, opaque pagination cursor from `next_cursor`)
+
+Query params (v1 recommended filters):
+- `kind` = `poster|background|banner|logo|clearlogo|thumb` (optional)
+- `orientation` = `portrait|landscape|square` (optional)
+- `text` = `text|textless|unknown` (optional)
+- `season_number` (optional; meaningful when `type=season|episode`)
+- `episode_number` (optional; meaningful when `type=episode`)
 
 ### 4.2 Response
 
@@ -221,10 +228,18 @@ Poster Entry MUST include:
   - `imdb_id` (string like `tt0133093`) OPTIONAL
   - `tvdb_id` (number) OPTIONAL
 
+TV hierarchy fields (v1):
+- When `type` is `season` or `episode`, `media` MUST also include:
+  - `show_tmdb_id` (number) — the TMDB id of the parent show
+- When `type` is `episode`, `media` MUST also include:
+  - `season_number` (number)
+  - `episode_number` (number)
+- When `type` is `season`, `media` MUST also include:
+  - `season_number` (number)
+
 `media` SHOULD include:
 - `title` (string)
 - `year` (number)
-- `season_number` / `episode_number` when `type` is `season|episode`
 
 #### 4.3.3 Creator object
 
@@ -252,12 +267,14 @@ Assets SHOULD include:
 - `width` / `height` (integers)
 - `kind`:
   - `poster` (default)
-  - `background`
-  - `banner`
+  - `background` (aka fanart)
+  - `banner` (wide, typically for TV)
   - `logo`
   - `clearlogo`
   - `thumb`
+- `orientation`: `portrait|landscape|square` (recommended; derived from width/height if present)
 - `language` (BCP-47 tag like `en`, `en-AU`, `ja`) or `null` for language-neutral
+- `text`: `text|textless|unknown` (whether the artwork contains titles/logos)
 
 `assets.preview` MUST be a browse-friendly image (small-ish). Recommended:
 - 400–800px on the short edge
@@ -302,8 +319,9 @@ Nodes SHOULD expose variants to reduce client work and bandwidth. Two patterns a
 #### 4.3.7 Descriptive fields (recommended)
 
 Poster Entry SHOULD include:
-- `title` (string; creator-provided name for the artwork, distinct from movie title)
+- `title` (string; creator-provided name for the artwork, distinct from media title)
 - `tags` (string[]) e.g., `minimal`, `retro`, `neon`, `alt-poster`, `imax`, `criterion`
+- `text`: `text|textless|unknown` (poster-level hint; assets may also specify per-asset)
 - `rating` / `score` (number) OPTIONAL (node-local)
 - `created_at` / `updated_at` (RFC3339 timestamps)
 - `checksum` fields are covered by `hash` (do not add extra hashes unless needed)
