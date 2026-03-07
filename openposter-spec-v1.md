@@ -519,7 +519,56 @@ Nodes MAY also support issuer introspection, but SHOULD work offline using token
 
 ---
 
-## 9. Security notes (v1)
+## 9. Errors (v1)
+
+All error responses from `/v1/*` endpoints MUST be JSON with `Content-Type: application/json` and the following shape:
+
+```json
+{
+  "error": {
+    "code": "string",
+    "message": "human readable message",
+    "request_id": "optional string",
+    "details": {}
+  }
+}
+```
+
+Rules:
+- `code` MUST be a stable, machine-readable string.
+- `message` SHOULD be safe to display to users.
+- `details` MAY be omitted.
+- `request_id` SHOULD be included if the node has request tracing.
+
+### 9.1 Standard error codes
+
+Nodes SHOULD use these codes when applicable:
+- `invalid_request` → 400
+- `not_found` → 404
+- `unsupported` → 400 or 422
+- `rate_limited` → 429
+- `unauthorized` → 401 (missing/invalid token)
+- `forbidden` → 403 (token valid, but not entitled)
+- `signature_invalid` → 400 or 422 (poster metadata signature failed verification)
+- `blob_hash_mismatch` → 502 or 500 (node misconfigured; served bytes don’t match hash)
+- `internal` → 500
+
+### 9.2 Validation error details (recommended)
+
+For field-level validation errors, `details` SHOULD follow:
+
+```json
+{
+  "fields": [
+    {"path": "/media/tmdb_id", "error": "required"},
+    {"path": "/assets/full/encryption/nonce", "error": "invalid_base64"}
+  ]
+}
+```
+
+---
+
+## 10. Security notes (v1)
 
 - **Previews must be public** to allow cross-node browsing without auth complexity.
 - Premium full-res blobs SHOULD be encrypted at rest and in distribution.
