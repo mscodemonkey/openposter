@@ -180,7 +180,7 @@ function TedBoxSetDemo() {
                         className="op-img"
                         src={e.src}
                         alt={e.title}
-                        style={{ height: 100, width: "100%", objectFit: "cover" }}
+                        style={{ height: 100, width: "100%", objectFit: "contain", background: "#0b0b0b" }}
                       />
                     </div>
                   ))}
@@ -364,7 +364,7 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
                           className="op-img"
                           src={p.assets.preview.url}
                           alt={p.media.title || p.poster_id}
-                          style={{ height: 100, width: "100%", objectFit: "cover" }}
+                          style={{ height: 100, width: "100%", objectFit: "contain", background: "#0b0b0b" }}
                         />
                       </div>
                     ))}
