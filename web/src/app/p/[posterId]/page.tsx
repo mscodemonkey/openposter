@@ -6,6 +6,8 @@ import { INDEXER_BASE_URL } from "@/lib/config";
 import { loadCreatorConnection } from "@/lib/storage";
 import type { PosterEntry, SearchResponse } from "@/lib/types";
 
+type PosterLink = NonNullable<PosterEntry["links"]>[number];
+
 function PosterStrip({ items }: { items: PosterEntry[] }) {
   return (
     <div className="op-grid op-grid--strip op-mt-10">
@@ -38,9 +40,16 @@ export default function PosterPage({ params }: { params: { posterId: string } })
   const [moreByCreator, setMoreByCreator] = useState<PosterEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [linksValue, setLinksValue] = useState<PosterLink[]>([]);
   const [linksDraft, setLinksDraft] = useState<string>("");
+  const [linksAdvanced, setLinksAdvanced] = useState<boolean>(false);
   const [linksStatus, setLinksStatus] = useState<string | null>(null);
   const [linksSaving, setLinksSaving] = useState<boolean>(false);
+
+  const [linkSearchQ, setLinkSearchQ] = useState<string>("");
+  const [linkSearchLoading, setLinkSearchLoading] = useState<boolean>(false);
+  const [linkSearchResults, setLinkSearchResults] = useState<PosterEntry[]>([]);
+  const [linkSearchError, setLinkSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -56,7 +65,9 @@ export default function PosterPage({ params }: { params: { posterId: string } })
 
         const p = json as PosterEntry;
         setPoster(p);
-        setLinksDraft(p.links ? JSON.stringify(p.links, null, 2) : "[]");
+        const lv = (p.links || []) as PosterLink[];
+        setLinksValue(lv);
+        setLinksDraft(JSON.stringify(lv, null, 2));
 
         // Pre-initialize related arrays for nicer loading states
         setSimilarByTmdb([]);
@@ -223,7 +234,7 @@ export default function PosterPage({ params }: { params: { posterId: string } })
           <div className="op-section">
             <h2 className="op-section-title">Creator tools</h2>
             <p className="op-subtle op-text-sm op-mt-6">
-              Edit this posters related links (links are validated by the node: they must point to other posters by the same creator).
+              Add/remove related links. The node validates: links must use <code className="op-code">/p/&lt;poster_id&gt;</code> and the target must be by the same creator.
             </p>
 
             {(() => {
@@ -247,14 +258,10 @@ export default function PosterPage({ params }: { params: { posterId: string } })
                 );
               }
 
-              const save = async () => {
+              const saveLinks = async (value: PosterLink[]) => {
                 setLinksStatus(null);
                 setLinksSaving(true);
                 try {
-                  // Validate JSON locally for nicer errors
-                  const parsed = JSON.parse(linksDraft);
-                  if (!Array.isArray(parsed)) throw new Error("links_json must be a JSON array");
-
                   const url = `${conn.nodeUrl.replace(/\/+$/, "")}/v1/admin/posters/${encodeURIComponent(poster.poster_id)}/links`;
                   const r = await fetch(url, {
                     method: "PUT",
@@ -262,7 +269,7 @@ export default function PosterPage({ params }: { params: { posterId: string } })
                       authorization: `Bearer ${conn.adminToken}`,
                       "content-type": "application/json",
                     },
-                    body: JSON.stringify({ links_json: JSON.stringify(parsed) }),
+                    body: JSON.stringify({ links_json: JSON.stringify(value) }),
                   });
 
                   const json = await r.json().catch(() => ({}));
@@ -277,6 +284,9 @@ export default function PosterPage({ params }: { params: { posterId: string } })
                   if (pr.ok) {
                     const pjson = (await pr.json()) as PosterEntry;
                     setPoster(pjson);
+                    const lv = ((pjson.links || []) as PosterLink[]);
+                    setLinksValue(lv);
+                    setLinksDraft(JSON.stringify(lv, null, 2));
                   }
                 } catch (e: any) {
                   setLinksStatus(e?.message || String(e));
@@ -285,19 +295,163 @@ export default function PosterPage({ params }: { params: { posterId: string } })
                 }
               };
 
+              const addLinkFromPoster = (target: PosterEntry) => {
+                const title = target.media.title || target.poster_id;
+                const tmdb = target.media.tmdb_id;
+
+                const newLink: PosterLink = {
+                  rel: "related",
+                  href: `/p/${target.poster_id}`,
+                  title,
+                  media: tmdb ? { type: target.media.type, tmdb_id: tmdb } : { type: target.media.type },
+                };
+
+                setLinksValue((prev) => {
+                  const exists = prev.some((l) => l.href === newLink.href);
+                  const next = exists ? prev : [...prev, newLink];
+                  setLinksDraft(JSON.stringify(next, null, 2));
+                  return next;
+                });
+              };
+
+              const removeLink = (href: string) => {
+                setLinksValue((prev) => {
+                  const next = prev.filter((l) => l.href !== href);
+                  setLinksDraft(JSON.stringify(next, null, 2));
+                  return next;
+                });
+              };
+
+              const runSearch = async () => {
+                setLinkSearchError(null);
+                setLinkSearchLoading(true);
+                try {
+                  const u = new URL(`${base}/v1/search`);
+                  u.searchParams.set("creator_id", poster.creator.creator_id);
+                  u.searchParams.set("limit", "24");
+                  if (linkSearchQ.trim()) u.searchParams.set("q", linkSearchQ.trim());
+
+                  const r = await fetch(u.toString());
+                  if (!r.ok) throw new Error(`search failed: ${r.status}`);
+                  const json = (await r.json()) as SearchResponse;
+                  setLinkSearchResults(json.results.filter((x) => x.poster_id !== poster.poster_id));
+                } catch (e: any) {
+                  setLinkSearchError(e?.message || String(e));
+                } finally {
+                  setLinkSearchLoading(false);
+                }
+              };
+
               return (
                 <div className="op-mt-12">
-                  <textarea
-                    className="op-input"
-                    style={{ minHeight: 180, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
-                    value={linksDraft}
-                    onChange={(e) => setLinksDraft(e.target.value)}
-                  />
-                  <div className="op-row op-mt-10">
-                    <button className="op-btn" disabled={linksSaving} onClick={() => void save()}>
+                  <div className="op-row op-row--between">
+                    <div className="op-subtle op-text-sm">
+                      Current links: <strong>{linksValue.length}</strong>
+                    </div>
+                    <button className="op-btn" disabled={linksSaving} onClick={() => void saveLinks(linksValue)}>
                       {linksSaving ? "Saving…" : "Save links"}
                     </button>
-                    {linksStatus && <span className="op-subtle op-text-sm">{linksStatus}</span>}
+                  </div>
+
+                  {linksStatus && <div className="op-subtle op-text-sm op-mt-10">{linksStatus}</div>}
+
+                  {linksValue.length === 0 ? (
+                    <p className="op-subtle op-mt-12">No links yet.</p>
+                  ) : (
+                    <div className="op-grid op-mt-10">
+                      {linksValue.map((l, idx) => (
+                        <div key={`${l.href}-${idx}`} className="op-card op-card--padded">
+                          <div className="op-card-title">{l.title || l.rel || "Related"}</div>
+                          <div className="op-subtle op-text-sm op-mt-6">
+                            <code className="op-code">{l.href}</code>
+                          </div>
+                          <div className="op-row op-mt-10">
+                            <a className="op-link" href={l.href}>
+                              Open →
+                            </a>
+                            <button className="op-btn op-btn--subtle" onClick={() => removeLink(l.href)}>
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="op-section">
+                    <h3 className="op-section-title">Add a link</h3>
+                    <div className="op-row op-mt-10">
+                      <input
+                        className="op-input"
+                        placeholder="Search your posters (title substring)"
+                        value={linkSearchQ}
+                        onChange={(e) => setLinkSearchQ(e.target.value)}
+                      />
+                      <button className="op-btn" disabled={linkSearchLoading} onClick={() => void runSearch()}>
+                        {linkSearchLoading ? "Searching…" : "Search"}
+                      </button>
+                    </div>
+                    {linkSearchError && <div className="op-alert op-alert--error op-mt-12">{linkSearchError}</div>}
+                    {linkSearchResults.length > 0 && (
+                      <div className="op-grid op-grid--strip op-mt-10">
+                        {linkSearchResults.map((r) => (
+                          <div key={r.poster_id} className="op-card">
+                            <button
+                              className="op-link"
+                              style={{ width: "100%", textAlign: "left" }}
+                              onClick={() => addLinkFromPoster(r)}
+                              title="Add link"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img className="op-img" src={r.assets.preview.url} alt={r.media.title || r.poster_id} />
+                            </button>
+                            <div className="op-poster-meta">
+                              <div className="op-poster-title">{r.media.title || "(untitled)"}</div>
+                              <div className="op-subtle op-text-sm">
+                                <span className="op-badge">{r.media.type}</span>
+                                {r.media.tmdb_id !== undefined && r.media.tmdb_id !== null && (
+                                  <span className="op-badge">TMDB {r.media.tmdb_id}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="op-section">
+                    <button className="op-btn op-btn--subtle" onClick={() => setLinksAdvanced((v) => !v)}>
+                      {linksAdvanced ? "Hide advanced JSON" : "Show advanced JSON"}
+                    </button>
+
+                    {linksAdvanced && (
+                      <div className="op-mt-12">
+                        <textarea
+                          className="op-input"
+                          style={{ minHeight: 180, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+                          value={linksDraft}
+                          onChange={(e) => setLinksDraft(e.target.value)}
+                        />
+                        <div className="op-row op-mt-10">
+                          <button
+                            className="op-btn op-btn--subtle"
+                            onClick={() => {
+                              try {
+                                const parsed = JSON.parse(linksDraft);
+                                if (!Array.isArray(parsed)) throw new Error("links_json must be a JSON array");
+                                setLinksValue(parsed as PosterLink[]);
+                                setLinksStatus("Draft applied (not saved yet).");
+                              } catch (e: any) {
+                                setLinksStatus(e?.message || String(e));
+                              }
+                            }}
+                          >
+                            Apply JSON draft
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
