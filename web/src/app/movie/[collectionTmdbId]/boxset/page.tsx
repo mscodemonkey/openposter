@@ -49,10 +49,8 @@ function TedMovieBoxSetDemo() {
         <div>
       <div className="op-row op-row--between">
         <div>
-          <h1 className="op-title-lg">ted collection Movie Box Set</h1>
-          <div className="op-subtle op-mt-6 op-title-meta">
-            MOVIE BOX SET | 2012 | willtong93
-          </div>
+          <h1 className="op-title-lg">ted</h1>
+          <div className="op-subtle op-mt-6 op-title-meta">MOVIE COLLECTION | willtong93</div>
         </div>
         <a className="op-link op-text-sm" href="/tv/201834/boxset">
           Back to TV box set →
@@ -154,10 +152,14 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
       <div className="op-page-content">
         <div className="op-row op-row--between">
           <div>
-            <h1 className="op-title-lg">{collection.media.title || "Movie Box Set"}</h1>
-            <div className="op-subtle op-mt-6 op-title-meta">
-              MOVIE BOX SET{collection.media.year ? ` | ${collection.media.year}` : ""} | {collection.creator.display_name}
-            </div>
+            <h1 className="op-title-lg">
+              {(() => {
+                const t = collection.media.title || "Movie Collection";
+                // UX: don't repeat "collection"/"box set" in the title line
+                return t.replace(/\s+collection\s*$/i, "").replace(/\s+box\s*set\s*$/i, "").trim() || t;
+              })()}
+            </h1>
+            <div className="op-subtle op-mt-6 op-title-meta">MOVIE COLLECTION | {collection.creator.display_name}</div>
           </div>
         </div>
 
