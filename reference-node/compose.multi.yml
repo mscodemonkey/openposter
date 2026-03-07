@@ -9,6 +9,13 @@ services:
       - OPENPOSTER_OPERATOR_NAME=Creator A
       - OPENPOSTER_MIRRORS=http://localhost:8083
       - OPENPOSTER_ADMIN_TOKEN=dev-admin
+      - OPENPOSTER_ALLOW_PRIVATE_NODES=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read(); print('ok')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     volumes:
       - ./data-a:/data
 
@@ -21,6 +28,13 @@ services:
       - OPENPOSTER_NODE_NAME=OpenPoster Node B
       - OPENPOSTER_OPERATOR_NAME=Creator B
       - OPENPOSTER_ADMIN_TOKEN=dev-admin
+      - OPENPOSTER_ALLOW_PRIVATE_NODES=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read(); print('ok')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     volumes:
       - ./data-b:/data
 
@@ -37,6 +51,12 @@ services:
       - OPENPOSTER_OPERATOR_NAME=Mirror Operator
       - OPENPOSTER_MIRROR_ORIGIN=http://node_a:8080
       - OPENPOSTER_MIRROR_POLL_SECONDS=5
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read(); print('ok')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     volumes:
       - ./data-mirror:/data
 
@@ -47,5 +67,11 @@ services:
     environment:
       - OPENPOSTER_INDEXER_SEEDS=http://node_a:8080
       - OPENPOSTER_INDEXER_POLL_SECONDS=10
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/v1/health').read(); print('ok')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     volumes:
       - ./data-indexer:/data

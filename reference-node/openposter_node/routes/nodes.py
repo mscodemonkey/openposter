@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
+import socket
+import ipaddress
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Body, Query, Request
-from sqlalchemy import String, select
 
 from ..errors import http_error
 
@@ -16,6 +18,32 @@ def _now_rfc3339() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _is_private_host(host: str) -> bool:
+    # Resolve host to IPs and check if any are private/loopback/link-local.
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return True
+
+    for info in infos:
+        sockaddr = info[4]
+        ip_str = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except Exception:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            return True
+    return False
+
+
 def _normalize_url(url: str) -> str:
     url = url.strip().rstrip("/")
     p = urlparse(url)
@@ -23,6 +51,15 @@ def _normalize_url(url: str) -> str:
         raise http_error(400, "invalid_request", "node url must be http(s)")
     if not p.netloc:
         raise http_error(400, "invalid_request", "node url missing host")
+
+    # Basic SSRF hardening: block private/localhost by default.
+    allow_private = os.environ.get("OPENPOSTER_ALLOW_PRIVATE_NODES", "").lower() in {"1", "true", "yes"}
+    host = p.hostname
+    if host is None:
+        raise http_error(400, "invalid_request", "node url missing host")
+    if not allow_private and _is_private_host(host):
+        raise http_error(400, "invalid_request", "private/localhost node urls are not allowed")
+
     return url
 
 

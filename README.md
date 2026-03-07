@@ -56,6 +56,22 @@ Creator nodes can trust multiple issuers (including self-issued).
 
 For beta testing, you can run the reference node and (optionally) an indexer using Docker Compose.
 
+### First-run checklist for node operators
+
+1) Set `OPENPOSTER_BASE_URL` correctly
+- This is the URL other people will use to reach your node.
+- If you set it wrong, clients may get `localhost` links that don’t work for anyone else.
+
+2) Set an admin token (for ingest)
+- Set `OPENPOSTER_ADMIN_TOKEN` to a long random string.
+- Anyone with this token can upload/delete posters on your node.
+
+3) Decide your redistribution policy
+- `public-cache-ok` vs `mirrors-approved` vs `none`.
+
+4) Register your node with a seed directory/indexer (when available)
+- For now, nodes can register with other nodes using `POST /v1/nodes`.
+
 The reference node is intentionally minimal: it’s a working starting point and a compatibility target.
 
 ### Requirements
