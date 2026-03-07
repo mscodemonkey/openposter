@@ -15,6 +15,8 @@ This document defines a minimal, stable core protocol for a federated poster net
 
 ## 0. Terms
 
+This section defines the key words used throughout the protocol. You don’t need to memorise these — it’s just here so the rest of the document stays consistent.
+
 - **Node**: an HTTP server that publishes posters and metadata.
 - **Creator node**: node operated by a creator (canonical publisher of that creator’s metadata).
 - **Client**: consumer software (Plex/Jellyfin plugin, CLI, web app).
@@ -27,6 +29,8 @@ Normative keywords: **MUST**, **SHOULD**, **MAY** per RFC 2119.
 ---
 
 ## 1. Transport and versioning
+
+This section explains the basic “shape” of the OpenPoster API: how clients talk to nodes, and how we avoid breaking older clients as the protocol evolves.
 
 - All endpoints are served over **HTTPS** (HTTP MAY be allowed for LAN/self-signed dev, but clients SHOULD warn).
 - API versioning is path-based: `/v1/...`.
@@ -112,6 +116,12 @@ Nodes MUST return JSON with at least:
 
 ## 3. Node list (gossip)
 
+OpenPoster is a network of many nodes, so clients need a way to discover more than just the first node they were told about.
+
+The **node list** endpoint is a simple way for nodes to share “other nodes I know about”. This is sometimes called *gossip discovery*.
+
+Important: the node list is about **discovery**, not **trust**. Clients should still verify signed poster metadata and apply their own trust rules.
+
 ### 3.1 Endpoint
 
 `GET /v1/nodes`
@@ -140,6 +150,10 @@ Nodes MUST return JSON with at least:
 ---
 
 ## 4. Search
+
+Search is how apps (Plex/Jellyfin tools, websites, CLIs) find artwork on a node.
+
+In v1, the most reliable way to search is by external IDs (especially TMDB). Text search (`q=...`) is allowed, but ID-based search is what makes this work consistently across a federation.
 
 ### 4.1 Endpoint
 
@@ -422,6 +436,8 @@ Rationale:
 
 ## 5. Poster record
 
+Search results are meant to be lightweight. When a client wants the full details for a specific piece of artwork (including signed metadata and all available variants), it fetches the **poster record**.
+
 ### 5.1 Endpoint
 
 `GET /v1/posters/{poster_id}`
@@ -433,6 +449,10 @@ Same schema as a search result entry, but MAY include additional fields (tags, r
 ---
 
 ## 6. Blob serving (content-addressed)
+
+A **blob** is the actual image bytes (JPEG/PNG) for a preview, poster, or background.
+
+OpenPoster serves blobs by **SHA-256 hash**, not by “filename”. This makes blobs immutable and safe to cache/mirror, and lets clients verify integrity after download.
 
 ### 6.1 Endpoint
 
@@ -454,6 +474,8 @@ Same schema as a search result entry, but MAY include additional fields (tags, r
 ## 7. Premium access: key unwrap
 
 Premium works by distributing **encrypted blobs** and separately granting the **content key** to entitled users.
+
+This design is intentional: it allows mirrors and caches to host the encrypted bytes (good performance, lower creator bandwidth), while the creator keeps control over who can decrypt.
 
 ### 7.1 Endpoint
 
@@ -522,6 +544,10 @@ The node MUST:
 
 ## 8. Token requirements (issuer → client)
 
+Tokens are how a client proves “this user is allowed to access premium content”.
+
+OpenPoster uses a **hybrid issuer model**: a creator node can choose which issuers it trusts (including itself, OpenPoster, or others). This keeps the network decentralised while still allowing good user experience.
+
 v1 assumes bearer tokens in **JWT** format.
 
 Required JWT claims:
@@ -560,6 +586,8 @@ Nodes MAY also support issuer introspection, but SHOULD work offline using token
 ---
 
 ## 9. Errors (v1)
+
+Consistent errors make it much easier for clients (and humans) to understand what went wrong. v1 standardises an error format so tools can show friendly messages and developers can debug quickly.
 
 All error responses from `/v1/*` endpoints MUST be JSON with `Content-Type: application/json` and the following shape:
 
@@ -610,6 +638,8 @@ For field-level validation errors, `details` SHOULD follow:
 
 ## 10. Security notes (v1)
 
+This section summarises the “gotchas” that matter in a federated network: how to avoid spoofed metadata, prevent accidental leakage of premium keys, and keep nodes from being overwhelmed.
+
 - **Previews must be public** to allow cross-node browsing without auth complexity.
 - Premium full-res blobs SHOULD be encrypted at rest and in distribution.
 - Nodes MUST rate-limit `/keys/*:unwrap` to reduce abuse.
@@ -618,7 +648,9 @@ For field-level validation errors, `details` SHOULD follow:
 
 ---
 
-## 10. Open questions / extensions (non-normative)
+## 11. Open questions / extensions (non-normative)
+
+Not everything needs to be in v1. This section captures ideas we expect to add later (or keep optional) without bloating the core protocol.
 
 - Signed poster manifests (creator signature over metadata) to prevent metadata forgery.
 - Mirror approval flows (creator-authorized mirrors).
@@ -628,7 +660,9 @@ For field-level validation errors, `details` SHOULD follow:
 
 ---
 
-## 11. Minimal conformance checklist
+## 12. Minimal conformance checklist
+
+This checklist makes federation practical: it tells node operators and client authors which endpoints and behaviours are required for basic interoperability.
 
 A conforming **node** MUST implement:
 - `GET /.well-known/openposter-node`
