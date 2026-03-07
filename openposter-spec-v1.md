@@ -160,7 +160,7 @@ Query params (v1 core):
           "bytes": 5123123,
           "mime": "image/jpeg",
           "encryption": {
-            "alg": "xchacha20poly1305",
+            "alg": "aes-256-gcm",
             "key_id": "key_7d2b...",
             "nonce": "base64:..."
           }
@@ -253,7 +253,7 @@ Assets SHOULD include:
 - `access`: `public|premium`
 
 If `access = "premium"`, `assets.full.encryption` MUST be present:
-- `alg`: `xchacha20poly1305` (recommended) or `aes-256-gcm`
+- `alg`: `aes-256-gcm` (recommended for v1) or `xchacha20poly1305`
 - `key_id`: string (used with `/v1/keys/{key_id}:unwrap`)
 - `nonce`: base64 string (algorithm-specific)
 
@@ -267,14 +267,14 @@ Nodes SHOULD expose variants to reduce client work and bandwidth. Two patterns a
   "assets": {
     "preview": {"kind":"poster","hash":"sha256:...","url":"...","bytes":123,"mime":"image/jpeg","width":600,"height":900},
     "full": {"access":"premium","kind":"poster","hash":"sha256:...","url":"...","bytes":5123123,"mime":"image/png","width":2000,"height":3000,
-      "encryption": {"alg":"xchacha20poly1305","key_id":"key_...","nonce":"base64:..."}
+      "encryption": {"alg":"aes-256-gcm","key_id":"key_...","nonce":"base64:..."}
     },
     "variants": [
       {"name":"full-jpeg","hash":"sha256:...","url":"...","bytes":2100000,"mime":"image/jpeg","width":2000,"height":3000,
-        "access":"premium","encryption": {"alg":"xchacha20poly1305","key_id":"key_...","nonce":"base64:..."}
+        "access":"premium","encryption": {"alg":"aes-256-gcm","key_id":"key_...","nonce":"base64:..."}
       },
       {"name":"full-png","hash":"sha256:...","url":"...","bytes":3400000,"mime":"image/png","width":2000,"height":3000,
-        "access":"premium","encryption": {"alg":"xchacha20poly1305","key_id":"key_...","nonce":"base64:..."}
+        "access":"premium","encryption": {"alg":"aes-256-gcm","key_id":"key_...","nonce":"base64:..."}
       }
     ]
   }
@@ -359,7 +359,7 @@ Body:
 ```json
 {
   "key_id": "key_7d2b...",
-  "alg": "xchacha20poly1305",
+  "alg": "aes-256-gcm",
   "content_key": "base64:...",
   "expires_at": "2026-03-07T03:25:00Z"
 }
@@ -393,8 +393,28 @@ Required JWT claims:
 - `iat` issued-at
 
 Entitlement claims (recommended):
-- `entitlements`: array of creator ids and/or collection ids
-  - e.g. `{ "creator": "cr_marty", "tier": "premium" }`
+- `entitlements`: array of entitlement objects.
+
+Creator-wide entitlement (v1 recommended):
+```json
+{
+  "creator_id": "cr_marty",
+  "tier": "premium"
+}
+```
+
+Per-collection entitlement (v1 optional; reserved for later):
+```json
+{
+  "creator_id": "cr_marty",
+  "collection_id": "col_neon_pack",
+  "tier": "premium"
+}
+```
+
+Rules:
+- If `collection_id` is absent, the entitlement applies to the whole creator.
+- Nodes MUST treat unknown fields as ignorable (forward compatible).
 
 Nodes MAY also support issuer introspection, but SHOULD work offline using token claims for scale.
 
