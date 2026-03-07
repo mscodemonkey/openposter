@@ -10,13 +10,17 @@ export default function LibraryPage() {
   const conn = loadCreatorConnection();
   const baseUrl = useMemo(() => conn?.nodeUrl?.replace(/\/+$/, "") || "", [conn]);
 
+  const [autoCheck, setAutoCheck] = useState(false);
   const [items, setItems] = useState<PosterEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [indexed, setIndexed] = useState<Record<string, "yes" | "no" | "checking">>({});
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  async function load() {
+  async function loadFirstPage() {
     if (!conn) {
       setItems([]);
+      setNextCursor(null);
       return;
     }
     setError(null);
@@ -24,6 +28,25 @@ export default function LibraryPage() {
     if (!r.ok) throw new Error(`list failed: ${r.status}`);
     const json = (await r.json()) as SearchResponse;
     setItems(json.results);
+    setNextCursor(json.next_cursor);
+  }
+
+  async function loadMore() {
+    if (!conn) return;
+    if (!nextCursor) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const r = await fetch(
+        baseUrl + "/v1/posters?limit=50&cursor=" + encodeURIComponent(nextCursor)
+      );
+      if (!r.ok) throw new Error(`list failed: ${r.status}`);
+      const json = (await r.json()) as SearchResponse;
+      setItems((prev) => ([...(prev || []), ...json.results]));
+      setNextCursor(json.next_cursor);
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   async function checkIndexed(p: PosterEntry) {
@@ -55,12 +78,41 @@ export default function LibraryPage() {
       setError(`delete failed: ${r.status} ${JSON.stringify(json)}`);
       return;
     }
-    await load();
+    await loadFirstPage();
+  }
+
+  async function checkAllIndexed(list: PosterEntry[]) {
+    for (const p of list) {
+      // Skip already known
+      if (indexed[p.poster_id]) continue;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await checkIndexed(p);
+      } catch (e: any) {
+        setError(e?.message || String(e));
+        // keep going
+      }
+    }
   }
 
   useEffect(() => {
-    void load().catch((e) => setError(e?.message || String(e)));
+    // client-only query param parsing (avoids useSearchParams build constraint)
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      setAutoCheck(sp.get("check") === "1");
+    } catch {
+      setAutoCheck(false);
+    }
+
+    void loadFirstPage().catch((e) => setError(e?.message || String(e)));
   }, []);
+
+  useEffect(() => {
+    if (!autoCheck) return;
+    if (!items || items.length === 0) return;
+    void checkAllIndexed(items);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCheck, items]);
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: 24 }}>
@@ -91,9 +143,23 @@ export default function LibraryPage() {
         ) : items.length === 0 ? (
           <p style={{ opacity: 0.8 }}>No posters found.</p>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-            {items.map((p) => (
-              <div key={p.poster_id} style={{ border: "1px solid #333", borderRadius: 10, overflow: "hidden" }}>
+          <>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+              <button
+                onClick={() => void checkAllIndexed(items).catch((e) => setError(e?.message || String(e)))}
+                style={{ fontSize: 12, border: "1px solid #444", borderRadius: 8, padding: "8px 12px" }}
+                title="Checks indexer status for all currently loaded posters"
+              >
+                Check all indexed
+              </button>
+              <div style={{ opacity: 0.8, fontSize: 12 }}>
+                Indexer: <code>{INDEXER_BASE_URL}</code>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+              {items.map((p) => (
+                <div key={p.poster_id} style={{ border: "1px solid #333", borderRadius: 10, overflow: "hidden" }}>
                 <a href={p.assets.preview.url} target="_blank" rel="noreferrer">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={p.assets.preview.url} alt={p.media.title || p.poster_id} style={{ width: "100%", display: "block" }} />
@@ -134,8 +200,23 @@ export default function LibraryPage() {
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              {nextCursor ? (
+                <button
+                  onClick={() => void loadMore().catch((e) => setError(e?.message || String(e)))}
+                  disabled={loadingMore}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #333" }}
+                >
+                  {loadingMore ? "Loading…" : "Load more"}
+                </button>
+              ) : (
+                <div style={{ opacity: 0.7, fontSize: 12 }}>End of list.</div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

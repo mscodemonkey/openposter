@@ -61,7 +61,7 @@ export default function UploadPage() {
 
     setStatus(`Uploaded. Redirecting to My library...`);
     setTimeout(() => {
-      window.location.href = "/library";
+      window.location.href = "/library?check=1";
     }, 400);
   }
 
