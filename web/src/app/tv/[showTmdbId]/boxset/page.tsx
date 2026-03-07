@@ -198,12 +198,12 @@ function TedBoxSetDemo() {
               <img
                 className="op-img"
                 src="/demo/ted-movie-boxset/d7ee7c6c-89cc-46b7-95ba-0c276fd78a7d.jpg"
-                alt="ted collection Movie Box Set"
+                alt="ted collection"
               />
             </a>
             <div className="op-poster-meta">
               <a className="op-link" href="/movie/1703/boxset">
-                <div className="op-poster-title">ted collection Movie Box Set</div>
+                <div className="op-poster-title">ted collection</div>
                 <div className="op-subtle op-text-sm">Movie Box Set</div>
               </a>
             </div>
