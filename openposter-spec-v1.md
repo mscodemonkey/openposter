@@ -223,19 +223,19 @@ Poster Entry MUST include:
 
 `media` MUST include:
 - `type`: `movie|show|season|episode|collection`
-- One or more IDs:
-  - `tmdb_id` (number) RECOMMENDED
-  - `imdb_id` (string like `tt0133093`) OPTIONAL
-  - `tvdb_id` (number) OPTIONAL
 
-TV hierarchy fields (v1):
-- When `type` is `season` or `episode`, `media` MUST also include:
+Canonical IDs (v1):
+- For `type=movie` and `type=show`, `media` MUST include:
+  - `tmdb_id` (number)
+- For `type=season` and `type=episode`, `media` MUST include:
   - `show_tmdb_id` (number) — the TMDB id of the parent show
-- When `type` is `episode`, `media` MUST also include:
   - `season_number` (number)
-  - `episode_number` (number)
-- When `type` is `season`, `media` MUST also include:
-  - `season_number` (number)
+  - and for `type=episode` additionally: `episode_number` (number)
+
+Optional IDs (v1):
+- `tmdb_id` (number) MAY be included for `season` and `episode` if known (object-level TMDB id).
+- `imdb_id` (string like `tt0133093`) OPTIONAL
+- `tvdb_id` (number) OPTIONAL
 
 `media` SHOULD include:
 - `title` (string)
