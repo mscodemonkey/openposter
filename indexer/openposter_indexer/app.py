@@ -8,6 +8,7 @@ from .routes.posters import router as posters_router
 from .routes.recent import router as recent_router
 from .routes.search import router as search_router
 from .routes.stats import router as stats_router
+from .routes.tv_boxset import router as tv_boxset_router
 
 app = FastAPI(title="OpenPoster Indexer", version="0.1.0")
 
@@ -23,4 +24,5 @@ app.include_router(creators_router, prefix="/v1")
 app.include_router(facets_router, prefix="/v1")
 app.include_router(posters_router, prefix="/v1")
 app.include_router(stats_router, prefix="/v1")
+app.include_router(tv_boxset_router, prefix="/v1")
 app.include_router(nodes_router, prefix="/v1")

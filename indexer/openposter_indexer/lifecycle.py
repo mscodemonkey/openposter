@@ -177,6 +177,9 @@ async def crawl_once(app: FastAPI) -> None:
                         year=(str(media.get("year")) if media.get("year") is not None else None),
                         creator_id=(str(creator.get("creator_id")) if creator.get("creator_id") is not None else None),
                         creator_display_name=(str(creator.get("display_name")) if creator.get("display_name") is not None else None),
+                        show_tmdb_id=(str(media.get("show_tmdb_id")) if media.get("show_tmdb_id") is not None else None),
+                        season_number=(str(media.get("season_number")) if media.get("season_number") is not None else None),
+                        episode_number=(str(media.get("episode_number")) if media.get("episode_number") is not None else None),
                         changed_at=_norm_rfc3339(changed_at),
                         poster_json=json.dumps(poster, separators=(",", ":")),
                     )
@@ -223,6 +226,9 @@ async def init_app_state(app: FastAPI) -> None:
             ("year", "ALTER TABLE indexed_posters ADD COLUMN year VARCHAR"),
             ("creator_id", "ALTER TABLE indexed_posters ADD COLUMN creator_id VARCHAR"),
             ("creator_display_name", "ALTER TABLE indexed_posters ADD COLUMN creator_display_name VARCHAR"),
+            ("show_tmdb_id", "ALTER TABLE indexed_posters ADD COLUMN show_tmdb_id VARCHAR"),
+            ("season_number", "ALTER TABLE indexed_posters ADD COLUMN season_number VARCHAR"),
+            ("episode_number", "ALTER TABLE indexed_posters ADD COLUMN episode_number VARCHAR"),
         ]:
             if col not in existing:
                 await conn.exec_driver_sql(ddl)
@@ -245,6 +251,15 @@ async def init_app_state(app: FastAPI) -> None:
         )
         await conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_indexed_posters_creator_display_name ON indexed_posters(creator_display_name)"
+        )
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_indexed_posters_show_tmdb_id ON indexed_posters(show_tmdb_id)"
+        )
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_indexed_posters_season_number ON indexed_posters(season_number)"
+        )
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_indexed_posters_episode_number ON indexed_posters(episode_number)"
         )
 
     # backfill denormalized columns for existing rows
@@ -271,6 +286,9 @@ async def init_app_state(app: FastAPI) -> None:
                 r.creator_display_name = (
                     str(creator.get("display_name")) if creator.get("display_name") is not None else None
                 )
+                r.show_tmdb_id = (str(media.get("show_tmdb_id")) if media.get("show_tmdb_id") is not None else None)
+                r.season_number = (str(media.get("season_number")) if media.get("season_number") is not None else None)
+                r.episode_number = (str(media.get("episode_number")) if media.get("episode_number") is not None else None)
             except Exception:
                 continue
         await session.commit()
