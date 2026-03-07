@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import Integer, String
+from sqlalchemy import Integer, String, DateTime
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -15,6 +15,10 @@ class Poster(Base):
     __tablename__ = "posters"
 
     poster_id: Mapped[str] = mapped_column(String, primary_key=True)
+
+    created_at: Mapped[str] = mapped_column(String)  # RFC3339
+    updated_at: Mapped[str] = mapped_column(String)  # RFC3339
+    deleted_at: Mapped[str | None] = mapped_column(String, nullable=True)  # RFC3339 or null
 
     media_type: Mapped[str] = mapped_column(String)
     tmdb_id: Mapped[int] = mapped_column(Integer, index=True)

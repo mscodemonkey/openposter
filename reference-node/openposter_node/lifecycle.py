@@ -39,6 +39,19 @@ async def init_app_state(app: FastAPI) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+        # Lightweight SQLite migration for early development: add new columns if missing.
+        # (Once we stabilise, we'll introduce proper migrations.)
+        await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+        cols = (await conn.exec_driver_sql("PRAGMA table_info(posters)")).all()
+        col_names = {c[1] for c in cols}
+        for name, ddl in [
+            ("created_at", "ALTER TABLE posters ADD COLUMN created_at TEXT"),
+            ("updated_at", "ALTER TABLE posters ADD COLUMN updated_at TEXT"),
+            ("deleted_at", "ALTER TABLE posters ADD COLUMN deleted_at TEXT"),
+        ]:
+            if name not in col_names:
+                await conn.exec_driver_sql(ddl)
+
     # Seed sample data once (optional): if posters table empty and seed file exists
     seed = cfg.data_dir / "seed.json"
     if seed.exists():
@@ -50,7 +63,13 @@ async def init_app_state(app: FastAPI) -> None:
             async with app.state.Session() as session:
                 existing = (await session.execute(select(Poster).limit(1))).scalar_one_or_none()
                 if existing is None:
+                    from datetime import datetime, timezone
+
+                    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
                     for row in payload:
+                        row.setdefault("created_at", now)
+                        row.setdefault("updated_at", now)
+                        row.setdefault("deleted_at", None)
                         session.add(Poster(**row))
                     await session.commit()
 
