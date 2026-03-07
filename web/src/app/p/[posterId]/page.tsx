@@ -124,7 +124,22 @@ export default function PosterPage({
       <div className="op-row op-row--between">
         <div>
           <h1 className="op-title-lg">{poster?.media.title || "Poster"}</h1>
-          <div className="op-subtle op-text-sm">
+
+          {poster && (
+            <div className="op-subtle op-mt-6 op-title-meta">
+              {(() => {
+                const t = poster.media.type;
+                if (t === "show") return "TV SHOW";
+                if (t === "season") return "TV SEASON";
+                if (t === "episode") return "TV EPISODE";
+                if (t === "collection") return "MOVIE BOX SET";
+                if (t === "movie") return "MOVIE";
+                return "POSTER";
+              })()} | {poster.creator.display_name}
+            </div>
+          )}
+
+          <div className="op-subtle op-text-sm op-mt-6">
             <code className="op-code">{posterId}</code>
           </div>
         </div>
