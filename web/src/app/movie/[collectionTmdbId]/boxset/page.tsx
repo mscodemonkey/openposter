@@ -159,7 +159,9 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
                 return t.replace(/\s+collection\s*$/i, "").replace(/\s+box\s*set\s*$/i, "").trim() || t;
               })()}
             </h1>
-            <div className="op-subtle op-mt-6 op-title-meta">MOVIE COLLECTION | {collection.creator.display_name}</div>
+            <div className="op-subtle op-mt-6 op-title-meta">
+              {(collection ? "MOVIE BOX SET" : movies.length <= 1 ? "MOVIE" : "MOVIE BOX SET")} | {collection.creator.display_name}
+            </div>
           </div>
         </div>
 
