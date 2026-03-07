@@ -61,8 +61,16 @@
 }
 
 .op-section-title {
-  font-size: 18px;
+  /* Keep this class for shared spacing/weight; font-size is set by element (h2/h3) */
   font-weight: 600;
+}
+
+h2.op-section-title {
+  font-size: 18px;
+}
+
+h3.op-section-title {
+  font-size: 16px;
 }
 
 .op-title-lg {
