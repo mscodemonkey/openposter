@@ -143,11 +143,15 @@ async def crawl_once(app: FastAPI) -> None:
                     if tmdb_id is None or not media_type:
                         continue
 
+                    creator = poster.get("creator") or {}
                     row = IndexedPoster(
                         poster_id=poster_id,
                         source_node=node,
                         media_type=str(media_type),
                         tmdb_id=str(tmdb_id),
+                        title=(str(media.get("title")) if media.get("title") is not None else None),
+                        year=(str(media.get("year")) if media.get("year") is not None else None),
+                        creator_id=(str(creator.get("creator_id")) if creator.get("creator_id") is not None else None),
                         changed_at=changed_at or _now_rfc3339(),
                         poster_json=json.dumps(poster, separators=(",", ":")),
                     )
@@ -185,6 +189,32 @@ async def init_app_state(app: FastAPI) -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # lightweight migrations for SQLite (dev/MVP)
+        cols = await conn.exec_driver_sql("PRAGMA table_info(indexed_posters)")
+        existing = {row[1] for row in cols}
+        for col, ddl in [
+            ("title", "ALTER TABLE indexed_posters ADD COLUMN title VARCHAR"),
+            ("year", "ALTER TABLE indexed_posters ADD COLUMN year VARCHAR"),
+            ("creator_id", "ALTER TABLE indexed_posters ADD COLUMN creator_id VARCHAR"),
+        ]:
+            if col not in existing:
+                await conn.exec_driver_sql(ddl)
+
+    # backfill denormalized columns for existing rows
+    async with app.state.Session() as session:
+        rows = (await session.execute(select(IndexedPoster).where(IndexedPoster.title.is_(None)).limit(5000))).scalars().all()
+        for r in rows:
+            try:
+                poster = json.loads(r.poster_json)
+                media = poster.get("media") or {}
+                creator = poster.get("creator") or {}
+                r.title = (str(media.get("title")) if media.get("title") is not None else None)
+                r.year = (str(media.get("year")) if media.get("year") is not None else None)
+                r.creator_id = (str(creator.get("creator_id")) if creator.get("creator_id") is not None else None)
+            except Exception:
+                continue
+        await session.commit()
 
     app.state.crawler_task = asyncio.create_task(crawler_loop(app))
 

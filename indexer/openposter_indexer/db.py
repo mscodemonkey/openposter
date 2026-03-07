@@ -20,7 +20,12 @@ class IndexedPoster(Base):
     media_type: Mapped[str] = mapped_column(String, index=True)
     tmdb_id: Mapped[str] = mapped_column(String, index=True)
 
-    changed_at: Mapped[str] = mapped_column(String)
+    # denormalized fields to support simple browsing/search
+    title: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    year: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    creator_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+
+    changed_at: Mapped[str] = mapped_column(String, index=True)
 
     poster_json: Mapped[str] = mapped_column(Text)
 
