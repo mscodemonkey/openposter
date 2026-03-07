@@ -59,8 +59,16 @@ Nodes MUST return JSON with at least:
     "search": true,
     "nodes_gossip": true,
     "blobs": true,
-    "premium": true
+    "premium": true,
+    "signed_metadata": true
   },
+  "signing_keys": [
+    {
+      "key_id": "key_ed25519_1",
+      "alg": "ed25519",
+      "public_key": "base64:..."
+    }
+  ],
   "trusted_issuers": [
     {
       "issuer": "https://openposter.art",
@@ -81,6 +89,7 @@ Nodes MUST return JSON with at least:
 ### 2.3 Semantics
 
 - `node_id` MUST be stable over time (e.g., random ID stored in node config). It SHOULD NOT be a domain name.
+- `signing_keys` lists public keys used to sign poster metadata (see §4.3.9). Nodes with `features.signed_metadata=true` MUST publish at least one signing key.
 - `trusted_issuers` declares which issuers the node will accept bearer tokens from for premium operations.
 - Nodes MAY include themselves as an issuer (self-issued model) by hosting a `jwks_url`.
 
@@ -302,6 +311,33 @@ Poster Entry SHOULD include:
 - `source_url` (canonical page)
 - `author` / `author_url` if different from node operator
 
+#### 4.3.9 Signed metadata (REQUIRED for v1)
+
+To prevent spoofing/impersonation, Poster Entry metadata MUST be signed by the creator node.
+
+Poster Entry MUST include a `signature` object:
+```json
+{
+  "signature": {
+    "alg": "ed25519",
+    "key_id": "key_ed25519_1",
+    "jcs": true,
+    "sig": "base64:..."
+  }
+}
+```
+
+Signing rules:
+- `alg` MUST be `ed25519` for v1.
+- `key_id` MUST reference one of the node’s `signing_keys` from `/.well-known/openposter-node`.
+- `sig` MUST be computed over the **canonical JSON** (RFC 8785 / JCS) of the Poster Entry **with the `signature` field omitted**.
+- Clients MUST verify signatures for any Poster Entry they display or apply.
+- Clients MAY choose not to display entries with invalid signatures.
+
+Rationale:
+- Blobs are content-addressed, but metadata can be forged without signatures.
+- This allows mirrors/indexers to relay metadata while preserving authenticity.
+
 ---
 
 ## 5. Poster record
@@ -349,25 +385,48 @@ Headers:
 Body:
 ```json
 {
-  "poster_id": "pst_8fa2c",
-  "hash": "sha256:..." 
+  "poster_id": "op:v1:opn_3c1f...:pst_8fa2c",
+  "hash": "sha256:...",
+  "wrap": {
+    "alg": "hpke-x25519-hkdf-sha256-aes-128-gcm",
+    "client_pubkey": "base64:..."
+  }
 }
 ```
+
+Notes:
+- `wrap` is OPTIONAL. If provided, the node SHOULD return a wrapped key instead of a raw content key.
 
 ### 7.2 Response
 
 ```json
 {
   "key_id": "key_7d2b...",
-  "alg": "aes-256-gcm",
+  "content_alg": "aes-256-gcm",
+  "expires_at": "2026-03-07T03:25:00Z",
+
+  "wrapped_key": {
+    "alg": "hpke-x25519-hkdf-sha256-aes-128-gcm",
+    "enc": "base64:...",
+    "ciphertext": "base64:..."
+  }
+}
+```
+
+Alternate (allowed, simpler):
+```json
+{
+  "key_id": "key_7d2b...",
+  "content_alg": "aes-256-gcm",
   "content_key": "base64:...",
   "expires_at": "2026-03-07T03:25:00Z"
 }
 ```
 
-Notes:
-- Returning `content_key` directly is the simplest model.
-- More advanced models MAY return a wrapped key bound to the client device, but v1 does not require it.
+Rules:
+- If the request includes `wrap`, the node SHOULD return `wrapped_key` and SHOULD NOT return `content_key`.
+- If the request omits `wrap`, the node MAY return `content_key`.
+- Clients SHOULD implement `wrapped_key` for long-term safety (prevents accidental leakage of long-lived content keys).
 
 ### 7.3 Validation rules
 
