@@ -15,11 +15,14 @@ app = FastAPI(title="OpenPoster Indexer", version="0.1.0")
 
 # CORS: the web UI is typically served from a different origin (e.g. http://localhost:3000)
 # than the indexer API (e.g. http://localhost:8090). Allow browser access.
-# MVP: allow all origins.
+# Note: wildcard origins can't be used with credentialed requests, so we allow common local dev origins.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
