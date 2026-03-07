@@ -67,7 +67,8 @@ services:
     ports:
       - "8084:8080"
     environment:
-      - OPENPOSTER_BASE_URL=http://localhost:8084
+      # Use the service DNS name so other containers (indexer) can crawl it.
+      - OPENPOSTER_BASE_URL=http://directory:8080
       - OPENPOSTER_NODE_NAME=OpenPoster Directory
       - OPENPOSTER_OPERATOR_NAME=Directory Operator
       - OPENPOSTER_ADMIN_TOKEN=dev-admin
