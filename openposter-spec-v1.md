@@ -486,6 +486,10 @@ Indexer peering note (non-normative):
 - Indexers SHOULD treat creator nodes as the source of truth for poster metadata.
 - If an indexer accepts poster metadata from another indexer, it MUST verify creator signatures and MUST be able to fetch the creator node descriptor to validate signing keys.
 
+Indexer node-health note (non-normative):
+- Indexers MAY track node health (e.g., `status`, `down_since`, `last_seen_up`, `consecutive_failures`) based on reachability checks.
+- Clients MAY use indexer-provided node health as a hint to avoid timeouts, but SHOULD treat it as observational rather than authoritative.
+
 ---
 
 ## 6. Poster record
