@@ -132,19 +132,11 @@ function TedBoxSetDemo() {
         <div>
           <h1 className="op-title-lg">ted (2024) Box Set</h1>
           <div className="op-subtle op-text-sm op-mt-6">
-            Reference creator: <strong>willtong93</strong>
+            Created by: <strong>willtong93</strong>
           </div>
         </div>
       </div>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Related artwork</h2>
-        <div className="op-subtle op-text-sm op-mt-6">
-          <a className="op-link" href="/movie/1703/boxset">
-            ted collection Movie Box Set
-          </a>
-        </div>
-      </section>
 
       <section className="op-section">
         <h2 className="op-section-title">Main show poster</h2>
@@ -197,6 +189,27 @@ function TedBoxSetDemo() {
             </div>
           );
         })}
+      <section className="op-section">
+        <h2 className="op-section-title">Related artwork</h2>
+        <div className="op-grid op-grid--posters op-mt-10">
+          <div className="op-card">
+            <a className="op-link" href="/movie/1703/boxset">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="op-img"
+                src="/demo/ted-movie-boxset/d7ee7c6c-89cc-46b7-95ba-0c276fd78a7d.jpg"
+                alt="ted collection Movie Box Set"
+              />
+            </a>
+            <div className="op-poster-meta">
+              <a className="op-link" href="/movie/1703/boxset">
+                <div className="op-poster-title">ted collection Movie Box Set</div>
+                <div className="op-subtle op-text-sm">Movie Box Set</div>
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
       </section>
     </div>
   );
