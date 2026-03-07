@@ -14,13 +14,17 @@ type CreatorsResponse = {
 };
 
 export default function CreatorsPage() {
+  const [q, setQ] = useState("");
   const [data, setData] = useState<CreatorsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const url = useMemo(() => {
     const base = INDEXER_BASE_URL.replace(/\/+$/, "");
-    return base + "/v1/creators?limit=200";
-  }, []);
+    const u = new URL(base + "/v1/creators");
+    u.searchParams.set("limit", "200");
+    if (q.trim() !== "") u.searchParams.set("q", q.trim());
+    return u.toString();
+  }, [q]);
 
   useEffect(() => {
     void (async () => {
@@ -40,6 +44,11 @@ export default function CreatorsPage() {
       <p className="op-subtle op-mt-6">
         Indexer: <code className="op-code">{INDEXER_BASE_URL}</code>
       </p>
+
+      <section className="op-section">
+        <h2 className="op-section-title">Find a creator</h2>
+        <input className="op-input op-mt-10" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search creator names…" />
+      </section>
 
       {error && <div className="op-alert op-alert--error">{error}</div>}
 
@@ -62,15 +71,13 @@ export default function CreatorsPage() {
                 </div>
               </div>
 
-              <div className="op-mt-10">
-                <div className="op-row op-row--between">
-                  <a className="op-link" href={`/creator/${encodeURIComponent(c.creator_id)}`}>
-                    View creator →
-                  </a>
-                  <a className="op-link" href={`/browse?creator_id=${encodeURIComponent(c.creator_id)}`}>
-                    Browse posters →
-                  </a>
-                </div>
+              <div className="op-row op-row--between op-mt-10">
+                <a className="op-link" href={`/creator/${encodeURIComponent(c.creator_id)}`}>
+                  View creator →
+                </a>
+                <a className="op-link" href={`/browse?creator_id=${encodeURIComponent(c.creator_id)}`}>
+                  Browse posters →
+                </a>
               </div>
             </div>
           ))}

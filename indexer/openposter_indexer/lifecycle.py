@@ -227,6 +227,26 @@ async def init_app_state(app: FastAPI) -> None:
             if col not in existing:
                 await conn.exec_driver_sql(ddl)
 
+        # Indexes (CREATE INDEX IF NOT EXISTS is safe for SQLite)
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_indexed_posters_changed_at ON indexed_posters(changed_at)"
+        )
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_indexed_posters_creator_id ON indexed_posters(creator_id)"
+        )
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_indexed_posters_media_type ON indexed_posters(media_type)"
+        )
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_indexed_posters_tmdb_id ON indexed_posters(tmdb_id)"
+        )
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_indexed_posters_title ON indexed_posters(title)"
+        )
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_indexed_posters_creator_display_name ON indexed_posters(creator_display_name)"
+        )
+
     # backfill denormalized columns for existing rows
     async with app.state.Session() as session:
         rows = (

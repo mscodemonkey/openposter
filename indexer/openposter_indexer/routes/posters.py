@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Request
+
+from ..errors import http_error
 from sqlalchemy import select
 
 from ..db import IndexedPoster
@@ -27,6 +29,6 @@ async def get_indexed_poster(request: Request, poster_id: str):
         ).scalar_one_or_none()
 
     if row is None:
-        return {"error": "not_found"}
+        raise http_error(404, "not_found", "poster not found")
 
     return json.loads(row.poster_json)

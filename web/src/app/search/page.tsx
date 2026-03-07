@@ -5,7 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { PosterEntry, SearchResponse } from "@/lib/types";
 
-const MEDIA_TYPES = ["", "movie", "show", "season", "episode", "collection"];
+type FacetsResponse = {
+  media_types: Array<{ type: string; count: number }>;
+  creators: Array<{ creator_id: string; display_name: string | null; count: number }>;
+};
 
 export default function SearchPage() {
   const base = useMemo(() => INDEXER_BASE_URL.replace(/\/+$/, ""), []);
@@ -13,6 +16,9 @@ export default function SearchPage() {
   const [tmdbId, setTmdbId] = useState("");
   const [q, setQ] = useState("");
   const [type, setType] = useState("");
+  const [creatorId, setCreatorId] = useState("");
+
+  const [facets, setFacets] = useState<FacetsResponse | null>(null);
 
   const [results, setResults] = useState<PosterEntry[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -26,6 +32,7 @@ export default function SearchPage() {
     if (tmdbId.trim() !== "") u.searchParams.set("tmdb_id", tmdbId.trim());
     if (q.trim() !== "") u.searchParams.set("q", q.trim());
     if (type.trim() !== "") u.searchParams.set("type", type.trim());
+    if (creatorId.trim() !== "") u.searchParams.set("creator_id", creatorId.trim());
     if (cursor) u.searchParams.set("cursor", cursor);
     return u.toString();
   }
@@ -35,6 +42,7 @@ export default function SearchPage() {
     if (tmdbId.trim() !== "") sp.set("tmdb_id", tmdbId.trim());
     if (q.trim() !== "") sp.set("q", q.trim());
     if (type.trim() !== "") sp.set("type", type.trim());
+    if (creatorId.trim() !== "") sp.set("creator_id", creatorId.trim());
     const qs = sp.toString();
     const next = qs ? `/search?${qs}` : "/search";
     window.history.replaceState(null, "", next);
@@ -77,10 +85,21 @@ export default function SearchPage() {
       setTmdbId(sp.get("tmdb_id") || "");
       setQ(sp.get("q") || "");
       setType(sp.get("type") || "");
+      setCreatorId(sp.get("creator_id") || "");
     } catch {
       // ignore
     }
-  }, []);
+
+    void (async () => {
+      try {
+        const r = await fetch(`${base}/v1/facets`);
+        if (!r.ok) throw new Error(`facets failed: ${r.status}`);
+        setFacets((await r.json()) as FacetsResponse);
+      } catch {
+        // non-fatal
+      }
+    })();
+  }, [base]);
 
   return (
     <div className="op-container">
@@ -102,25 +121,39 @@ export default function SearchPage() {
           <label className="op-label">
             <div className="op-label-hint">Media type</div>
             <select className="op-select" value={type} onChange={(e) => setType(e.target.value)}>
-              {MEDIA_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t === "" ? "(any)" : t}
+              <option value="">(any)</option>
+              {(facets?.media_types || []).map((t) => (
+                <option key={t.type} value={t.type}>
+                  {t.type} ({t.count})
                 </option>
               ))}
             </select>
           </label>
         </div>
 
-        <div className="op-form-grid-title-year op-mt-10">
+        <div className="op-form-grid-2 op-mt-10">
+          <label className="op-label">
+            <div className="op-label-hint">Creator</div>
+            <select className="op-select" value={creatorId} onChange={(e) => setCreatorId(e.target.value)}>
+              <option value="">(any)</option>
+              {(facets?.creators || []).map((c) => (
+                <option key={c.creator_id} value={c.creator_id}>
+                  {(c.display_name || c.creator_id) + ` (${c.count})`}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <label className="op-label">
             <div className="op-label-hint">TMDB id</div>
             <input className="op-input" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} placeholder="optional" />
           </label>
-          <div className="op-row op-justify-end">
-            <button className="op-btn" onClick={() => void runSearch().catch((e) => setError(e?.message || String(e)))} disabled={loading}>
-              {loading ? "Searching…" : "Search"}
-            </button>
-          </div>
+        </div>
+
+        <div className="op-row op-justify-end op-mt-10">
+          <button className="op-btn" onClick={() => void runSearch().catch((e) => setError(e?.message || String(e)))} disabled={loading}>
+            {loading ? "Searching…" : "Search"}
+          </button>
         </div>
 
         <p className="op-subtle op-text-sm op-mt-10">
@@ -148,7 +181,11 @@ export default function SearchPage() {
                 </a>
                 <div className="op-poster-meta">
                   <div className="op-poster-title">{r.media.title || "(untitled)"}</div>
-                  <div className="op-subtle op-text-sm">{r.creator.display_name}</div>
+                  <div className="op-subtle op-text-sm">
+                    <a className="op-link" href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}>
+                      {r.creator.display_name}
+                    </a>
+                  </div>
                   <div className="op-row op-mt-8">
                     <a className="op-link op-text-sm" href={r.assets.full.url} target="_blank" rel="noreferrer">
                       Download

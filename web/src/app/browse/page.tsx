@@ -16,6 +16,7 @@ type CreatorsResponse = {
 
 type FacetsResponse = {
   media_types: Array<{ type: string; count: number }>;
+  creators: Array<{ creator_id: string; display_name: string | null; count: number }>;
 };
 
 export default function BrowsePage() {
@@ -206,12 +207,15 @@ export default function BrowsePage() {
               onChange={(e) => setCreatorId(e.target.value)}
             >
               <option value="">(any)</option>
-              {creators?.results.map((c) => (
+              {(facets?.creators || []).map((c) => (
                 <option key={c.creator_id} value={c.creator_id}>
-                  {c.display_name || c.creator_id}
+                  {(c.display_name || c.creator_id) + ` (${c.count})`}
                 </option>
               ))}
             </select>
+            <div className="op-subtle op-text-sm op-mt-6">
+              Tip: use the <a className="op-link" href="/creators">Creators</a> page to browse/search creators.
+            </div>
           </label>
 
           <label className="op-label">
