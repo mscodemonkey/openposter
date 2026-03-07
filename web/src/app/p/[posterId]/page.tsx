@@ -51,6 +51,9 @@ export default function PosterPage({ params }: { params: { posterId: string } })
   const [linkSearchResults, setLinkSearchResults] = useState<PosterEntry[]>([]);
   const [linkSearchError, setLinkSearchError] = useState<string | null>(null);
 
+  const [newLinkRelPreset, setNewLinkRelPreset] = useState<string>("related");
+  const [newLinkRelCustom, setNewLinkRelCustom] = useState<string>("");
+
   useEffect(() => {
     void (async () => {
       try {
@@ -300,7 +303,7 @@ export default function PosterPage({ params }: { params: { posterId: string } })
                 const tmdb = target.media.tmdb_id;
 
                 const newLink: PosterLink = {
-                  rel: "related",
+                  rel: (newLinkRelPreset === "custom" ? (newLinkRelCustom.trim() || "related") : newLinkRelPreset) || "related",
                   href: `/p/${target.poster_id}`,
                   title,
                   media: tmdb ? { type: target.media.type, tmdb_id: tmdb } : { type: target.media.type },
@@ -309,6 +312,14 @@ export default function PosterPage({ params }: { params: { posterId: string } })
                 setLinksValue((prev) => {
                   const exists = prev.some((l) => l.href === newLink.href);
                   const next = exists ? prev : [...prev, newLink];
+                  setLinksDraft(JSON.stringify(next, null, 2));
+                  return next;
+                });
+              };
+
+              const updateLinkAt = (idx: number, patch: Partial<PosterLink>) => {
+                setLinksValue((prev) => {
+                  const next = prev.map((l, i) => (i === idx ? ({ ...l, ...patch } as PosterLink) : l));
                   setLinksDraft(JSON.stringify(next, null, 2));
                   return next;
                 });
@@ -361,17 +372,38 @@ export default function PosterPage({ params }: { params: { posterId: string } })
                     <div className="op-grid op-mt-10">
                       {linksValue.map((l, idx) => (
                         <div key={`${l.href}-${idx}`} className="op-card op-card--padded">
-                          <div className="op-card-title">{l.title || l.rel || "Related"}</div>
-                          <div className="op-subtle op-text-sm op-mt-6">
-                            <code className="op-code">{l.href}</code>
-                          </div>
-                          <div className="op-row op-mt-10">
-                            <a className="op-link" href={l.href}>
-                              Open →
-                            </a>
+                          <div className="op-row op-row--between">
+                            <div className="op-card-title">Link</div>
                             <button className="op-btn op-btn--subtle" onClick={() => removeLink(l.href)}>
                               Remove
                             </button>
+                          </div>
+
+                          <div className="op-subtle op-text-sm op-mt-10">Target</div>
+                          <div className="op-text-sm op-mt-6">
+                            <code className="op-code">{l.href}</code>
+                          </div>
+
+                          <div className="op-subtle op-text-sm op-mt-12">Rel</div>
+                          <input
+                            className="op-input op-mt-6"
+                            value={l.rel}
+                            onChange={(e) => updateLinkAt(idx, { rel: e.target.value })}
+                            placeholder="related / contains / ..."
+                          />
+
+                          <div className="op-subtle op-text-sm op-mt-12">Title override (optional)</div>
+                          <input
+                            className="op-input op-mt-6"
+                            value={l.title || ""}
+                            onChange={(e) => updateLinkAt(idx, { title: e.target.value || undefined })}
+                            placeholder="e.g. Ted 2 (2015)"
+                          />
+
+                          <div className="op-row op-mt-12">
+                            <a className="op-link" href={l.href}>
+                              Open →
+                            </a>
                           </div>
                         </div>
                       ))}
@@ -380,6 +412,25 @@ export default function PosterPage({ params }: { params: { posterId: string } })
 
                   <div className="op-section">
                     <h3 className="op-section-title">Add a link</h3>
+
+                    <div className="op-subtle op-text-sm op-mt-10">Default rel for new links</div>
+                    <div className="op-row op-mt-6">
+                      <select className="op-input" value={newLinkRelPreset} onChange={(e) => setNewLinkRelPreset(e.target.value)}>
+                        <option value="related">related</option>
+                        <option value="contains">contains</option>
+                        <option value="companion">companion</option>
+                        <option value="custom">custom…</option>
+                      </select>
+                      {newLinkRelPreset === "custom" && (
+                        <input
+                          className="op-input"
+                          placeholder="custom rel"
+                          value={newLinkRelCustom}
+                          onChange={(e) => setNewLinkRelCustom(e.target.value)}
+                        />
+                      )}
+                    </div>
+
                     <div className="op-row op-mt-10">
                       <input
                         className="op-input"
