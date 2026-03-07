@@ -7,6 +7,7 @@ services:
       - OPENPOSTER_BASE_URL=http://localhost:8081
       - OPENPOSTER_NODE_NAME=OpenPoster Node A
       - OPENPOSTER_OPERATOR_NAME=Creator A
+      - OPENPOSTER_MIRRORS=http://localhost:8083
     volumes:
       - ./data-a:/data
 

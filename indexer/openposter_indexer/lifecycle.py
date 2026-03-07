@@ -53,6 +53,11 @@ async def crawl_once(app: FastAPI) -> None:
 
                 try:
                     r = await client.get(node + "/v1/changes", params=params)
+                    if r.status_code == 409:
+                        # cursor expired: reset and try a full sync (since=None)
+                        since = None
+                        params = {}
+                        r = await client.get(node + "/v1/changes", params=params)
                     r.raise_for_status()
                     payload = r.json()
                 except Exception:
@@ -65,7 +70,17 @@ async def crawl_once(app: FastAPI) -> None:
                     poster_id = ch.get("poster_id")
                     kind = ch.get("kind")
                     changed_at = ch.get("changed_at")
-                    if not poster_id or kind != "upsert":
+                    if not poster_id:
+                        continue
+
+                    if kind == "delete":
+                        # Remove from index
+                        existing = (await session.execute(select(IndexedPoster).where(IndexedPoster.poster_id == poster_id))).scalar_one_or_none()
+                        if existing is not None:
+                            await session.delete(existing)
+                        continue
+
+                    if kind != "upsert":
                         continue
 
                     try:

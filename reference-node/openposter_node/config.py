@@ -10,6 +10,7 @@ class Config:
     node_name: str
     operator_name: str
     operator_contact: str | None
+    mirrors: list[str]
 
 
 def load_config() -> Config:
@@ -19,6 +20,9 @@ def load_config() -> Config:
     operator_name = os.environ.get("OPENPOSTER_OPERATOR_NAME", "Operator")
     operator_contact = os.environ.get("OPENPOSTER_OPERATOR_CONTACT")
 
+    mirrors_raw = os.environ.get("OPENPOSTER_MIRRORS", "").strip()
+    mirrors = [m.strip().rstrip("/") for m in mirrors_raw.split(",") if m.strip()]
+
     data_dir.mkdir(parents=True, exist_ok=True)
 
     return Config(
@@ -27,4 +31,5 @@ def load_config() -> Config:
         node_name=node_name,
         operator_name=operator_name,
         operator_contact=operator_contact,
+        mirrors=mirrors,
     )
