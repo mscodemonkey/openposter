@@ -180,6 +180,123 @@ Notes:
 - Preview MUST be accessible without authentication.
 - Full asset MAY be `public` or `premium`.
 
+### 4.3 Poster entry schema (normative)
+
+A `results[]` entry (and `/v1/posters/{poster_id}` response) is a **Poster Entry**.
+
+#### 4.3.1 Required fields
+
+Poster Entry MUST include:
+- `poster_id` (string, stable within the node)
+- `media` (object; MUST include `type` and at least one canonical external id)
+- `creator` (object; MUST include `creator_id` and `home_node`)
+- `assets.preview` (object)
+- `assets.full` (object)
+- `attribution.license` and `attribution.redistribution`
+
+#### 4.3.2 Media object
+
+`media` MUST include:
+- `type`: `movie|show|season|episode|collection`
+- One or more IDs:
+  - `tmdb_id` (number) RECOMMENDED
+  - `imdb_id` (string like `tt0133093`) OPTIONAL
+  - `tvdb_id` (number) OPTIONAL
+
+`media` SHOULD include:
+- `title` (string)
+- `year` (number)
+- `season_number` / `episode_number` when `type` is `season|episode`
+
+#### 4.3.3 Creator object
+
+`creator` MUST include:
+- `creator_id` (string; stable)
+- `display_name` (string)
+- `home_node` (URL string)
+
+`creator` MAY include:
+- `profile_url` (URL)
+- `avatar` (asset reference)
+
+#### 4.3.4 Asset object
+
+Each asset (`assets.preview`, `assets.full`, and any variants) MUST include:
+- `hash` (content hash of the served bytes)
+- `url` (fetch URL; MAY point to mirrors)
+- `bytes` (integer)
+- `mime` (`image/jpeg|image/png|image/webp|image/avif`)
+
+Assets SHOULD include:
+- `width` / `height` (integers)
+- `kind`:
+  - `poster` (default)
+  - `background`
+  - `banner`
+  - `logo`
+  - `clearlogo`
+  - `thumb`
+- `language` (BCP-47 tag like `en`, `en-AU`, `ja`) or `null` for language-neutral
+
+`assets.preview` MUST be a browse-friendly image (small-ish). Recommended:
+- 400–800px on the short edge
+- <= ~500KB if possible
+
+#### 4.3.5 Full asset access and encryption
+
+`assets.full` MUST include:
+- `access`: `public|premium`
+
+If `access = "premium"`, `assets.full.encryption` MUST be present:
+- `alg`: `xchacha20poly1305` (recommended) or `aes-256-gcm`
+- `key_id`: string (used with `/v1/keys/{key_id}:unwrap`)
+- `nonce`: base64 string (algorithm-specific)
+
+#### 4.3.6 Variants (recommended)
+
+Nodes SHOULD expose variants to reduce client work and bandwidth. Two patterns are allowed:
+
+**Pattern A (recommended): named variants**
+```json
+{
+  "assets": {
+    "preview": {"kind":"poster","hash":"sha256:...","url":"...","bytes":123,"mime":"image/webp","width":600,"height":900},
+    "full": {"access":"premium","kind":"poster","hash":"sha256:...","url":"...","bytes":5123123,"mime":"image/png","width":2000,"height":3000,
+      "encryption": {"alg":"xchacha20poly1305","key_id":"key_...","nonce":"base64:..."}
+    },
+    "variants": [
+      {"name":"full-jpeg","hash":"sha256:...","url":"...","bytes":2100000,"mime":"image/jpeg","width":2000,"height":3000,
+        "access":"premium","encryption": {"alg":"xchacha20poly1305","key_id":"key_...","nonce":"base64:..."}
+      },
+      {"name":"full-webp","hash":"sha256:...","url":"...","bytes":1400000,"mime":"image/webp","width":2000,"height":3000,
+        "access":"premium","encryption": {"alg":"xchacha20poly1305","key_id":"key_...","nonce":"base64:..."}
+      }
+    ]
+  }
+}
+```
+
+**Pattern B: multiple posters per media** (e.g., separate records for poster/background). This is allowed but Pattern A is preferred.
+
+#### 4.3.7 Descriptive fields (recommended)
+
+Poster Entry SHOULD include:
+- `title` (string; creator-provided name for the artwork, distinct from movie title)
+- `tags` (string[]) e.g., `minimal`, `retro`, `neon`, `alt-poster`, `imax`, `criterion`
+- `rating` / `score` (number) OPTIONAL (node-local)
+- `created_at` / `updated_at` (RFC3339 timestamps)
+- `checksum` fields are covered by `hash` (do not add extra hashes unless needed)
+
+#### 4.3.8 Attribution / redistribution
+
+`attribution` MUST include:
+- `license`: `all-rights-reserved|cc-by|cc-by-sa|cc0|custom`
+- `redistribution`: `public-cache-ok|mirrors-approved|none`
+
+`attribution` SHOULD include:
+- `source_url` (canonical page)
+- `author` / `author_url` if different from node operator
+
 ---
 
 ## 5. Poster record
