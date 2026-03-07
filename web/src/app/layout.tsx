@@ -25,6 +25,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <nav style={{ display: "flex", gap: 12, padding: 16, borderBottom: "1px solid #222" }}>
+          <a href="/">Browse</a>
+          <a href="/connect">Connect node</a>
+          <a href="/upload">Upload</a>
+        </nav>
         {children}
       </body>
     </html>
