@@ -25,10 +25,11 @@
 }
 
 .op-page-bg {
-  position: absolute;
+  /* Fixed to viewport so it behaves like a page/body background (not container-width) */
+  position: fixed;
   top: 0;
   left: 0;
-  right: 0;
+  width: 100vw;
   height: 60vh;
   background-size: cover;
   background-position: center top;
