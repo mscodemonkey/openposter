@@ -156,8 +156,17 @@ function TedBoxSetDemo() {
           return (
             <div key={sg.season} className="op-section">
               <button
-                className="op-link op-row"
-                style={{ gap: 10 }}
+                type="button"
+                className="op-row"
+                style={{
+                  gap: 10,
+                  width: "100%",
+                  padding: 0,
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
                 onClick={() =>
                   setExpandedSeasons((prev) => ({
                     ...prev,
@@ -165,7 +174,9 @@ function TedBoxSetDemo() {
                   }))
                 }
               >
-                <span className="op-badge">{expanded ? "▾" : "▸"}</span>
+                <span style={{ width: 16, display: "inline-block", fontSize: 14, lineHeight: "14px" }}>
+                  {expanded ? "▾" : "▸"}
+                </span>
                 <h3 className="op-section-title" style={{ margin: 0 }}>
                   Season {sg.season}
                 </h3>
@@ -174,13 +185,13 @@ function TedBoxSetDemo() {
               {expanded && (
                 <div className="op-grid op-grid--episode-cards op-mt-10">
                   {sg.episodes.map((e) => (
-                    <div key={e.src} className="op-card">
+                    <div key={e.src} className="op-card" style={{ justifySelf: "start" }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         className="op-img"
                         src={e.src}
                         alt={e.title}
-                        style={{ height: 100, width: "100%", objectFit: "contain", background: "#0b0b0b" }}
+                        style={{ height: 100, width: "auto", objectFit: "contain" }}
                       />
                     </div>
                   ))}
@@ -340,8 +351,17 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
             return (
               <div key={season} className="op-section">
                 <button
-                  className="op-link op-row"
-                  style={{ gap: 10 }}
+                  type="button"
+                  className="op-row"
+                  style={{
+                    gap: 10,
+                    width: "100%",
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
                   onClick={() =>
                     setExpandedSeasons((prev) => ({
                       ...prev,
@@ -349,7 +369,9 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
                     }))
                   }
                 >
-                  <span className="op-badge">{expanded ? "▾" : "▸"}</span>
+                  <span style={{ width: 16, display: "inline-block", fontSize: 14, lineHeight: "14px" }}>
+                    {expanded ? "▾" : "▸"}
+                  </span>
                   <h3 className="op-section-title" style={{ margin: 0 }}>
                     Season {season}
                   </h3>
@@ -358,13 +380,13 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
                 {expanded && (
                   <div className="op-grid op-grid--episode-cards op-mt-10">
                     {eps.map((p) => (
-                      <div key={p.poster_id} className="op-card">
+                      <div key={p.poster_id} className="op-card" style={{ justifySelf: "start" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           className="op-img"
                           src={p.assets.preview.url}
                           alt={p.media.title || p.poster_id}
-                          style={{ height: 100, width: "100%", objectFit: "contain", background: "#0b0b0b" }}
+                          style={{ height: 100, width: "auto", objectFit: "contain" }}
                         />
                       </div>
                     ))}
