@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { PosterEntry, SearchResponse } from "@/lib/types";
 
+import CreatorPicker from "@/components/CreatorPicker";
+
 type FacetsResponse = {
   media_types: Array<{ type: string; count: number }>;
   creators: Array<{ creator_id: string; display_name: string | null; count: number }>;
@@ -133,15 +135,13 @@ export default function SearchPage() {
 
         <div className="op-form-grid-2 op-mt-10">
           <label className="op-label">
-            <div className="op-label-hint">Creator</div>
-            <select className="op-select" value={creatorId} onChange={(e) => setCreatorId(e.target.value)}>
-              <option value="">(any)</option>
-              {(facets?.creators || []).map((c) => (
-                <option key={c.creator_id} value={c.creator_id}>
-                  {(c.display_name || c.creator_id) + ` (${c.count})`}
-                </option>
-              ))}
-            </select>
+            <CreatorPicker
+              indexerBaseUrl={INDEXER_BASE_URL}
+              value={creatorId}
+              onChange={(v) => setCreatorId(v)}
+              initialOptions={facets?.creators || []}
+              label="Creator"
+            />
           </label>
 
           <label className="op-label">

@@ -5,13 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { PosterEntry } from "@/lib/types";
 
+import CreatorPicker from "@/components/CreatorPicker";
+
 type PagedResponse = {
   results: PosterEntry[];
   next_cursor?: string | null;
-};
-
-type CreatorsResponse = {
-  results: Array<{ creator_id: string; display_name: string | null }>;
 };
 
 type FacetsResponse = {
@@ -33,7 +31,6 @@ export default function BrowsePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [creators, setCreators] = useState<CreatorsResponse | null>(null);
   const [facets, setFacets] = useState<FacetsResponse | null>(null);
 
   const base = useMemo(() => INDEXER_BASE_URL.replace(/\/+$/, ""), []);
@@ -73,15 +70,8 @@ export default function BrowsePage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [cr, fc] = await Promise.all([
-          fetch(`${base}/v1/creators?limit=200`),
-          fetch(`${base}/v1/facets`),
-        ]);
-
-        if (!cr.ok) throw new Error(`creators failed: ${cr.status}`);
+        const fc = await fetch(`${base}/v1/facets`);
         if (!fc.ok) throw new Error(`facets failed: ${fc.status}`);
-
-        setCreators((await cr.json()) as CreatorsResponse);
         setFacets((await fc.json()) as FacetsResponse);
       } catch (e: any) {
         setError(e?.message || String(e));
@@ -200,22 +190,13 @@ export default function BrowsePage() {
 
         <div className="op-form-grid-2 op-mt-10">
           <label className="op-label">
-            <div className="op-label-hint">Creator</div>
-            <select
-              className="op-select"
+            <CreatorPicker
+              indexerBaseUrl={INDEXER_BASE_URL}
               value={creatorId}
-              onChange={(e) => setCreatorId(e.target.value)}
-            >
-              <option value="">(any)</option>
-              {(facets?.creators || []).map((c) => (
-                <option key={c.creator_id} value={c.creator_id}>
-                  {(c.display_name || c.creator_id) + ` (${c.count})`}
-                </option>
-              ))}
-            </select>
-            <div className="op-subtle op-text-sm op-mt-6">
-              Tip: use the <a className="op-link" href="/creators">Creators</a> page to browse/search creators.
-            </div>
+              onChange={(v) => setCreatorId(v)}
+              initialOptions={facets?.creators || []}
+              label="Creator"
+            />
           </label>
 
           <label className="op-label">
