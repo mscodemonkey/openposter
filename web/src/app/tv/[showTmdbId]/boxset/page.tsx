@@ -21,10 +21,8 @@ function PosterGridStatic({ items }: { items: PosterImg[] }) {
     <div className="op-grid op-grid--posters op-mt-10">
       {items.map((p) => (
         <div key={p.src} className="op-card">
-          <a className="op-link" href={p.src} target="_blank" rel="noreferrer">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="op-img" src={p.src} alt={p.title} />
-          </a>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="op-img" src={p.src} alt={p.title} />
         </div>
       ))}
     </div>
@@ -118,6 +116,16 @@ function TedBoxSetDemo() {
     },
   ];
 
+  const latestSeason = Math.max(...seasonGroups.map((s) => s.season));
+  // Latest season expanded by default
+  const [expandedSeasons, setExpandedSeasons] = useState<Record<number, boolean>>(() => {
+    const m: Record<number, boolean> = {};
+    for (const s of seasonGroups) m[s.season] = s.season === latestSeason;
+    return m;
+  });
+
+  const sortedSeasonGroups = [...seasonGroups].sort((a, b) => b.season - a.season);
+
   return (
     <div>
       <div className="op-row op-row--between">
@@ -150,25 +158,45 @@ function TedBoxSetDemo() {
 
       <section className="op-section">
         <h2 className="op-section-title">Episode cards</h2>
-        <p className="op-subtle op-text-sm op-mt-6">
-          Grouped by season. (Movie box set posters are shown under Related artwork.)
-        </p>
 
-        {seasonGroups.map((sg) => (
-          <div key={sg.season} className="op-section">
-            <h3 className="op-section-title">Season {sg.season}</h3>
-            <div className="op-grid op-grid--episode-cards op-mt-10">
-              {sg.episodes.map((e) => (
-                <div key={e.src} className="op-card">
-                  <a className="op-link" href={e.src} target="_blank" rel="noreferrer">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img className="op-img" src={e.src} alt={e.title} />
-                  </a>
+        {sortedSeasonGroups.map((sg) => {
+          const expanded = !!expandedSeasons[sg.season];
+          return (
+            <div key={sg.season} className="op-section">
+              <button
+                className="op-link op-row"
+                style={{ gap: 10 }}
+                onClick={() =>
+                  setExpandedSeasons((prev) => ({
+                    ...prev,
+                    [sg.season]: !prev[sg.season],
+                  }))
+                }
+              >
+                <span className="op-badge">{expanded ? "▾" : "▸"}</span>
+                <h3 className="op-section-title" style={{ margin: 0 }}>
+                  Season {sg.season}
+                </h3>
+              </button>
+
+              {expanded && (
+                <div className="op-grid op-grid--episode-cards op-mt-10">
+                  {sg.episodes.map((e) => (
+                    <div key={e.src} className="op-card">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        className="op-img"
+                        src={e.src}
+                        alt={e.title}
+                        style={{ maxHeight: 220, objectFit: "cover" }}
+                      />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
     </div>
   );
@@ -224,13 +252,27 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
 
   const [data, setData] = useState<TvBoxsetResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expandedSeasons, setExpandedSeasons] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     void (async () => {
       try {
         const r = await fetch(`${base}/v1/tv_boxset/${encodeURIComponent(showTmdbId)}`);
         if (!r.ok) throw new Error(`tv_boxset failed: ${r.status}`);
-        setData((await r.json()) as TvBoxsetResponse);
+        const json = (await r.json()) as TvBoxsetResponse;
+        setData(json);
+
+        const seasons = Object.keys(json.episodes_by_season)
+          .map((k) => Number(k))
+          .filter((n) => Number.isFinite(n));
+        const latest = seasons.length > 0 ? Math.max(...seasons) : null;
+        if (latest !== null) {
+          setExpandedSeasons(() => {
+            const m: Record<number, boolean> = {};
+            for (const s of seasons) m[s] = s === latest;
+            return m;
+          });
+        }
       } catch (e: any) {
         setError(e?.message || String(e));
       }
@@ -275,21 +317,49 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
 
       <section className="op-section">
         <h2 className="op-section-title">Episode cards</h2>
-        {Object.entries(data.episodes_by_season).map(([season, eps]) => (
-          <div key={season} className="op-section">
-            <h3 className="op-section-title">Season {season}</h3>
-            <div className="op-grid op-grid--episode-cards op-mt-10">
-              {eps.map((p) => (
-                <div key={p.poster_id} className="op-card">
-                  <a className="op-link" href={`/p/${encodeURIComponent(p.poster_id)}`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img className="op-img" src={p.assets.preview.url} alt={p.media.title || p.poster_id} />
-                  </a>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+
+        {Object.entries(data.episodes_by_season)
+          .map(([season, eps]) => ({ season: Number(season), eps }))
+          .filter((x) => Number.isFinite(x.season))
+          .sort((a, b) => b.season - a.season)
+          .map(({ season, eps }) => {
+            const expanded = !!expandedSeasons[season];
+            return (
+              <div key={season} className="op-section">
+                <button
+                  className="op-link op-row"
+                  style={{ gap: 10 }}
+                  onClick={() =>
+                    setExpandedSeasons((prev) => ({
+                      ...prev,
+                      [season]: !prev[season],
+                    }))
+                  }
+                >
+                  <span className="op-badge">{expanded ? "▾" : "▸"}</span>
+                  <h3 className="op-section-title" style={{ margin: 0 }}>
+                    Season {season}
+                  </h3>
+                </button>
+
+                {expanded && (
+                  <div className="op-grid op-grid--episode-cards op-mt-10">
+                    {eps.map((p) => (
+                      <div key={p.poster_id} className="op-card">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          className="op-img"
+                          src={p.assets.preview.url}
+                          alt={p.media.title || p.poster_id}
+                          style={{ maxHeight: 220, objectFit: "cover" }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
       </section>
 
       <RelatedArtworkFromLinks base={base} links={data.show[0]?.links || null} />
