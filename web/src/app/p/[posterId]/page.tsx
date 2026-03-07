@@ -52,6 +52,10 @@ export default function PosterPage({ params }: { params: { posterId: string } })
         const p = json as PosterEntry;
         setPoster(p);
 
+        // Pre-initialize related arrays for nicer loading states
+        setSimilarByTmdb([]);
+        setMoreByCreator([]);
+
         // Similar: same TMDB id + media type
         if (p.media.tmdb_id) {
           const u = new URL(`${base}/v1/search`);
@@ -174,6 +178,27 @@ export default function PosterPage({ params }: { params: { posterId: string } })
               </div>
             </div>
           </div>
+
+          {poster.links && poster.links.length > 0 && (
+            <div className="op-section">
+              <h2 className="op-section-title">Related artwork</h2>
+              <div className="op-grid op-mt-10">
+                {poster.links.map((l, idx) => (
+                  <div key={idx} className="op-card op-card--padded">
+                    <div className="op-card-title">{l.title || l.rel || "Related"}</div>
+                    <div className="op-subtle op-text-sm op-mt-6">
+                      <code className="op-code">{l.href}</code>
+                    </div>
+                    <div className="op-mt-10">
+                      <a className="op-link" href={l.href}>
+                        Open →
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="op-section">
             <div className="op-row op-row--between">
