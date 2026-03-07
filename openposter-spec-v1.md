@@ -187,8 +187,13 @@ A `results[]` entry (and `/v1/posters/{poster_id}` response) is a **Poster Entry
 #### 4.3.1 Required fields
 
 Poster Entry MUST include:
-- `poster_id` (string, stable within the node)
+- `poster_id` (string, **globally unique**)
 - `media` (object; MUST include `type` and at least one canonical external id)
+
+`poster_id` format (v1):
+- MUST be globally unique across nodes.
+- RECOMMENDED format: `op:v1:<node_id>:<local_id>` (e.g., `op:v1:opn_3c1f...:pst_8fa2c`).
+- Clients SHOULD treat `poster_id` as an opaque identifier.
 - `creator` (object; MUST include `creator_id` and `home_node`)
 - `assets.preview` (object)
 - `assets.full` (object)
@@ -225,7 +230,7 @@ Each asset (`assets.preview`, `assets.full`, and any variants) MUST include:
 - `hash` (content hash of the served bytes)
 - `url` (fetch URL; MAY point to mirrors)
 - `bytes` (integer)
-- `mime` (`image/jpeg|image/png|image/webp|image/avif`)
+- `mime` (`image/jpeg|image/png`)
 
 Assets SHOULD include:
 - `width` / `height` (integers)
@@ -260,7 +265,7 @@ Nodes SHOULD expose variants to reduce client work and bandwidth. Two patterns a
 ```json
 {
   "assets": {
-    "preview": {"kind":"poster","hash":"sha256:...","url":"...","bytes":123,"mime":"image/webp","width":600,"height":900},
+    "preview": {"kind":"poster","hash":"sha256:...","url":"...","bytes":123,"mime":"image/jpeg","width":600,"height":900},
     "full": {"access":"premium","kind":"poster","hash":"sha256:...","url":"...","bytes":5123123,"mime":"image/png","width":2000,"height":3000,
       "encryption": {"alg":"xchacha20poly1305","key_id":"key_...","nonce":"base64:..."}
     },
@@ -268,7 +273,7 @@ Nodes SHOULD expose variants to reduce client work and bandwidth. Two patterns a
       {"name":"full-jpeg","hash":"sha256:...","url":"...","bytes":2100000,"mime":"image/jpeg","width":2000,"height":3000,
         "access":"premium","encryption": {"alg":"xchacha20poly1305","key_id":"key_...","nonce":"base64:..."}
       },
-      {"name":"full-webp","hash":"sha256:...","url":"...","bytes":1400000,"mime":"image/webp","width":2000,"height":3000,
+      {"name":"full-png","hash":"sha256:...","url":"...","bytes":3400000,"mime":"image/png","width":2000,"height":3000,
         "access":"premium","encryption": {"alg":"xchacha20poly1305","key_id":"key_...","nonce":"base64:..."}
       }
     ]
@@ -317,7 +322,7 @@ Same schema as a search result entry, but MAY include additional fields (tags, r
 
 `GET /v1/blobs/{hash}`
 
-- `hash` format: `{algo}:{hex}` (e.g., `sha256:abcdef...`).
+- `hash` format: `sha256:{hex}` (e.g., `sha256:abcdef...`).
 - Nodes MUST serve the exact bytes matching that hash.
 
 ### 6.2 Optional endpoint
