@@ -6,11 +6,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
+from pydantic import BaseModel
 
 from ..errors import http_error
 from ..storage.blobs import blob_path
 
 router = APIRouter()
+
+
+class LinksUpdate(BaseModel):
+    links_json: str | None = None
 
 
 def _now_rfc3339() -> str:
@@ -180,6 +185,65 @@ async def admin_upload_poster(
         await session.commit()
 
     return {"ok": True, "poster_id": poster_id}
+
+
+@router.put("/admin/posters/{poster_id}/links")
+async def admin_update_links(request: Request, poster_id: str, body: LinksUpdate):
+    """Admin-only update for creator-authored related links.
+
+    MVP to enable reciprocal linking after upload.
+    """
+
+    _require_admin(request)
+    from ..db import Poster
+
+    links_value = None
+    if body.links_json:
+        try:
+            import json as _json
+
+            links_value = _json.loads(body.links_json)
+            if not isinstance(links_value, list):
+                raise ValueError("links_json must be a JSON array")
+            for item in links_value:
+                if not isinstance(item, dict):
+                    raise ValueError("each link must be an object")
+                href = item.get("href")
+                if not isinstance(href, str) or not href.startswith("/p/"):
+                    raise ValueError("links must use href like /p/<poster_id>")
+        except Exception as e:
+            raise http_error(400, "invalid_request", f"invalid links_json: {e}")
+
+    now = _now_rfc3339()
+
+    async with request.app.state.Session() as session:
+        p = await session.get(Poster, poster_id)
+        if p is None or p.deleted_at is not None:
+            raise http_error(404, "not_found", "poster not found")
+
+        # Enforce links point to other posters by same creator.
+        if links_value:
+            for item in links_value:
+                href = item.get("href")
+                target_id = href[len("/p/") :]
+                try:
+                    from urllib.parse import unquote
+
+                    target_id = unquote(target_id)
+                except Exception:
+                    pass
+
+                target = await session.get(Poster, target_id)
+                if target is None or target.deleted_at is not None:
+                    raise http_error(400, "invalid_request", f"linked poster not found: {target_id}")
+                if target.creator_id != p.creator_id:
+                    raise http_error(400, "invalid_request", "links may only reference posters by the same creator")
+
+        p.links_json = body.links_json
+        p.updated_at = now
+        await session.commit()
+
+    return {"ok": True, "poster_id": poster_id, "updated_at": now}
 
 
 @router.delete("/admin/posters/{poster_id}")
