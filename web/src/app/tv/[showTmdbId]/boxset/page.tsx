@@ -174,7 +174,7 @@ function TedBoxSetDemo() {
                   }))
                 }
               >
-                <span>
+                <span style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
                   {expanded ? "▼" : "▶︎"}
                 </span>
                 <h3 className="op-section-title" style={{ margin: 0 }}>
@@ -369,7 +369,7 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
                     }))
                   }
                 >
-                  <span>
+                  <span style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
                     {expanded ? "▼" : "▶︎"}
                   </span>
                   <h3 className="op-section-title" style={{ margin: 0 }}>
