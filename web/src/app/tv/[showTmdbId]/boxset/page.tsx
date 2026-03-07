@@ -174,8 +174,8 @@ function TedBoxSetDemo() {
                   }))
                 }
               >
-                <span style={{ display: "inline-block", fontSize: 28, lineHeight: "28px" }}>
-                  {expanded ? "▾" : "▸"}
+                <span>
+                  {expanded ? "▼" : "▶︎"}
                 </span>
                 <h3 className="op-section-title" style={{ margin: 0 }}>
                   Season {sg.season}
@@ -369,8 +369,8 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
                     }))
                   }
                 >
-                  <span style={{ display: "inline-block", fontSize: 28, lineHeight: "28px" }}>
-                    {expanded ? "▾" : "▸"}
+                  <span>
+                    {expanded ? "▼" : "▶︎"}
                   </span>
                   <h3 className="op-section-title" style={{ margin: 0 }}>
                     Season {season}
