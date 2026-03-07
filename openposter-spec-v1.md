@@ -237,6 +237,9 @@ Optional IDs (v1):
 - `imdb_id` (string like `tt0133093`) OPTIONAL
 - `tvdb_id` (number) OPTIONAL
 
+Enrichment note (non-normative):
+- Nodes MAY automatically populate object-level `tmdb_id` for `season`/`episode` entries by resolving `show_tmdb_id` + `season_number` (+ `episode_number`) via the TMDB API at ingest time.
+
 `media` SHOULD include:
 - `title` (string)
 - `year` (number)
