@@ -22,3 +22,8 @@ reference-node/data*/
 reference-node/tmp-images/
 reference-node/**/db.sqlite
 reference-node/**/nodes.json
+
+# Indexer local data
+reference-node/data-indexer/
+indexer/.venv/
+indexer/**/__pycache__/

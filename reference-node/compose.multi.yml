@@ -35,3 +35,13 @@ services:
     volumes:
       - ./data-a/blobs:/data/blobs
       - ./data-mirror:/data
+
+  indexer:
+    build: ../indexer
+    ports:
+      - "8090:8090"
+    environment:
+      - OPENPOSTER_INDEXER_SEEDS=http://node_a:8080
+      - OPENPOSTER_INDEXER_POLL_SECONDS=10
+    volumes:
+      - ./data-indexer:/data
