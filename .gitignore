@@ -28,3 +28,9 @@ reference-node/data-indexer/
 indexer/.venv/
 indexer/**/__pycache__/
 reference-node/tmp-upload/
+
+# Next.js
+web/node_modules/
+web/.next/
+web/out/
+web/.env.local
