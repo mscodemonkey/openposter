@@ -12,6 +12,7 @@ router = APIRouter()
 async def creators(
     request: Request,
     limit: int = Query(200, ge=1, le=500),
+    q: str | None = Query(None),
 ):
     """List creators seen by the indexer.
 
@@ -29,7 +30,13 @@ async def creators(
                 func.max(IndexedPoster.changed_at).label("last_changed_at"),
             )
             .where(IndexedPoster.creator_id.is_not(None))
-            .group_by(IndexedPoster.creator_id)
+        )
+
+        if q is not None and q.strip() != "":
+            stmt = stmt.where(IndexedPoster.creator_display_name.ilike(f"%{q.strip()}%"))
+
+        stmt = (
+            stmt.group_by(IndexedPoster.creator_id)
             .order_by(func.max(IndexedPoster.changed_at).desc())
             .limit(limit)
         )

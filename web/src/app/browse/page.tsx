@@ -19,6 +19,9 @@ const MEDIA_TYPES = ["", "movie", "show", "season", "episode", "collection"];
 export default function BrowsePage() {
   const [creatorId, setCreatorId] = useState<string>("");
   const [mediaType, setMediaType] = useState<string>("");
+  const [tmdbId, setTmdbId] = useState<string>("");
+  const [q, setQ] = useState<string>("");
+
   const [copied, setCopied] = useState(false);
 
   const [items, setItems] = useState<PosterEntry[] | null>(null);
@@ -31,10 +34,17 @@ export default function BrowsePage() {
 
   const base = useMemo(() => INDEXER_BASE_URL.replace(/\/+$/, ""), []);
 
-  function syncUrl(next: { creatorId: string; mediaType: string }) {
+  function syncUrl(next: {
+    creatorId: string;
+    mediaType: string;
+    tmdbId: string;
+    q: string;
+  }) {
     const sp = new URLSearchParams();
     if (next.creatorId) sp.set("creator_id", next.creatorId);
     if (next.mediaType) sp.set("media_type", next.mediaType);
+    if (next.tmdbId) sp.set("tmdb_id", next.tmdbId);
+    if (next.q) sp.set("q", next.q);
     const qs = sp.toString();
     const newUrl = qs ? `/browse?${qs}` : "/browse";
     window.history.replaceState(null, "", newUrl);
@@ -46,9 +56,13 @@ export default function BrowsePage() {
       const sp = new URLSearchParams(window.location.search);
       setCreatorId(sp.get("creator_id") || "");
       setMediaType(sp.get("media_type") || "");
+      setTmdbId(sp.get("tmdb_id") || "");
+      setQ(sp.get("q") || "");
     } catch {
       setCreatorId("");
       setMediaType("");
+      setTmdbId("");
+      setQ("");
     }
   }, []);
 
@@ -64,7 +78,31 @@ export default function BrowsePage() {
     })();
   }, [base]);
 
+  function useSearchEndpoint() {
+    return tmdbId.trim() !== "" || q.trim() !== "";
+  }
+
   function buildUrl(cursor?: string | null) {
+    if (useSearchEndpoint()) {
+      const u = new URL(`${base}/v1/search`);
+      u.searchParams.set("limit", "40");
+      if (tmdbId) u.searchParams.set("tmdb_id", tmdbId);
+      if (q) u.searchParams.set("q", q);
+      if (mediaType) u.searchParams.set("type", mediaType);
+      // creator filtering for /v1/search isn't implemented; fall back to /recent when creator filter is used
+      if (creatorId) {
+        // if creator filter is set and we're doing a keyword search, it's still useful: use /recent filtered by creator_id
+        const r = new URL(`${base}/v1/recent`);
+        r.searchParams.set("limit", "40");
+        r.searchParams.set("creator_id", creatorId);
+        if (mediaType) r.searchParams.set("media_type", mediaType);
+        if (cursor) r.searchParams.set("cursor", cursor);
+        return r.toString();
+      }
+      if (cursor) u.searchParams.set("cursor", cursor);
+      return u.toString();
+    }
+
     const u = new URL(`${base}/v1/recent`);
     u.searchParams.set("limit", "40");
     if (mediaType) u.searchParams.set("media_type", mediaType);
@@ -105,15 +143,19 @@ export default function BrowsePage() {
   useEffect(() => {
     // keep URL shareable
     try {
-      syncUrl({ creatorId, mediaType });
+      syncUrl({
+        creatorId,
+        mediaType,
+        tmdbId: tmdbId.trim(),
+        q: q.trim(),
+      });
     } catch {
       // ignore
     }
 
-    // once filters are set, load
     void loadFirst().catch((e) => setError(e?.message || String(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [creatorId, mediaType]);
+  }, [creatorId, mediaType, tmdbId, q]);
 
   return (
     <div className="op-container">
@@ -131,6 +173,8 @@ export default function BrowsePage() {
               onClick={() => {
                 setCreatorId("");
                 setMediaType("");
+                setTmdbId("");
+                setQ("");
               }}
             >
               Clear
@@ -184,6 +228,24 @@ export default function BrowsePage() {
             </select>
           </label>
         </div>
+
+        <div className="op-form-grid-2 op-mt-10">
+          <label className="op-label">
+            <div className="op-label-hint">Title contains</div>
+            <input className="op-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="optional" />
+          </label>
+
+          <label className="op-label">
+            <div className="op-label-hint">TMDB id</div>
+            <input className="op-input" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} placeholder="optional" />
+          </label>
+        </div>
+
+        {creatorId && (tmdbId.trim() !== "" || q.trim() !== "") && (
+          <div className="op-subtle op-text-sm op-mt-10">
+            Note: creator + keyword search currently uses <code className="op-code">/v1/recent</code> filtered by creator (not full keyword search).
+          </div>
+        )}
       </section>
 
       {error && <div className="op-alert op-alert--error">{error}</div>}
@@ -204,7 +266,11 @@ export default function BrowsePage() {
                 </a>
                 <div className="op-poster-meta">
                   <div className="op-poster-title">{r.media.title || "(untitled)"}</div>
-                  <div className="op-subtle op-text-sm">{r.creator.display_name}</div>
+                  <div className="op-subtle op-text-sm">
+                    <a className="op-link" href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}>
+                      {r.creator.display_name}
+                    </a>
+                  </div>
                   <div className="op-row op-mt-8">
                     <a className="op-link op-text-sm" href={r.assets.full.url} target="_blank" rel="noreferrer">
                       Download

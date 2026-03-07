@@ -29,6 +29,7 @@ export default function RootLayout({
         <nav className="op-nav">
           <a href="/">Home</a>
           <a href="/browse">Browse</a>
+          <a href="/search">Search</a>
           <a href="/creators">Creators</a>
           <a href="/connect">Connect node</a>
           <a href="/upload">Upload</a>

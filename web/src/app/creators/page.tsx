@@ -63,9 +63,14 @@ export default function CreatorsPage() {
               </div>
 
               <div className="op-mt-10">
-                <a className="op-link" href={`/browse?creator_id=${encodeURIComponent(c.creator_id)}`}>
-                  Browse this creator →
-                </a>
+                <div className="op-row op-row--between">
+                  <a className="op-link" href={`/creator/${encodeURIComponent(c.creator_id)}`}>
+                    View creator →
+                  </a>
+                  <a className="op-link" href={`/browse?creator_id=${encodeURIComponent(c.creator_id)}`}>
+                    Browse posters →
+                  </a>
+                </div>
               </div>
             </div>
           ))}
