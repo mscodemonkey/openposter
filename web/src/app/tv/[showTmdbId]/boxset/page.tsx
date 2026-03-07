@@ -174,7 +174,7 @@ function TedBoxSetDemo() {
                   }))
                 }
               >
-                <span style={{ width: 32, display: "inline-block", fontSize: 28, lineHeight: "28px" }}>
+                <span style={{ display: "inline-block", fontSize: 28, lineHeight: "28px" }}>
                   {expanded ? "▾" : "▸"}
                 </span>
                 <h3 className="op-section-title" style={{ margin: 0 }}>
@@ -369,7 +369,7 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
                     }))
                   }
                 >
-                  <span style={{ width: 32, display: "inline-block", fontSize: 28, lineHeight: "28px" }}>
+                  <span style={{ display: "inline-block", fontSize: 28, lineHeight: "28px" }}>
                     {expanded ? "▾" : "▸"}
                   </span>
                   <h3 className="op-section-title" style={{ margin: 0 }}>
