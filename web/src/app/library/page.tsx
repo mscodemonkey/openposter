@@ -44,6 +44,11 @@ export default function LibraryPage() {
       const json = (await r.json()) as SearchResponse;
       setItems((prev) => ([...(prev || []), ...json.results]));
       setNextCursor(json.next_cursor);
+
+      if (autoCheck && json.results.length > 0) {
+        // kick off check in background for the newly loaded page
+        void checkAllIndexed(json.results);
+      }
     } finally {
       setLoadingMore(false);
     }
@@ -82,17 +87,25 @@ export default function LibraryPage() {
   }
 
   async function checkAllIndexed(list: PosterEntry[]) {
-    for (const p of list) {
-      // Skip already known
-      if (indexed[p.poster_id]) continue;
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await checkIndexed(p);
-      } catch (e: any) {
-        setError(e?.message || String(e));
-        // keep going
+    // Small concurrency pool to keep this fast but not abusive.
+    const concurrency = 4;
+    const queue = list.filter((p) => !indexed[p.poster_id]);
+
+    async function worker() {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const p = queue.shift();
+        if (!p) return;
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await checkIndexed(p);
+        } catch (e: any) {
+          setError(e?.message || String(e));
+        }
       }
     }
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
   }
 
   useEffect(() => {
