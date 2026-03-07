@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { INDEXER_BASE_URL } from "@/lib/config";
 import { loadCreatorConnection } from "@/lib/storage";
 import type { PosterEntry, SearchResponse } from "@/lib/types";
 
@@ -11,6 +12,7 @@ export default function LibraryPage() {
 
   const [items, setItems] = useState<PosterEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [indexed, setIndexed] = useState<Record<string, "yes" | "no" | "checking">>({});
 
   async function load() {
     if (!conn) {
@@ -22,6 +24,23 @@ export default function LibraryPage() {
     if (!r.ok) throw new Error(`list failed: ${r.status}`);
     const json = (await r.json()) as SearchResponse;
     setItems(json.results);
+  }
+
+  async function checkIndexed(p: PosterEntry) {
+    if (!p.media.tmdb_id) {
+      setIndexed((m) => ({ ...m, [p.poster_id]: "no" }));
+      return;
+    }
+    setIndexed((m) => ({ ...m, [p.poster_id]: "checking" }));
+    const url = new URL(INDEXER_BASE_URL.replace(/\/+$/, "") + "/v1/search");
+    url.searchParams.set("tmdb_id", String(p.media.tmdb_id));
+    if (p.media.type) url.searchParams.set("type", p.media.type);
+
+    const r = await fetch(url.toString());
+    if (!r.ok) throw new Error(`indexer search failed: ${r.status}`);
+    const json = (await r.json()) as SearchResponse;
+    const found = json.results.some((x) => x.poster_id === p.poster_id);
+    setIndexed((m) => ({ ...m, [p.poster_id]: found ? "yes" : "no" }));
   }
 
   async function del(posterId: string) {
@@ -86,10 +105,24 @@ export default function LibraryPage() {
                   <div style={{ opacity: 0.8, fontSize: 12 }}>
                     {p.media.type} · TMDB {p.media.tmdb_id}
                   </div>
-                  <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                     <a href={p.assets.full.url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
                       Download
                     </a>
+
+                    <button
+                      onClick={() => void checkIndexed(p).catch((e) => setError(e?.message || String(e)))}
+                      style={{ fontSize: 12, border: "1px solid #444", borderRadius: 8, padding: "6px 10px" }}
+                      disabled={indexed[p.poster_id] === "checking"}
+                      title={`Checks ${INDEXER_BASE_URL}/v1/search for this TMDB id/type`}
+                    >
+                      {indexed[p.poster_id] === "checking"
+                        ? "Checking…"
+                        : indexed[p.poster_id]
+                          ? `Indexed: ${indexed[p.poster_id]}`
+                          : "Check indexed"}
+                    </button>
+
                     {conn && (
                       <button
                         onClick={() => void del(p.poster_id)}

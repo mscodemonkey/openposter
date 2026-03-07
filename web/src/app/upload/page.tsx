@@ -59,12 +59,18 @@ export default function UploadPage() {
       return;
     }
 
-    setStatus(`Uploaded: ${JSON.stringify(json)}`);
+    setStatus(`Uploaded. Redirecting to My library...`);
+    setTimeout(() => {
+      window.location.href = "/library";
+    }, 400);
   }
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
       <h1 style={{ fontSize: 24, fontWeight: 700 }}>Upload poster</h1>
+      <p style={{ marginTop: 8, opacity: 0.8 }}>
+        After upload, you’ll be redirected to <a href="/library">My library</a>.
+      </p>
       <p style={{ opacity: 0.8 }}>
         Uploads to your connected node’s <code>/v1/admin/posters</code> endpoint.
       </p>
