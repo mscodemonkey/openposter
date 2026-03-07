@@ -497,7 +497,8 @@ Body:
 ```
 
 Notes:
-- `wrap` is OPTIONAL. If provided, the node SHOULD return a wrapped key instead of a raw content key.
+- `wrap` is OPTIONAL in the protocol, but nodes SHOULD require `wrap` for premium content in production deployments.
+- If `wrap` is provided, the node SHOULD return a wrapped key instead of a raw content key.
 
 ### 7.2 Response
 
@@ -527,8 +528,12 @@ Alternate (allowed, simpler):
 
 Rules:
 - If the request includes `wrap`, the node SHOULD return `wrapped_key` and SHOULD NOT return `content_key`.
-- If the request omits `wrap`, the node MAY return `content_key`.
+- If the request omits `wrap`, the node MAY return `content_key` (RECOMMENDED only for development/testing).
 - Clients SHOULD implement `wrapped_key` for long-term safety (prevents accidental leakage of long-lived content keys).
+
+Operational guidance (non-normative):
+- Nodes SHOULD issue short-lived grants (`expires_at` on the order of minutes).
+- Nodes SHOULD log key unwrap events with the requesting user identity (`sub`) and a fingerprint of `client_pubkey` for abuse investigation.
 
 ### 7.3 Validation rules
 
