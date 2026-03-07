@@ -1,0 +1,18 @@
+# Local runtime data
+reference-node/data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# OpenClaw workspace files (never commit)
+AGENTS.md
+BOOTSTRAP.md
+HEARTBEAT.md
+IDENTITY.md
+MEMORY.md
+SOUL.md
+TOOLS.md
+USER.md
+memory/
