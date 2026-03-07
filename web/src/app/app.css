@@ -106,6 +106,10 @@
   grid-template-columns: repeat(6, 1fr);
 }
 
+.op-grid--episode-cards {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 /* Detail layout (poster page) */
 .op-grid--detail {
   grid-template-columns: 340px 1fr;

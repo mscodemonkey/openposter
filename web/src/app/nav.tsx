@@ -34,6 +34,7 @@ export default function Nav() {
       <a href="/upload">Upload</a>
       <a href="/library">My library</a>
       <a href="/register">Register</a>
+      <a href="/tv/201834/boxset">Ted box set (demo)</a>
 
       <div className="op-spacer" />
 
