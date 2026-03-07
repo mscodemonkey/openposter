@@ -36,6 +36,21 @@ Normative keywords: **MUST**, **SHOULD**, **MAY** per RFC 2119.
 
 ## 2. Node descriptor (discovery + capabilities)
 
+Every OpenPoster server is called a **node**.
+
+A node publishes a small JSON document called its **node descriptor**. Think of it like a profile card for your poster library: it tells apps where your node lives, what it supports, and what public keys clients should use to verify your posters.
+
+Why it matters:
+- **Discovery:** clients (and other nodes) can quickly recognise “this is an OpenPoster node” and learn its base URL.
+- **Compatibility:** clients can see which protocol version and features you support.
+- **Trust:** clients can verify that poster entries really came from your node (via signing keys).
+- **Premium support:** if you offer premium content, the descriptor tells clients which login/issuer systems your node will accept.
+
+How it’s used:
+1. A client learns your node URL (from a directory, a friend, or a link you share).
+2. The client fetches `/.well-known/openposter-node`.
+3. The client uses that information to search your library and verify poster metadata.
+
 ### 2.1 Endpoint
 
 `GET /.well-known/openposter-node`
