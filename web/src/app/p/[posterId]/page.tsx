@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
 import { loadCreatorConnection } from "@/lib/storage";
+import RelatedArtworkSection from "@/components/RelatedArtworkSection";
 import type { PosterEntry, SearchResponse } from "@/lib/types";
 
 type PosterLink = NonNullable<PosterEntry["links"]>[number];
@@ -211,43 +212,7 @@ export default function PosterPage({
             </div>
           </div>
 
-          {poster.links && poster.links.length > 0 && (
-            <div className="op-section">
-              <h2 className="op-section-title">Related artwork</h2>
-              <div className="op-grid op-mt-10">
-                {poster.links.map((l, idx) => {
-                  const derivedBoxsetHref =
-                    l.media?.type === "show" && l.media.tmdb_id
-                      ? `/tv/${encodeURIComponent(String(l.media.tmdb_id))}/boxset`
-                      : l.media?.type === "collection" && l.media.tmdb_id
-                        ? `/movie/${encodeURIComponent(String(l.media.tmdb_id))}/boxset`
-                        : null;
-
-                  return (
-                    <div key={idx} className="op-card op-card--padded">
-                      <div className="op-card-title">{l.title || l.rel || "Related"}</div>
-                      <div className="op-subtle op-text-sm op-mt-6">
-                        <code className="op-code">{l.href}</code>
-                      </div>
-                      <div className="op-row op-mt-10">
-                        <a
-                          className="op-link"
-                          href={l.href.startsWith("/p/") ? `/p/${encodeURIComponent(l.href.slice(3))}` : l.href}
-                        >
-                          Open poster →
-                        </a>
-                        {derivedBoxsetHref && (
-                          <a className="op-link" href={derivedBoxsetHref}>
-                            Open box set →
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <RelatedArtworkSection base={base} links={poster.links || null} />
 
           <div className="op-section">
             <h2 className="op-section-title">Creator tools</h2>
