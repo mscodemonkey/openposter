@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Request
+
+from .cors import attach_cors
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -13,6 +15,8 @@ from .routes.posters import router as posters_router
 from .routes.search import router as search_router
 
 app = FastAPI(title="OpenPoster Reference Node", version="0.1.0")
+
+attach_cors(app)
 
 @app.get("/v1/health")
 async def health():

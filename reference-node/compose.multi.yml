@@ -10,6 +10,7 @@ services:
       - OPENPOSTER_MIRRORS=http://localhost:8083
       - OPENPOSTER_ADMIN_TOKEN=dev-admin
       - OPENPOSTER_ALLOW_PRIVATE_NODES=true
+      - OPENPOSTER_CORS_ORIGINS=http://localhost:3000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read(); print('ok')"]
@@ -29,6 +30,7 @@ services:
       - OPENPOSTER_OPERATOR_NAME=Creator B
       - OPENPOSTER_ADMIN_TOKEN=dev-admin
       - OPENPOSTER_ALLOW_PRIVATE_NODES=true
+      - OPENPOSTER_CORS_ORIGINS=http://localhost:3000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read(); print('ok')"]
@@ -73,6 +75,7 @@ services:
       - OPENPOSTER_OPERATOR_NAME=Directory Operator
       - OPENPOSTER_ADMIN_TOKEN=dev-admin
       - OPENPOSTER_ALLOW_PRIVATE_NODES=true
+      - OPENPOSTER_CORS_ORIGINS=http://localhost:3000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read(); print('ok')"]
