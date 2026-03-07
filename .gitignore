@@ -16,3 +16,9 @@ SOUL.md
 TOOLS.md
 USER.md
 memory/
+
+# Reference-node local dev artifacts
+reference-node/data*/
+reference-node/tmp-images/
+reference-node/**/db.sqlite
+reference-node/**/nodes.json
