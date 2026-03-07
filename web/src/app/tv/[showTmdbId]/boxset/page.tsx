@@ -134,7 +134,7 @@ function TedBoxSetDemo() {
         <div className="op-row op-row--between">
         <div>
           <h1 className="op-title-lg">ted</h1>
-          <div className="op-subtle op-mt-6" style={{ fontSize: "1rem" }}>
+          <div className="op-subtle op-mt-6 op-title-meta">
             TV SHOW | 2024 | willtong93
           </div>
         </div>
@@ -329,7 +329,7 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
         <div className="op-row op-row--between">
         <div>
           <h1 className="op-title-lg">{data.show[0]?.media.title || "TV Box Set"}</h1>
-          <div className="op-subtle op-mt-6" style={{ fontSize: "1rem" }}>
+          <div className="op-subtle op-mt-6 op-title-meta">
             TV SHOW{data.show[0]?.media.year ? ` | ${data.show[0].media.year}` : ""}{data.show[0]?.creator.display_name ? ` | ${data.show[0].creator.display_name}` : ""}
           </div>
         </div>
