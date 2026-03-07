@@ -3,6 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
+import RelatedArtworkSection from "@/components/RelatedArtworkSection";
 import type { PosterEntry, SearchResponse } from "@/lib/types";
 
 type PosterImg = { src: string; title: string };
@@ -22,84 +23,6 @@ function PosterGridIndexed({ items }: { items: PosterEntry[] }) {
   );
 }
 
-function relatedTypeLabel(p: PosterEntry): string {
-  if (p.media.type === "show") return "TV Show Box Set";
-  if (p.media.type === "collection") return "Movie Box Set";
-  return "Poster";
-}
-
-function relatedTargetHref(p: PosterEntry): string {
-  if (p.media.type === "show" && p.media.tmdb_id) return `/tv/${encodeURIComponent(String(p.media.tmdb_id))}/boxset`;
-  if (p.media.type === "collection" && p.media.tmdb_id) return `/movie/${encodeURIComponent(String(p.media.tmdb_id))}/boxset`;
-  return `/p/${encodeURIComponent(p.poster_id)}`;
-}
-
-function RelatedArtworkGrid({ items }: { items: PosterEntry[] }) {
-  return (
-    <div className="op-grid op-grid--posters op-mt-10">
-      {items.map((p) => {
-        const href = relatedTargetHref(p);
-        return (
-          <div key={p.poster_id} className="op-card">
-            <a className="op-link" href={href}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="op-img" src={p.assets.preview.url} alt={p.media.title || p.poster_id} />
-            </a>
-            <div className="op-poster-meta">
-              <a className="op-link" href={href}>
-                <div className="op-poster-title">{p.media.title || "(untitled)"}</div>
-                <div className="op-subtle op-text-sm">{relatedTypeLabel(p)}</div>
-              </a>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function RelatedArtworkFromLinks({ base, links }: { base: string; links: PosterEntry["links"] }) {
-  const [items, setItems] = useState<PosterEntry[] | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      if (!links || links.length === 0) {
-        setItems([]);
-        return;
-      }
-
-      const posterLinks = links.filter(
-        (l) =>
-          l.rel === "related" &&
-          typeof l.href === "string" &&
-          l.href.startsWith("/p/") &&
-          (l.media?.type === "show" || l.media?.type === "collection"),
-      );
-      const posterIds = posterLinks.map((l) => decodeURIComponent(l.href.slice(3))).filter(Boolean);
-
-      const fetched: PosterEntry[] = [];
-      for (const pid of posterIds) {
-        // eslint-disable-next-line no-await-in-loop
-        const r = await fetch(`${base}/v1/posters/${encodeURIComponent(pid)}`);
-        if (!r.ok) continue;
-        // eslint-disable-next-line no-await-in-loop
-        fetched.push((await r.json()) as PosterEntry);
-      }
-      setItems(fetched);
-    })();
-  }, [base, links]);
-
-  if (!links || links.length === 0) return null;
-  if (items === null) return <p className="op-subtle op-mt-12">Loading related…</p>;
-  if (items.length === 0) return null;
-
-  return (
-    <section className="op-section">
-      <h2 className="op-section-title">Related artwork</h2>
-      <RelatedArtworkGrid items={items} />
-    </section>
-  );
-}
 
 function TedMovieBoxSetDemo() {
   // Demo assets downloaded from mediux.pro/sets/41948 (Boxset Posters section)
@@ -244,7 +167,7 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
         )}
       </section>
 
-      <RelatedArtworkFromLinks base={base} links={collection.links || null} />
+      <RelatedArtworkSection base={base} links={collection.links || null} />
     </div>
   );
 }
