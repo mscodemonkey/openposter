@@ -87,7 +87,7 @@ async def crawl_once(app: FastAPI) -> None:
                         changed_at=changed_at or _now_rfc3339(),
                         poster_json=json.dumps(poster, separators=(",", ":")),
                     )
-                    session.merge(row)
+                    await session.merge(row)
 
                 # update cursor
                 if cur is None:
