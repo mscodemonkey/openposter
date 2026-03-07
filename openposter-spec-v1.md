@@ -476,6 +476,11 @@ Rules:
 - If a node does not support deletions, it MAY omit `delete` events.
 - Indexers SHOULD fetch details for each change via `GET /v1/posters/{poster_id}`.
 
+Operational guidance (non-normative):
+- Indexers SHOULD poll `/v1/changes` on a schedule (recommended every **5–30 minutes**, depending on network size and desired freshness).
+- Nodes SHOULD retain enough change history to allow indexers to recover from downtime (recommended retention: **at least 7 days**).
+- If a node cannot honour a `since` cursor (e.g., history expired), it SHOULD return `409 Conflict` with error code `cursor_expired` and a message telling the indexer to perform a full resync.
+
 ---
 
 ## 6. Poster record
@@ -663,6 +668,7 @@ Nodes SHOULD use these codes when applicable:
 - `invalid_request` → 400
 - `not_found` → 404
 - `unsupported` → 400 or 422
+- `cursor_expired` → 409 (indexer cursor no longer valid; requires full resync)
 - `rate_limited` → 429
 - `unauthorized` → 401 (missing/invalid token)
 - `forbidden` → 403 (token valid, but not entitled)
