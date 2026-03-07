@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .lifecycle import attach_lifecycle
+from .routes.admin import router as admin_router
 from .routes.blobs import router as blobs_router
 from .routes.changes import router as changes_router
 from .routes.node_descriptor import router as node_descriptor_router
@@ -51,3 +52,4 @@ app.include_router(changes_router, prefix="/v1")
 app.include_router(nodes_router, prefix="/v1")
 app.include_router(posters_router, prefix="/v1")
 app.include_router(blobs_router, prefix="/v1")
+app.include_router(admin_router, prefix="/v1")

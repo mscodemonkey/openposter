@@ -21,7 +21,7 @@ async def search(
     session_maker = request.app.state.Session
 
     async with session_maker() as session:
-        stmt = select(Poster).where(Poster.tmdb_id == tmdb_id)
+        stmt = select(Poster).where(Poster.tmdb_id == tmdb_id).where(Poster.deleted_at.is_(None))
         if type:
             stmt = stmt.where(Poster.media_type == type)
         stmt = stmt.limit(limit)

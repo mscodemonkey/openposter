@@ -17,7 +17,7 @@ async def get_poster(request: Request, poster_id: str):
     async with session_maker() as session:
         p = (await session.execute(select(Poster).where(Poster.poster_id == poster_id))).scalar_one_or_none()
 
-    if p is None:
+    if p is None or p.deleted_at is not None:
         raise http_error(404, "not_found", "poster not found")
 
     cfg = request.app.state.cfg

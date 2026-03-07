@@ -46,9 +46,6 @@ async def changes(
     async with session_maker() as session:
         stmt = select(Poster)
 
-        # Only include non-deleted posters in change feed for now.
-        stmt = stmt.where(Poster.deleted_at.is_(None))
-
         if since_updated_at:
             # (updated_at, poster_id) > (since_updated_at, since_poster_id)
             stmt = stmt.where(
@@ -62,7 +59,8 @@ async def changes(
     changes_out = []
     next_since = None
     for p in posters:
-        changes_out.append({"poster_id": p.poster_id, "changed_at": p.updated_at, "kind": "upsert"})
+        kind = "delete" if p.deleted_at is not None else "upsert"
+        changes_out.append({"poster_id": p.poster_id, "changed_at": p.updated_at, "kind": kind})
         next_since = encode_cursor(p.updated_at, p.poster_id)
 
     return {"changes": changes_out, "next_since": next_since}

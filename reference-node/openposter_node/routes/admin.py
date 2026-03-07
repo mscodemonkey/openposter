@@ -1,0 +1,148 @@
+from __future__ import annotations
+
+import hashlib
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+from fastapi import APIRouter, File, Form, Request, UploadFile
+
+from ..errors import http_error
+from ..storage.blobs import blob_path
+
+router = APIRouter()
+
+
+def _now_rfc3339() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _require_admin(request: Request) -> None:
+    token = os.environ.get("OPENPOSTER_ADMIN_TOKEN")
+    if not token:
+        raise http_error(500, "internal", "admin token not configured")
+
+    auth = request.headers.get("authorization") or ""
+    if not auth.startswith("Bearer "):
+        raise http_error(401, "unauthorized", "missing bearer token")
+
+    provided = auth.split(" ", 1)[1].strip()
+    if provided != token:
+        raise http_error(403, "forbidden", "invalid admin token")
+
+
+async def _save_upload_to_blob(data_dir: Path, upload: UploadFile) -> tuple[str, int, str]:
+    # Stream to disk, hash as we go.
+    h = hashlib.sha256()
+    data = await upload.read()
+    h.update(data)
+    hexhash = h.hexdigest()
+    sha = f"sha256:{hexhash}"
+
+    dst = blob_path(data_dir, sha)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(data)
+
+    mime = upload.content_type or "application/octet-stream"
+    if mime not in {"image/jpeg", "image/png"}:
+        raise http_error(400, "invalid_request", "only image/jpeg and image/png are supported in v1")
+
+    return sha, len(data), mime
+
+
+@router.post("/admin/posters")
+async def admin_upload_poster(
+    request: Request,
+    tmdb_id: int = Form(...),
+    media_type: str = Form(...),
+    title: str | None = Form(None),
+    year: int | None = Form(None),
+    creator_id: str = Form(...),
+    creator_display_name: str = Form(...),
+    attribution_license: str = Form("all-rights-reserved"),
+    attribution_redistribution: str = Form("mirrors-approved"),
+    preview: UploadFile = File(...),
+    full: UploadFile = File(...),
+):
+    """MVP ingest endpoint.
+
+    This is intentionally simple for beta testing. It creates a single poster entry and writes blobs to the blob store.
+    """
+
+    _require_admin(request)
+
+    if media_type not in {"movie", "show", "season", "episode", "collection"}:
+        raise http_error(400, "invalid_request", "invalid media_type")
+
+    cfg = request.app.state.cfg
+    node_id = request.app.state.node_id
+
+    preview_hash, preview_bytes, preview_mime = await _save_upload_to_blob(cfg.data_dir, preview)
+    full_hash, full_bytes, full_mime = await _save_upload_to_blob(cfg.data_dir, full)
+
+    # Local id derived from content; stable-ish
+    local_id = "pst_" + hashlib.sha256((str(tmdb_id) + creator_id + full_hash).encode("utf-8")).hexdigest()[:8]
+    poster_id = f"op:v1:{node_id}:{local_id}"
+
+    from ..db import Poster
+
+    now = _now_rfc3339()
+
+    async with request.app.state.Session() as session:
+        existing = await session.get(Poster, poster_id)
+        if existing is not None:
+            raise http_error(409, "invalid_request", "poster_id conflict")
+
+        row = Poster(
+            poster_id=poster_id,
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
+            media_type=media_type,
+            tmdb_id=tmdb_id,
+            title=title,
+            year=year,
+            creator_id=creator_id,
+            creator_display_name=creator_display_name,
+            creator_home_node=cfg.base_url or str(request.base_url).rstrip("/"),
+            attribution_license=attribution_license,
+            attribution_redistribution=attribution_redistribution,
+            attribution_source_url=None,
+            preview_hash=preview_hash,
+            preview_bytes=preview_bytes,
+            preview_mime=preview_mime,
+            preview_width=None,
+            preview_height=None,
+            full_access="public",
+            full_hash=full_hash,
+            full_bytes=full_bytes,
+            full_mime=full_mime,
+            full_width=None,
+            full_height=None,
+            enc_alg=None,
+            enc_key_id=None,
+            enc_nonce=None,
+        )
+        session.add(row)
+        await session.commit()
+
+    return {"ok": True, "poster_id": poster_id}
+
+
+@router.delete("/admin/posters/{poster_id}")
+async def admin_delete_poster(request: Request, poster_id: str):
+    _require_admin(request)
+    from ..db import Poster
+
+    now = _now_rfc3339()
+
+    async with request.app.state.Session() as session:
+        p = await session.get(Poster, poster_id)
+        if p is None:
+            raise http_error(404, "not_found", "poster not found")
+
+        p.deleted_at = now
+        p.updated_at = now
+        await session.commit()
+
+    return {"ok": True, "poster_id": poster_id, "deleted_at": now}
