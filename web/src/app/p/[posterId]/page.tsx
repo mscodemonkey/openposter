@@ -222,7 +222,10 @@ export default function PosterPage({
                         <code className="op-code">{l.href}</code>
                       </div>
                       <div className="op-row op-mt-10">
-                        <a className="op-link" href={l.href}>
+                        <a
+                          className="op-link"
+                          href={l.href.startsWith("/p/") ? `/p/${encodeURIComponent(l.href.slice(3))}` : l.href}
+                        >
                           Open poster →
                         </a>
                         {derivedBoxsetHref && (
@@ -405,7 +408,7 @@ export default function PosterPage({
                           />
 
                           <div className="op-row op-mt-12">
-                            <a className="op-link" href={l.href}>
+                            <a className="op-link" href={l.href.startsWith("/p/") ? `/p/${encodeURIComponent(l.href.slice(3))}` : l.href}>
                               Open →
                             </a>
                           </div>

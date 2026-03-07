@@ -138,38 +138,45 @@ function TedBoxSetDemo() {
   );
 }
 
-function RelatedArtworkFromLinks({ links }: { links: PosterEntry["links"] }) {
+function RelatedArtworkFromLinks({
+  base,
+  links,
+}: {
+  base: string;
+  links: PosterEntry["links"];
+}) {
+  const [items, setItems] = useState<PosterEntry[] | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      if (!links || links.length === 0) {
+        setItems([]);
+        return;
+      }
+
+      const posterLinks = links.filter((l) => typeof l.href === "string" && l.href.startsWith("/p/"));
+      const posterIds = posterLinks.map((l) => decodeURIComponent(l.href.slice(3))).filter(Boolean);
+
+      const fetched: PosterEntry[] = [];
+      for (const pid of posterIds) {
+        // eslint-disable-next-line no-await-in-loop
+        const r = await fetch(`${base}/v1/posters/${encodeURIComponent(pid)}`);
+        if (!r.ok) continue;
+        // eslint-disable-next-line no-await-in-loop
+        fetched.push((await r.json()) as PosterEntry);
+      }
+      setItems(fetched);
+    })();
+  }, [base, links]);
+
   if (!links || links.length === 0) return null;
+  if (items === null) return <p className="op-subtle op-mt-12">Loading related…</p>;
+  if (items.length === 0) return null;
 
   return (
     <section className="op-section">
       <h2 className="op-section-title">Related artwork</h2>
-      <div className="op-grid op-mt-10">
-        {links.map((l, idx) => {
-          const derivedBoxsetHref =
-            l.media?.type === "show" && l.media.tmdb_id
-              ? `/tv/${encodeURIComponent(String(l.media.tmdb_id))}/boxset`
-              : l.media?.type === "collection" && l.media.tmdb_id
-                ? `/movie/${encodeURIComponent(String(l.media.tmdb_id))}/boxset`
-                : null;
-
-          return (
-            <div key={idx} className="op-card op-card--padded">
-              <div className="op-card-title">{l.title || l.rel || "Related"}</div>
-              <div className="op-row op-mt-10">
-                <a className="op-link" href={l.href}>
-                  Open poster →
-                </a>
-                {derivedBoxsetHref && (
-                  <a className="op-link" href={derivedBoxsetHref}>
-                    Open box set →
-                  </a>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <PosterGridIndexed items={items} />
     </section>
   );
 }
@@ -218,8 +225,6 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
         </div>
       </div>
 
-      <RelatedArtworkFromLinks links={data.show[0]?.links || null} />
-
       <section className="op-section">
         <h2 className="op-section-title">Main show posters</h2>
         <PosterGridIndexed items={data.show} />
@@ -248,6 +253,8 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
           </div>
         ))}
       </section>
+
+      <RelatedArtworkFromLinks base={base} links={data.show[0]?.links || null} />
     </div>
   );
 }

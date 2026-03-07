@@ -22,41 +22,39 @@ function PosterGridIndexed({ items }: { items: PosterEntry[] }) {
   );
 }
 
-function RelatedArtworkFromLinks({ links }: { links: PosterEntry["links"] }) {
-  if (!links || links.length === 0) return null;
+function RelatedArtworkFromLinks({ base, links }: { base: string; links: PosterEntry["links"] }) {
+  const [items, setItems] = useState<PosterEntry[] | null>(null);
 
-  const related = links.filter((l) => l.media?.type === "show" || l.media?.type === "collection");
-  if (related.length === 0) return null;
+  useEffect(() => {
+    void (async () => {
+      if (!links || links.length === 0) {
+        setItems([]);
+        return;
+      }
+
+      const posterLinks = links.filter((l) => typeof l.href === "string" && l.href.startsWith("/p/") && (l.media?.type === "show" || l.media?.type === "collection"));
+      const posterIds = posterLinks.map((l) => decodeURIComponent(l.href.slice(3))).filter(Boolean);
+
+      const fetched: PosterEntry[] = [];
+      for (const pid of posterIds) {
+        // eslint-disable-next-line no-await-in-loop
+        const r = await fetch(`${base}/v1/posters/${encodeURIComponent(pid)}`);
+        if (!r.ok) continue;
+        // eslint-disable-next-line no-await-in-loop
+        fetched.push((await r.json()) as PosterEntry);
+      }
+      setItems(fetched);
+    })();
+  }, [base, links]);
+
+  if (!links || links.length === 0) return null;
+  if (items === null) return <p className="op-subtle op-mt-12">Loading related…</p>;
+  if (items.length === 0) return null;
 
   return (
     <section className="op-section">
       <h2 className="op-section-title">Related artwork</h2>
-      <div className="op-grid op-mt-10">
-        {related.map((l, idx) => {
-          const derivedBoxsetHref =
-            l.media?.type === "show" && l.media.tmdb_id
-              ? `/tv/${encodeURIComponent(String(l.media.tmdb_id))}/boxset`
-              : l.media?.type === "collection" && l.media.tmdb_id
-                ? `/movie/${encodeURIComponent(String(l.media.tmdb_id))}/boxset`
-                : null;
-
-          return (
-            <div key={idx} className="op-card op-card--padded">
-              <div className="op-card-title">{l.title || l.rel || "Related"}</div>
-              <div className="op-row op-mt-10">
-                <a className="op-link" href={l.href}>
-                  Open poster →
-                </a>
-                {derivedBoxsetHref && (
-                  <a className="op-link" href={derivedBoxsetHref}>
-                    Open box set →
-                  </a>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <PosterGridIndexed items={items} />
     </section>
   );
 }
@@ -95,10 +93,20 @@ function TedMovieBoxSetDemo() {
 
       <section className="op-section">
         <h2 className="op-section-title">Related artwork</h2>
-        <div className="op-subtle op-text-sm op-mt-6">
-          <a className="op-link" href="/tv/201834/boxset">
-            ted (2024) TV Box Set
-          </a>
+        <div className="op-grid op-grid--posters op-mt-10">
+          <div className="op-card">
+            <a className="op-link" href="/tv/201834/boxset">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="op-img"
+                src="/demo/ted-boxset/c4ae91b4-a5ee-404d-a65d-9d42f81f64b0.jpg"
+                alt="ted (2024) TV Box Set"
+              />
+            </a>
+            <div className="op-poster-meta">
+              <div className="op-poster-title">ted (2024) TV Box Set</div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -180,8 +188,6 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
         </div>
       </div>
 
-      <RelatedArtworkFromLinks links={collection.links || null} />
-
       <section className="op-section">
         <h2 className="op-section-title">Box set poster</h2>
         <PosterGridIndexed items={[collection]} />
@@ -195,6 +201,8 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
           <PosterGridIndexed items={movies} />
         )}
       </section>
+
+      <RelatedArtworkFromLinks base={base} links={collection.links || null} />
     </div>
   );
 }
