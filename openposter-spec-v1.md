@@ -481,6 +481,11 @@ Operational guidance (non-normative):
 - Nodes SHOULD retain enough change history to allow indexers to recover from downtime (recommended retention: **at least 7 days**).
 - If a node cannot honour a `since` cursor (e.g., history expired), it SHOULD return `409 Conflict` with error code `cursor_expired` and a message telling the indexer to perform a full resync.
 
+Indexer peering note (non-normative):
+- Indexers MAY poll other indexers for **node discovery** and crawl hints (e.g., a list of nodes to crawl).
+- Indexers SHOULD treat creator nodes as the source of truth for poster metadata.
+- If an indexer accepts poster metadata from another indexer, it MUST verify creator signatures and MUST be able to fetch the creator node descriptor to validate signing keys.
+
 ---
 
 ## 6. Poster record
