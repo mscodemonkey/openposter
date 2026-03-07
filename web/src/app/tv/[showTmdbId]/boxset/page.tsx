@@ -138,6 +138,42 @@ function TedBoxSetDemo() {
   );
 }
 
+function RelatedArtworkFromLinks({ links }: { links: PosterEntry["links"] }) {
+  if (!links || links.length === 0) return null;
+
+  return (
+    <section className="op-section">
+      <h2 className="op-section-title">Related artwork</h2>
+      <div className="op-grid op-mt-10">
+        {links.map((l, idx) => {
+          const derivedBoxsetHref =
+            l.media?.type === "show" && l.media.tmdb_id
+              ? `/tv/${encodeURIComponent(String(l.media.tmdb_id))}/boxset`
+              : l.media?.type === "collection" && l.media.tmdb_id
+                ? `/movie/${encodeURIComponent(String(l.media.tmdb_id))}/boxset`
+                : null;
+
+          return (
+            <div key={idx} className="op-card op-card--padded">
+              <div className="op-card-title">{l.title || l.rel || "Related"}</div>
+              <div className="op-row op-mt-10">
+                <a className="op-link" href={l.href}>
+                  Open poster →
+                </a>
+                {derivedBoxsetHref && (
+                  <a className="op-link" href={derivedBoxsetHref}>
+                    Open box set →
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
   const base = useMemo(() => INDEXER_BASE_URL.replace(/\/+$/, ""), []);
 
@@ -181,6 +217,8 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
           </div>
         </div>
       </div>
+
+      <RelatedArtworkFromLinks links={data.show[0]?.links || null} />
 
       <section className="op-section">
         <h2 className="op-section-title">Main show posters</h2>

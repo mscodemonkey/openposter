@@ -183,19 +183,33 @@ export default function PosterPage({ params }: { params: { posterId: string } })
             <div className="op-section">
               <h2 className="op-section-title">Related artwork</h2>
               <div className="op-grid op-mt-10">
-                {poster.links.map((l, idx) => (
-                  <div key={idx} className="op-card op-card--padded">
-                    <div className="op-card-title">{l.title || l.rel || "Related"}</div>
-                    <div className="op-subtle op-text-sm op-mt-6">
-                      <code className="op-code">{l.href}</code>
+                {poster.links.map((l, idx) => {
+                  const derivedBoxsetHref =
+                    l.media?.type === "show" && l.media.tmdb_id
+                      ? `/tv/${encodeURIComponent(String(l.media.tmdb_id))}/boxset`
+                      : l.media?.type === "collection" && l.media.tmdb_id
+                        ? `/movie/${encodeURIComponent(String(l.media.tmdb_id))}/boxset`
+                        : null;
+
+                  return (
+                    <div key={idx} className="op-card op-card--padded">
+                      <div className="op-card-title">{l.title || l.rel || "Related"}</div>
+                      <div className="op-subtle op-text-sm op-mt-6">
+                        <code className="op-code">{l.href}</code>
+                      </div>
+                      <div className="op-row op-mt-10">
+                        <a className="op-link" href={l.href}>
+                          Open poster →
+                        </a>
+                        {derivedBoxsetHref && (
+                          <a className="op-link" href={derivedBoxsetHref}>
+                            Open box set →
+                          </a>
+                        )}
+                      </div>
                     </div>
-                    <div className="op-mt-10">
-                      <a className="op-link" href={l.href}>
-                        Open →
-                      </a>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
