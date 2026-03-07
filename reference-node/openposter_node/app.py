@@ -12,6 +12,7 @@ from .routes.changes import router as changes_router
 from .routes.node_descriptor import router as node_descriptor_router
 from .routes.nodes import router as nodes_router
 from .routes.posters import router as posters_router
+from .routes.posters_list import router as posters_list_router
 from .routes.search import router as search_router
 
 app = FastAPI(title="OpenPoster Reference Node", version="0.1.0")
@@ -58,6 +59,7 @@ app.include_router(node_descriptor_router)
 app.include_router(search_router, prefix="/v1")
 app.include_router(changes_router, prefix="/v1")
 app.include_router(nodes_router, prefix="/v1")
+app.include_router(posters_list_router, prefix="/v1")
 app.include_router(posters_router, prefix="/v1")
 app.include_router(blobs_router, prefix="/v1")
 app.include_router(admin_router, prefix="/v1")

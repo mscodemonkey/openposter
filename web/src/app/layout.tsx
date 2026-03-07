@@ -29,6 +29,7 @@ export default function RootLayout({
           <a href="/">Browse</a>
           <a href="/connect">Connect node</a>
           <a href="/upload">Upload</a>
+          <a href="/library">My library</a>
           <a href="/register">Register</a>
         </nav>
         {children}
