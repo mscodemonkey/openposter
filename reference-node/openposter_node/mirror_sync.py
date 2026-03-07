@@ -60,20 +60,17 @@ async def mirror_sync_once(app: FastAPI) -> None:
                 continue
             poster = pr.json()
 
-            # Pull all blob urls from sources (prefer origin role)
+            # Download blobs directly from the origin's blob endpoint.
+            # This avoids issues where the poster metadata advertises localhost-based URLs
+            # that only make sense to an external client.
             for key in ("preview", "full"):
                 asset = (poster.get("assets") or {}).get(key) or {}
-                sources = asset.get("sources") or []
-                # Find origin source; else fall back to asset.url
-                url = None
-                for s in sources:
-                    if s.get("role") == "origin":
-                        url = s.get("url")
-                        break
-                url = url or asset.get("url")
                 h = asset.get("hash")
-                if not url or not h:
+                if not h:
                     continue
+
+                url = origin + f"/v1/blobs/{h}"
+
                 dst = blob_path(cfg.data_dir, h)
                 if dst.exists():
                     continue
