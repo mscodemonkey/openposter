@@ -166,7 +166,7 @@ export default function LibraryPage() {
             <div className="op-grid op-grid--posters">
               {items.map((p) => (
                 <div key={p.poster_id} className="op-card">
-                  <a href={p.assets.preview.url} target="_blank" rel="noreferrer">
+                  <a className="op-link" href={`/p/${encodeURIComponent(p.poster_id)}`}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img className="op-img" src={p.assets.preview.url} alt={p.media.title || p.poster_id} />
                   </a>

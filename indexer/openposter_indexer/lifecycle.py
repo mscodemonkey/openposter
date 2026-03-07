@@ -16,6 +16,30 @@ def _now_rfc3339() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _norm_rfc3339(ts: str | None) -> str:
+    """Normalize timestamps for stable ordering.
+
+    Accepts a few common ISO-8601 variants and returns RFC3339 with Z.
+    Falls back to now if parsing fails.
+    """
+
+    if not ts:
+        return _now_rfc3339()
+
+    try:
+        s = str(ts)
+        if s.endswith("Z"):
+            s2 = s.replace("Z", "+00:00")
+        else:
+            s2 = s
+        dt = datetime.fromisoformat(s2)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    except Exception:
+        return _now_rfc3339()
+
+
 async def _fetch_json(client: httpx.AsyncClient, url: str) -> dict:
     r = await client.get(url)
     r.raise_for_status()
@@ -153,7 +177,7 @@ async def crawl_once(app: FastAPI) -> None:
                         year=(str(media.get("year")) if media.get("year") is not None else None),
                         creator_id=(str(creator.get("creator_id")) if creator.get("creator_id") is not None else None),
                         creator_display_name=(str(creator.get("display_name")) if creator.get("display_name") is not None else None),
-                        changed_at=changed_at or _now_rfc3339(),
+                        changed_at=_norm_rfc3339(changed_at),
                         poster_json=json.dumps(poster, separators=(",", ":")),
                     )
                     await session.merge(row)

@@ -245,7 +245,7 @@ function PosterGrid({ items }: { items: PosterEntry[] }) {
     <div className="op-grid op-grid--posters">
       {items.map((r) => (
         <div key={r.poster_id} className="op-card">
-          <a href={r.assets.preview.url} target="_blank" rel="noreferrer">
+          <a className="op-link" href={`/p/${encodeURIComponent(r.poster_id)}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="op-img" src={r.assets.preview.url} alt={r.media.title || r.poster_id} />
           </a>

@@ -39,6 +39,11 @@
   gap: 12px;
   padding: 16px;
   border-bottom: 1px solid #222;
+  align-items: center;
+}
+
+.op-spacer {
+  margin-left: auto;
 }
 
 .op-nav a {
@@ -95,6 +100,12 @@
 
 .op-grid--posters {
   grid-template-columns: repeat(5, 1fr);
+}
+
+/* Detail layout (poster page) */
+.op-grid--detail {
+  grid-template-columns: 340px 1fr;
+  gap: 16px;
 }
 
 .op-poster-meta {

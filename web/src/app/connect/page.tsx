@@ -31,7 +31,7 @@ export default function ConnectPage() {
     <div className="op-container op-container--narrow">
       <h1 className="op-title-lg">Connect your node</h1>
       <p className="op-subtle op-mt-6">
-        Stores your node URL and admin token in your browser (localStorage) for beta testing.
+        Stores your node URL in <code className="op-code">localStorage</code> and your admin token in <code className="op-code">sessionStorage</code> (token clears when the browser session ends).
       </p>
 
       <div className="op-section op-stack">

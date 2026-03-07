@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./app.css";
 
+import Nav from "./nav";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -26,16 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <nav className="op-nav">
-          <a href="/">Home</a>
-          <a href="/browse">Browse</a>
-          <a href="/search">Search</a>
-          <a href="/creators">Creators</a>
-          <a href="/connect">Connect node</a>
-          <a href="/upload">Upload</a>
-          <a href="/library">My library</a>
-          <a href="/register">Register</a>
-        </nav>
+        <Nav />
         {children}
       </body>
     </html>
