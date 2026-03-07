@@ -135,9 +135,12 @@ Query params (v1 core):
 - `imdb_id` (optional)
 - `q` (optional text query)
 - `type` = `movie|show|season|episode|collection` (optional)
-- `limit` (optional, default 50)
+- `limit` (optional, default 50; nodes MAY cap, recommended max 200)
+- `cursor` (optional, opaque pagination cursor from `next_cursor`)
 
 ### 4.2 Response
+
+Search responses MUST include `next_cursor` when pagination is possible. If there are no more results, `next_cursor` MUST be `null` or omitted.
 
 ```json
 {
@@ -181,7 +184,8 @@ Query params (v1 core):
         "redistribution": "mirrors-approved"
       }
     }
-  ]
+  ],
+  "next_cursor": "opaque-or-null"
 }
 ```
 
