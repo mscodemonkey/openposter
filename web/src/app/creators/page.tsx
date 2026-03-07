@@ -35,39 +35,37 @@ export default function CreatorsPage() {
   }, [url]);
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700 }}>Creators</h1>
-      <p style={{ opacity: 0.8, marginTop: 6 }}>
-        Indexer: <code>{INDEXER_BASE_URL}</code>
+    <div className="op-container op-container--narrow">
+      <h1 className="op-title-lg">Creators</h1>
+      <p className="op-subtle op-mt-6">
+        Indexer: <code className="op-code">{INDEXER_BASE_URL}</code>
       </p>
 
-      {error && (
-        <div style={{ marginTop: 12, padding: 12, border: "1px solid #633", borderRadius: 10 }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="op-alert op-alert--error">{error}</div>}
 
       {!data ? (
-        <p style={{ opacity: 0.8, marginTop: 12 }}>Loading…</p>
+        <p className="op-subtle op-mt-12">Loading…</p>
       ) : (
-        <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+        <div className="op-section op-stack">
           {data.results.map((c) => (
-            <div key={c.creator_id} style={{ border: "1px solid #333", borderRadius: 10, padding: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <div key={c.creator_id} className="op-card op-card--padded">
+              <div className="op-row op-row--between">
                 <div>
-                  <div style={{ fontWeight: 700 }}>{c.display_name || c.creator_id}</div>
-                  <div style={{ opacity: 0.8, fontSize: 12 }}>
-                    <code>{c.creator_id}</code>
+                  <div className="op-card-title">{c.display_name || c.creator_id}</div>
+                  <div className="op-subtle op-text-sm">
+                    <code className="op-code">{c.creator_id}</code>
                   </div>
                 </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 12, opacity: 0.85 }}>{c.count} poster(s)</div>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>{c.last_changed_at || "-"}</div>
+                <div className="op-text-right">
+                  <div className="op-text-sm op-subtle-strong">{c.count} poster(s)</div>
+                  <div className="op-text-sm op-faint">{c.last_changed_at || "-"}</div>
                 </div>
               </div>
 
-              <div style={{ marginTop: 10 }}>
-                <a href={`/browse?creator_id=${encodeURIComponent(c.creator_id)}`}>Browse this creator →</a>
+              <div className="op-mt-10">
+                <a className="op-link" href={`/browse?creator_id=${encodeURIComponent(c.creator_id)}`}>
+                  Browse this creator →
+                </a>
               </div>
             </div>
           ))}

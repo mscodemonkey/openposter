@@ -28,36 +28,37 @@ export default function ConnectPage() {
   }
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700 }}>Connect your node</h1>
-      <p style={{ opacity: 0.8 }}>
-        This stores your node URL and admin token in your browser (localStorage) for beta testing.
+    <div className="op-container op-container--narrow">
+      <h1 className="op-title-lg">Connect your node</h1>
+      <p className="op-subtle op-mt-6">
+        Stores your node URL and admin token in your browser (localStorage) for beta testing.
       </p>
 
-      <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
-        <label>
-          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Node URL</div>
+      <div className="op-section op-stack">
+        <label className="op-label">
+          <div className="op-label-hint">Node URL</div>
           <input
+            className="op-input"
             value={nodeUrl}
             onChange={(e) => setNodeUrl(e.target.value)}
-            style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #333" }}
             placeholder="https://posters.example.com"
           />
         </label>
 
-        <label>
-          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Admin token</div>
+        <label className="op-label">
+          <div className="op-label-hint">Admin token</div>
           <input
+            className="op-input"
             value={adminToken}
             onChange={(e) => setAdminToken(e.target.value)}
-            style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #333" }}
             placeholder="OPENPOSTER_ADMIN_TOKEN"
             type="password"
           />
         </label>
 
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="op-row">
           <button
+            className="op-btn"
             onClick={() => {
               saveCreatorConnection({
                 nodeUrl: nodeUrl.replace(/\/+$/, ""),
@@ -65,37 +66,31 @@ export default function ConnectPage() {
               });
               setStatus("Saved.");
             }}
-            style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #333" }}
           >
             Save
           </button>
 
-          <button
-            onClick={() => void testConnection()}
-            style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #333" }}
-          >
+          <button className="op-btn" onClick={() => void testConnection()}>
             Test
           </button>
 
           <button
+            className="op-btn"
             onClick={() => {
               clearCreatorConnection();
               setStatus("Cleared.");
             }}
-            style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #333" }}
           >
             Clear
           </button>
         </div>
 
         {status && (
-          <div style={{ marginTop: 6, padding: 10, borderRadius: 8, border: "1px solid #333" }}>
-            {status}
-          </div>
+          <div className="op-card op-card--padded op-mt-6">{status}</div>
         )}
 
-        <p style={{ marginTop: 12, opacity: 0.8 }}>
-          Next: <a href="/upload">upload a poster</a>
+        <p className="op-subtle op-mt-12">
+          Next: <a className="op-link" href="/upload">upload a poster</a>
         </p>
       </div>
     </div>

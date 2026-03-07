@@ -46,7 +46,6 @@ export default function LibraryPage() {
       setNextCursor(json.next_cursor);
 
       if (autoCheck && json.results.length > 0) {
-        // kick off check in background for the newly loaded page
         void checkAllIndexed(json.results);
       }
     } finally {
@@ -71,23 +70,7 @@ export default function LibraryPage() {
     setIndexed((m) => ({ ...m, [p.poster_id]: found ? "yes" : "no" }));
   }
 
-  async function del(posterId: string) {
-    if (!conn) return;
-    setError(null);
-    const r = await fetch(baseUrl + `/v1/admin/posters/${encodeURIComponent(posterId)}`, {
-      method: "DELETE",
-      headers: { authorization: `Bearer ${conn.adminToken}` },
-    });
-    const json = await r.json().catch(() => null);
-    if (!r.ok) {
-      setError(`delete failed: ${r.status} ${JSON.stringify(json)}`);
-      return;
-    }
-    await loadFirstPage();
-  }
-
   async function checkAllIndexed(list: PosterEntry[]) {
-    // Small concurrency pool to keep this fast but not abusive.
     const concurrency = 4;
     const queue = list.filter((p) => !indexed[p.poster_id]);
 
@@ -108,8 +91,22 @@ export default function LibraryPage() {
     await Promise.all(Array.from({ length: concurrency }, () => worker()));
   }
 
+  async function del(posterId: string) {
+    if (!conn) return;
+    setError(null);
+    const r = await fetch(baseUrl + `/v1/admin/posters/${encodeURIComponent(posterId)}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${conn.adminToken}` },
+    });
+    const json = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(`delete failed: ${r.status} ${JSON.stringify(json)}`);
+      return;
+    }
+    await loadFirstPage();
+  }
+
   useEffect(() => {
-    // client-only query param parsing (avoids useSearchParams build constraint)
     try {
       const sp = new URLSearchParams(window.location.search);
       setAutoCheck(sp.get("check") === "1");
@@ -128,105 +125,97 @@ export default function LibraryPage() {
   }, [autoCheck, items]);
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700 }}>My library</h1>
-      <p style={{ opacity: 0.8 }}>
-        Lists posters from your connected node via <code>/v1/posters</code>.
+    <div className="op-container">
+      <h1 className="op-title-lg">My library</h1>
+      <p className="op-subtle op-mt-6">
+        Lists posters from your connected node via <code className="op-code">/v1/posters</code>.
       </p>
 
       {!conn ? (
-        <div style={{ marginTop: 16, padding: 12, border: "1px solid #333", borderRadius: 10 }}>
-          Not connected. Go to <a href="/connect">/connect</a> first.
+        <div className="op-card op-card--padded op-mt-16">
+          Not connected. Go to <a className="op-link" href="/connect">/connect</a> first.
         </div>
       ) : (
-        <div style={{ marginTop: 16, padding: 12, border: "1px solid #333", borderRadius: 10 }}>
-          Connected node: <code>{baseUrl}</code>
+        <div className="op-card op-card--padded op-mt-16">
+          Connected node: <code className="op-code">{baseUrl}</code>
         </div>
       )}
 
-      {error && (
-        <div style={{ marginTop: 12, padding: 12, border: "1px solid #633", borderRadius: 10 }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="op-alert op-alert--error">{error}</div>}
 
-      <div style={{ marginTop: 16 }}>
+      <div className="op-section">
         {items === null ? (
-          <p style={{ opacity: 0.8 }}>Loading…</p>
+          <p className="op-subtle">Loading…</p>
         ) : items.length === 0 ? (
-          <p style={{ opacity: 0.8 }}>No posters found.</p>
+          <p className="op-subtle">No posters found.</p>
         ) : (
           <>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+            <div className="op-row op-mt-10">
               <button
+                className="op-btn op-btn--sm"
                 onClick={() => void checkAllIndexed(items).catch((e) => setError(e?.message || String(e)))}
-                style={{ fontSize: 12, border: "1px solid #444", borderRadius: 8, padding: "8px 12px" }}
                 title="Checks indexer status for all currently loaded posters"
               >
                 Check all indexed
               </button>
-              <div style={{ opacity: 0.8, fontSize: 12 }}>
-                Indexer: <code>{INDEXER_BASE_URL}</code>
+              <div className="op-subtle op-text-sm">
+                Indexer: <code className="op-code">{INDEXER_BASE_URL}</code>
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+            <div className="op-grid op-grid--posters">
               {items.map((p) => (
-                <div key={p.poster_id} style={{ border: "1px solid #333", borderRadius: 10, overflow: "hidden" }}>
-                <a href={p.assets.preview.url} target="_blank" rel="noreferrer">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.assets.preview.url} alt={p.media.title || p.poster_id} style={{ width: "100%", display: "block" }} />
-                </a>
-                <div style={{ padding: 10 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, lineHeight: "16px" }}>
-                    {p.media.title || "(untitled)"}
-                  </div>
-                  <div style={{ opacity: 0.8, fontSize: 12 }}>
-                    {p.media.type} · TMDB {p.media.tmdb_id}
-                  </div>
-                  <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                    <a href={p.assets.full.url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
-                      Download
-                    </a>
+                <div key={p.poster_id} className="op-card">
+                  <a href={p.assets.preview.url} target="_blank" rel="noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img className="op-img" src={p.assets.preview.url} alt={p.media.title || p.poster_id} />
+                  </a>
+                  <div className="op-poster-meta">
+                    <div className="op-poster-title">{p.media.title || "(untitled)"}</div>
+                    <div className="op-subtle op-text-sm">
+                      {p.media.type} · TMDB {p.media.tmdb_id}
+                    </div>
 
-                    <button
-                      onClick={() => void checkIndexed(p).catch((e) => setError(e?.message || String(e)))}
-                      style={{ fontSize: 12, border: "1px solid #444", borderRadius: 8, padding: "6px 10px" }}
-                      disabled={indexed[p.poster_id] === "checking"}
-                      title={`Checks ${INDEXER_BASE_URL}/v1/search for this TMDB id/type`}
-                    >
-                      {indexed[p.poster_id] === "checking"
-                        ? "Checking…"
-                        : indexed[p.poster_id]
-                          ? `Indexed: ${indexed[p.poster_id]}`
-                          : "Check indexed"}
-                    </button>
+                    <div className="op-row op-row--between op-mt-8">
+                      <a className="op-link op-text-sm" href={p.assets.full.url} target="_blank" rel="noreferrer">
+                        Download
+                      </a>
 
-                    {conn && (
                       <button
-                        onClick={() => void del(p.poster_id)}
-                        style={{ fontSize: 12, border: "1px solid #444", borderRadius: 8, padding: "6px 10px" }}
+                        className="op-btn op-btn--sm"
+                        onClick={() => void checkIndexed(p).catch((e) => setError(e?.message || String(e)))}
+                        disabled={indexed[p.poster_id] === "checking"}
+                        title={`Checks ${INDEXER_BASE_URL}/v1/search for this TMDB id/type`}
                       >
-                        Delete
+                        {indexed[p.poster_id] === "checking"
+                          ? "Checking…"
+                          : indexed[p.poster_id]
+                            ? `Indexed: ${indexed[p.poster_id]}`
+                            : "Check indexed"}
                       </button>
-                    )}
+
+                      {conn && (
+                        <button className="op-btn op-btn--sm" onClick={() => void del(p.poster_id)}>
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
               ))}
             </div>
 
-            <div style={{ marginTop: 16 }}>
+            <div className="op-mt-16">
               {nextCursor ? (
                 <button
+                  className="op-btn"
                   onClick={() => void loadMore().catch((e) => setError(e?.message || String(e)))}
                   disabled={loadingMore}
-                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #333" }}
                 >
                   {loadingMore ? "Loading…" : "Load more"}
                 </button>
               ) : (
-                <div style={{ opacity: 0.7, fontSize: 12 }}>End of list.</div>
+                <div className="op-faint op-text-sm">End of list.</div>
               )}
             </div>
           </>

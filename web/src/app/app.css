@@ -1,0 +1,261 @@
+/*
+  OpenPoster Web UI styles (beta)
+
+  Goals:
+  - Keep styling centralized (no inline styles in pages)
+  - Small set of reusable primitives: layout, typography, cards, grids, forms
+  - Avoid over-engineering while the UI is still in flux
+*/
+
+/* Layout */
+.op-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.op-container--narrow {
+  max-width: 900px;
+}
+
+.op-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.op-subtle {
+  opacity: 0.8;
+}
+
+.op-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.95em;
+}
+
+/* Nav */
+.op-nav {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #222;
+}
+
+.op-nav a {
+  opacity: 0.9;
+}
+
+.op-nav a:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+/* Sections */
+.op-section {
+  margin-top: 24px;
+}
+
+.op-section-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.op-title-lg {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.op-stack {
+  display: grid;
+  gap: 10px;
+}
+
+/* Cards */
+.op-card {
+  border: 1px solid #333;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.op-card--padded {
+  padding: 12px;
+  overflow: visible;
+}
+
+.op-card-title {
+  font-weight: 700;
+}
+
+/* Grids */
+.op-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.op-grid--posters {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.op-poster-meta {
+  padding: 10px;
+}
+
+.op-poster-title {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.op-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.op-row--between {
+  justify-content: space-between;
+}
+
+.op-text-right {
+  text-align: right;
+}
+
+.op-faint {
+  opacity: 0.7;
+}
+
+.op-subtle-strong {
+  opacity: 0.85;
+}
+
+/* Forms */
+.op-input,
+.op-select {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: transparent;
+  color: inherit;
+}
+
+.op-input {
+  width: 100%;
+}
+
+.op-form-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 120px;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.op-form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.op-form-grid-title-year {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 10px;
+}
+
+.op-label {
+  display: block;
+}
+
+.op-label-hint {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+/* Buttons */
+.op-btn {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.op-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.op-btn--sm {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-color: #444;
+}
+
+/* Tables */
+.op-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+}
+
+.op-table th,
+.op-table td {
+  padding: 8px;
+}
+
+.op-table thead tr {
+  text-align: left;
+  border-bottom: 1px solid #333;
+}
+
+.op-table tbody tr {
+  border-bottom: 1px solid #222;
+}
+
+/* Alerts */
+.op-alert {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #633;
+}
+
+.op-alert--error {
+  background: #2b1b1b;
+}
+
+/* Media */
+.op-img {
+  width: 100%;
+  display: block;
+}
+
+/* Text */
+.op-text-sm {
+  font-size: 12px;
+}
+
+.op-text-xs {
+  font-size: 11px;
+}
+
+.op-link:hover {
+  text-decoration: underline;
+}
+
+.op-pre {
+  white-space: pre-wrap;
+}
+
+/* Utility */
+.op-max-360 { max-width: 360px; }
+.op-mt-6 { margin-top: 6px; }
+.op-mt-8 { margin-top: 8px; }
+.op-mt-10 { margin-top: 10px; }
+.op-mt-12 { margin-top: 12px; }
+.op-mt-16 { margin-top: 16px; }
+.op-mt-20 { margin-top: 20px; }
+.op-mt-28 { margin-top: 28px; }
+.op-mt-32 { margin-top: 32px; }

@@ -59,48 +59,42 @@ export default function UploadPage() {
       return;
     }
 
-    setStatus(`Uploaded. Redirecting to My library...`);
+    setStatus("Uploaded. Redirecting to My library...");
     setTimeout(() => {
       window.location.href = "/library?check=1";
     }, 400);
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700 }}>Upload poster</h1>
-      <p style={{ marginTop: 8, opacity: 0.8 }}>
-        After upload, you’ll be redirected to <a href="/library">My library</a>.
+    <div className="op-container op-container--narrow">
+      <h1 className="op-title-lg">Upload poster</h1>
+      <p className="op-subtle op-mt-6">
+        Uploads to your connected node’s <code className="op-code">/v1/admin/posters</code> endpoint.
       </p>
-      <p style={{ opacity: 0.8 }}>
-        Uploads to your connected node’s <code>/v1/admin/posters</code> endpoint.
+      <p className="op-subtle op-mt-8">
+        After upload, you’ll be redirected to <a className="op-link" href="/library">My library</a>.
       </p>
 
       {!conn ? (
-        <div style={{ marginTop: 16, padding: 12, border: "1px solid #333", borderRadius: 10 }}>
-          Not connected. Go to <a href="/connect">/connect</a> first.
+        <div className="op-card op-card--padded op-mt-16">
+          Not connected. Go to <a className="op-link" href="/connect">/connect</a> first.
         </div>
       ) : (
-        <div style={{ marginTop: 16, padding: 12, border: "1px solid #333", borderRadius: 10 }}>
-          Connected node: <code>{baseUrl}</code>
+        <div className="op-card op-card--padded op-mt-16">
+          Connected node: <code className="op-code">{baseUrl}</code>
         </div>
       )}
 
-      <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>TMDB id</div>
-            <input value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #333" }} />
+      <div className="op-section op-stack">
+        <div className="op-form-grid-2">
+          <label className="op-label">
+            <div className="op-label-hint">TMDB id</div>
+            <input className="op-input" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} />
           </label>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Media type</div>
-            <select value={mediaType} onChange={(e) => setMediaType(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #333" }}>
-              {[
-                "movie",
-                "show",
-                "season",
-                "episode",
-                "collection",
-              ].map((t) => (
+          <label className="op-label">
+            <div className="op-label-hint">Media type</div>
+            <select className="op-select" value={mediaType} onChange={(e) => setMediaType(e.target.value)}>
+              {["movie", "show", "season", "episode", "collection"].map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
@@ -109,32 +103,32 @@ export default function UploadPage() {
           </label>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10 }}>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Title</div>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #333", width: "100%" }} />
+        <div className="op-form-grid-title-year">
+          <label className="op-label">
+            <div className="op-label-hint">Title</div>
+            <input className="op-input" value={title} onChange={(e) => setTitle(e.target.value)} />
           </label>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Year</div>
-            <input value={year} onChange={(e) => setYear(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #333" }} />
-          </label>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Creator id</div>
-            <input value={creatorId} onChange={(e) => setCreatorId(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #333" }} />
-          </label>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Creator name</div>
-            <input value={creatorName} onChange={(e) => setCreatorName(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #333" }} />
+          <label className="op-label">
+            <div className="op-label-hint">Year</div>
+            <input className="op-input" value={year} onChange={(e) => setYear(e.target.value)} />
           </label>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Redistribution</div>
-            <select value={redistribution} onChange={(e) => setRedistribution(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #333" }}>
+        <div className="op-form-grid-2">
+          <label className="op-label">
+            <div className="op-label-hint">Creator id</div>
+            <input className="op-input" value={creatorId} onChange={(e) => setCreatorId(e.target.value)} />
+          </label>
+          <label className="op-label">
+            <div className="op-label-hint">Creator name</div>
+            <input className="op-input" value={creatorName} onChange={(e) => setCreatorName(e.target.value)} />
+          </label>
+        </div>
+
+        <div className="op-form-grid-2">
+          <label className="op-label">
+            <div className="op-label-hint">Redistribution</div>
+            <select className="op-select" value={redistribution} onChange={(e) => setRedistribution(e.target.value)}>
               {["public-cache-ok", "mirrors-approved", "none"].map((t) => (
                 <option key={t} value={t}>
                   {t}
@@ -142,30 +136,28 @@ export default function UploadPage() {
               ))}
             </select>
           </label>
-          <label>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>License</div>
-            <input value={license} onChange={(e) => setLicense(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #333" }} />
+          <label className="op-label">
+            <div className="op-label-hint">License</div>
+            <input className="op-input" value={license} onChange={(e) => setLicense(e.target.value)} />
           </label>
         </div>
 
-        <label>
-          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Preview file (jpg/png)</div>
+        <label className="op-label">
+          <div className="op-label-hint">Preview file (jpg/png)</div>
           <input type="file" accept="image/jpeg,image/png" onChange={(e) => setPreviewFile(e.target.files?.[0] || null)} />
         </label>
 
-        <label>
-          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Full file (jpg/png)</div>
+        <label className="op-label">
+          <div className="op-label-hint">Full file (jpg/png)</div>
           <input type="file" accept="image/jpeg,image/png" onChange={(e) => setFullFile(e.target.files?.[0] || null)} />
         </label>
 
-        <button onClick={() => void upload()} style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #333", width: 140 }}>
+        <button className="op-btn" onClick={() => void upload()}>
           Upload
         </button>
 
         {status && (
-          <pre style={{ marginTop: 8, padding: 12, border: "1px solid #333", borderRadius: 10, whiteSpace: "pre-wrap" }}>
-            {status}
-          </pre>
+          <pre className="op-card op-card--padded op-pre op-mt-8">{status}</pre>
         )}
       </div>
     </div>

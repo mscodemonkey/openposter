@@ -43,36 +43,33 @@ export default function RegisterPage() {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700 }}>Register your node</h1>
-      <p style={{ opacity: 0.8 }}>
-        This registers your connected node with a directory so indexers can discover it.
+    <div className="op-container op-container--narrow">
+      <h1 className="op-title-lg">Register your node</h1>
+      <p className="op-subtle op-mt-6">
+        Registers your connected node with a directory so indexers can discover it.
       </p>
 
-      <div style={{ marginTop: 16, padding: 12, border: "1px solid #333", borderRadius: 10 }}>
-        Connected node: {nodeUrl ? <code>{nodeUrl}</code> : <em>none</em>}
+      <div className="op-card op-card--padded op-mt-16">
+        Connected node: {nodeUrl ? <code className="op-code">{nodeUrl}</code> : <em>none</em>}
       </div>
 
-      <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
-        <label>
-          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Directory URL</div>
+      <div className="op-section op-stack">
+        <label className="op-label">
+          <div className="op-label-hint">Directory URL</div>
           <input
+            className="op-input"
             value={directoryUrl}
             onChange={(e) => setDirectoryUrl(e.target.value)}
-            style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #333" }}
             placeholder="https://openposter.art"
           />
         </label>
 
-        <button
-          onClick={() => void register()}
-          style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #333", width: 200 }}
-        >
+        <button className="op-btn" onClick={() => void register()}>
           Register node
         </button>
 
         {status && (
-          <pre style={{ marginTop: 8, padding: 12, border: "1px solid #333", borderRadius: 10, whiteSpace: "pre-wrap" }}>
+          <pre className="op-card op-card--padded op-mt-8 op-pre">
             {status}
           </pre>
         )}
