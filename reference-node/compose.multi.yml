@@ -35,8 +35,9 @@ services:
       - OPENPOSTER_BASE_URL=http://localhost:8083
       - OPENPOSTER_NODE_NAME=Mirror for Node A
       - OPENPOSTER_OPERATOR_NAME=Mirror Operator
+      - OPENPOSTER_MIRROR_ORIGIN=http://node_a:8080
+      - OPENPOSTER_MIRROR_POLL_SECONDS=5
     volumes:
-      - ./data-a/blobs:/data/blobs
       - ./data-mirror:/data
 
   indexer:

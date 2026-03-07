@@ -28,6 +28,8 @@ async def crawl_once(app: FastAPI) -> None:
 
     # Build node set from seeds + discovered node lists.
     nodes: set[str] = set(cfg.seed_nodes)
+    issuer_cache: dict[str, dict] = getattr(app.state, "node_desc_cache", {})
+    signing_key_cache: dict[str, str] = getattr(app.state, "node_signing_key_cache", {})
 
     async with httpx.AsyncClient(timeout=8.0) as client:
         # discovery via /v1/nodes
@@ -88,6 +90,27 @@ async def crawl_once(app: FastAPI) -> None:
                     except Exception:
                         continue
 
+                    # Verify signature
+                    pub = signing_key_cache.get(node)
+                    if pub is None:
+                        try:
+                            desc = await _fetch_json(client, node + "/.well-known/openposter-node")
+                            issuer_cache[node] = desc
+                            keys = desc.get("signing_keys") or []
+                            pub = keys[0].get("public_key") if keys else None
+                            if isinstance(pub, str):
+                                signing_key_cache[node] = pub
+                        except Exception:
+                            pub = None
+
+                    if not pub:
+                        continue
+
+                    from .verify import verify_poster_signature
+
+                    if not verify_poster_signature(poster, public_key_b64=pub):
+                        continue
+
                     media = poster.get("media", {})
                     tmdb_id = media.get("tmdb_id")
                     media_type = media.get("type")
@@ -112,6 +135,9 @@ async def crawl_once(app: FastAPI) -> None:
                     cur.since = next_since
 
             await session.commit()
+
+    app.state.node_desc_cache = issuer_cache
+    app.state.node_signing_key_cache = signing_key_cache
 
 
 async def crawler_loop(app: FastAPI) -> None:

@@ -59,6 +59,14 @@ async def init_app_state(app: FastAPI) -> None:
         await conn.exec_driver_sql("UPDATE posters SET created_at = COALESCE(created_at, ?)", (now,))
         await conn.exec_driver_sql("UPDATE posters SET updated_at = COALESCE(updated_at, ?)", (now,))
 
+    # Optional mirror mode (pull blobs from an origin)
+    mirror_origin = os.environ.get("OPENPOSTER_MIRROR_ORIGIN")
+    if mirror_origin:
+        from .mirror_sync import attach_mirror
+
+        poll = int(os.environ.get("OPENPOSTER_MIRROR_POLL_SECONDS", "30"))
+        attach_mirror(app, origin=mirror_origin, poll_seconds=poll)
+
     # Seed sample data once (optional): if posters table empty and seed file exists
     seed = cfg.data_dir / "seed.json"
     if seed.exists():
