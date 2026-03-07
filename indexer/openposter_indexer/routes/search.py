@@ -17,6 +17,7 @@ async def search(
     tmdb_id: str | None = Query(None),
     q: str | None = Query(None),
     type: str | None = Query(None),  # noqa: A002
+    creator_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     cursor: str | None = Query(None),
 ):
@@ -43,6 +44,8 @@ async def search(
             stmt = stmt.where(IndexedPoster.media_type == type)
         if q is not None and q.strip() != "":
             stmt = stmt.where(IndexedPoster.title.ilike(f"%{q.strip()}%"))
+        if creator_id is not None:
+            stmt = stmt.where(IndexedPoster.creator_id == str(creator_id))
 
         if cur_changed_at and cur_poster_id:
             stmt = stmt.where(

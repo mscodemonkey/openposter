@@ -89,16 +89,7 @@ export default function BrowsePage() {
       if (tmdbId) u.searchParams.set("tmdb_id", tmdbId);
       if (q) u.searchParams.set("q", q);
       if (mediaType) u.searchParams.set("type", mediaType);
-      // creator filtering for /v1/search isn't implemented; fall back to /recent when creator filter is used
-      if (creatorId) {
-        // if creator filter is set and we're doing a keyword search, it's still useful: use /recent filtered by creator_id
-        const r = new URL(`${base}/v1/recent`);
-        r.searchParams.set("limit", "40");
-        r.searchParams.set("creator_id", creatorId);
-        if (mediaType) r.searchParams.set("media_type", mediaType);
-        if (cursor) r.searchParams.set("cursor", cursor);
-        return r.toString();
-      }
+      if (creatorId) u.searchParams.set("creator_id", creatorId);
       if (cursor) u.searchParams.set("cursor", cursor);
       return u.toString();
     }
@@ -240,12 +231,6 @@ export default function BrowsePage() {
             <input className="op-input" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} placeholder="optional" />
           </label>
         </div>
-
-        {creatorId && (tmdbId.trim() !== "" || q.trim() !== "") && (
-          <div className="op-subtle op-text-sm op-mt-10">
-            Note: creator + keyword search currently uses <code className="op-code">/v1/recent</code> filtered by creator (not full keyword search).
-          </div>
-        )}
       </section>
 
       {error && <div className="op-alert op-alert--error">{error}</div>}
