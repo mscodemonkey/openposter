@@ -21,6 +21,9 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import IconButton from "@mui/material/IconButton";
+
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { PosterEntry } from "@/lib/types";
@@ -48,6 +51,9 @@ export default function BrowsePage() {
   const [shareAnchor, setShareAnchor] = useState<null | HTMLElement>(null);
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const [nodeMenuAnchor, setNodeMenuAnchor] = useState<null | HTMLElement>(null);
+  const [nodeMenuUrl, setNodeMenuUrl] = useState<string | null>(null);
 
   const [items, setItems] = useState<PosterEntry[] | null>(null);
   const [brokenPosterIds, setBrokenPosterIds] = useState<Record<string, true>>({});
@@ -375,80 +381,82 @@ export default function BrowsePage() {
                       </Typography>
                     </CardContent>
 
-                    <CardActions sx={{ px: 2 }}>
-                      {(() => {
-                        const isBoxset = r.media.type === "show" || r.media.type === "collection";
-                        if (isBoxset) {
+                    <CardActions sx={{ px: 2, justifyContent: "space-between" }}>
+                      <Box>
+                        {(() => {
+                          const isBoxset = r.media.type === "show" || r.media.type === "collection";
+                          if (isBoxset) {
+                            return (
+                              <Button
+                                component={Link}
+                                variant="text"
+                                size="small"
+                                href={`/p/${encodeURIComponent(r.poster_id)}`}
+                                sx={{ pl: 0, minWidth: 0 }}
+                              >
+                                POSTER
+                              </Button>
+                            );
+                          }
+
                           return (
                             <Button
-                              component={Link}
                               variant="text"
                               size="small"
-                              href={`/p/${encodeURIComponent(r.poster_id)}`}
+                              href={r.assets.full.url}
+                              target="_blank"
+                              rel="noreferrer"
                               sx={{ pl: 0, minWidth: 0 }}
                             >
-                              POSTER
+                              VIEW
                             </Button>
                           );
-                        }
+                        })()}
 
-                        return (
-                          <Button
-                            variant="text"
-                            size="small"
-                            href={r.assets.full.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            sx={{ pl: 0, minWidth: 0 }}
-                          >
-                            VIEW
-                          </Button>
-                        );
-                      })()}
+                        {(() => {
+                          const t = r.media.type;
+                          const tmdb = r.media.tmdb_id;
+                          if (!tmdb) return null;
+                          if (t === "show") {
+                            return (
+                              <Button
+                                component={Link}
+                                variant="text"
+                                size="small"
+                                href={`/tv/${encodeURIComponent(String(tmdb))}/boxset`}
+                                sx={{ minWidth: 0 }}
+                              >
+                                BOX SET
+                              </Button>
+                            );
+                          }
+                          if (t === "collection") {
+                            return (
+                              <Button
+                                component={Link}
+                                variant="text"
+                                size="small"
+                                href={`/movie/${encodeURIComponent(String(tmdb))}/boxset`}
+                                sx={{ minWidth: 0 }}
+                              >
+                                BOX SET
+                              </Button>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </Box>
 
-                      {(() => {
-                        const t = r.media.type;
-                        const tmdb = r.media.tmdb_id;
-                        if (!tmdb) return null;
-                        if (t === "show") {
-                          return (
-                            <Button
-                              component={Link}
-                              variant="text"
-                              size="small"
-                              href={`/tv/${encodeURIComponent(String(tmdb))}/boxset`}
-                              sx={{ minWidth: 0 }}
-                            >
-                              BOX SET
-                            </Button>
-                          );
-                        }
-                        if (t === "collection") {
-                          return (
-                            <Button
-                              component={Link}
-                              variant="text"
-                              size="small"
-                              href={`/movie/${encodeURIComponent(String(tmdb))}/boxset`}
-                              sx={{ minWidth: 0 }}
-                            >
-                              BOX SET
-                            </Button>
-                          );
-                        }
-                        return null;
-                      })()}
-
-                      <Button
-                        variant="text"
+                      <IconButton
+                        aria-label="More"
                         size="small"
-                        href={r.creator.home_node}
-                        target="_blank"
-                        rel="noreferrer"
-                        sx={{ minWidth: 0 }}
+                        onClick={(e) => {
+                          setNodeMenuAnchor(e.currentTarget);
+                          setNodeMenuUrl(r.creator.home_node);
+                        }}
                       >
-                        NODE
-                      </Button>
+                        <MoreVertIcon fontSize="small" />
+                      </IconButton>
                     </CardActions>
                   </Card>
                 </Grid>
@@ -467,6 +475,29 @@ export default function BrowsePage() {
             </Button>
           </Box>
         )}
+
+        <Menu
+          open={Boolean(nodeMenuAnchor)}
+          anchorEl={nodeMenuAnchor}
+          onClose={() => {
+            setNodeMenuAnchor(null);
+            setNodeMenuUrl(null);
+          }}
+        >
+          <MenuItem
+            component="a"
+            href={nodeMenuUrl || undefined}
+            target="_blank"
+            rel="noreferrer"
+            disabled={!nodeMenuUrl}
+            onClick={() => {
+              setNodeMenuAnchor(null);
+              setNodeMenuUrl(null);
+            }}
+          >
+            Node
+          </MenuItem>
+        </Menu>
       </Stack>
     </Container>
   );
