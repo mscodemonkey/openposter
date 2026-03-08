@@ -7,7 +7,6 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
-import CardActions from "@mui/material/CardActions";
 import CardContent from "@mui/material/CardContent";
 import CardMedia from "@mui/material/CardMedia";
 import Chip from "@mui/material/Chip";
@@ -45,23 +44,27 @@ function PosterStrip({ items, title }: { items: PosterEntry[]; title: string }) 
   if (!items || items.length === 0) return null;
 
   return (
-    <Paper sx={{ p: 2 }}>
+    <Box>
       <Typography variant="h6" sx={{ fontWeight: 800 }}>
         {title}
       </Typography>
       <Box sx={{ display: "flex", gap: 2, overflowX: "auto", pt: 1.5 }}>
         {items.map((r) => (
-          <Card key={r.poster_id} sx={{ minWidth: 200, maxWidth: 200, flex: "0 0 auto" }}>
+          <Card
+            key={r.poster_id}
+            variant="outlined"
+            sx={{ minWidth: 200, maxWidth: 200, flex: "0 0 auto", border: 0, bgcolor: "transparent" }}
+          >
             <Link href={`/p/${encodeURIComponent(r.poster_id)}`} style={{ textDecoration: "none" }}>
               <CardMedia
                 component="img"
                 height={280}
                 image={r.assets.preview.url}
                 alt={r.media.title || r.poster_id}
-                sx={{ objectFit: "cover" }}
+                sx={{ objectFit: "cover", borderRadius: 1 }}
               />
             </Link>
-            <CardContent sx={{ py: 1.5 }}>
+            <CardContent sx={{ px: 0, py: 1.5 }}>
               <Typography sx={{ fontWeight: 800 }} noWrap>
                 {r.media.title || "(untitled)"}
               </Typography>
@@ -72,7 +75,7 @@ function PosterStrip({ items, title }: { items: PosterEntry[]; title: string }) 
           </Card>
         ))}
       </Box>
-    </Paper>
+    </Box>
   );
 }
 

@@ -7,7 +7,6 @@ import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CardMedia from "@mui/material/CardMedia";
-import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/GridLegacy";
 
@@ -73,7 +72,7 @@ export default function RelatedArtworkSection({
   if (items.length === 0) return null;
 
   return (
-    <Paper sx={{ p: 2.5 }}>
+    <Box>
       <Typography variant="h6" sx={{ fontWeight: 800 }}>
         {title}
       </Typography>
@@ -84,17 +83,17 @@ export default function RelatedArtworkSection({
             const href = targetHref(p);
             return (
               <Grid key={p.poster_id} item xs={12} sm={6} md={4} lg={3}>
-                <Card>
+                <Card variant="outlined" sx={{ border: 0, bgcolor: "transparent" }}>
                   <Link href={href} style={{ textDecoration: "none" }}>
                     <CardMedia
                       component="img"
                       height={320}
                       image={p.assets.preview.url}
                       alt={p.media.title || p.poster_id}
-                      sx={{ objectFit: "cover" }}
+                      sx={{ objectFit: "cover", borderRadius: 1 }}
                     />
                   </Link>
-                  <CardContent>
+                  <CardContent sx={{ px: 0 }}>
                     <Typography sx={{ fontWeight: 800 }} noWrap>
                       {p.media.title || "(untitled)"}
                     </Typography>
@@ -108,6 +107,6 @@ export default function RelatedArtworkSection({
           })}
         </Grid>
       </Box>
-    </Paper>
+    </Box>
   );
 }
