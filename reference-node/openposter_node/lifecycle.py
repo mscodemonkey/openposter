@@ -16,7 +16,7 @@ async def init_app_state(app: FastAPI) -> None:
     cfg = load_config()
     app.state.cfg = cfg
 
-    # node_id persistence
+    # node_id persistence (legacy string id used in poster_ids)
     node_id_path = cfg.data_dir / "node_id.txt"
     if node_id_path.exists():
         node_id = node_id_path.read_text().strip()
@@ -26,6 +26,28 @@ async def init_app_state(app: FastAPI) -> None:
         node_id = "opn_" + secrets.token_hex(16)
         node_id_path.write_text(node_id)
     app.state.node_id = node_id
+
+    # node_uuid persistence (new stable node identity for issuer/ownership)
+    import uuid
+
+    node_uuid_path = cfg.data_dir / "node_uuid.txt"
+    if node_uuid_path.exists():
+        node_uuid = node_uuid_path.read_text().strip()
+    else:
+        node_uuid = str(uuid.uuid4())
+        node_uuid_path.write_text(node_uuid)
+    app.state.node_uuid = node_uuid
+
+    # bootstrap code for first admin claim (rotatable via admin endpoint)
+    bootstrap_path = cfg.data_dir / "bootstrap_code.txt"
+    if bootstrap_path.exists():
+        bootstrap_code = bootstrap_path.read_text().strip()
+    else:
+        import secrets
+
+        bootstrap_code = secrets.token_urlsafe(18)
+        bootstrap_path.write_text(bootstrap_code)
+    app.state.bootstrap_code = bootstrap_code
 
     # signing key
     signing_key, signing_info = ensure_ed25519_keypair(cfg.data_dir / "keys")

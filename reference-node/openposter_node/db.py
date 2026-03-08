@@ -11,6 +11,14 @@ class Base(AsyncAttrs, DeclarativeBase):
     pass
 
 
+class AdminSession(Base):
+    __tablename__ = "admin_sessions"
+
+    token_hash: Mapped[str] = mapped_column(String, primary_key=True)
+    created_at: Mapped[str] = mapped_column(String)  # RFC3339
+    expires_at: Mapped[str] = mapped_column(String)  # RFC3339
+
+
 class Poster(Base):
     __tablename__ = "posters"
 

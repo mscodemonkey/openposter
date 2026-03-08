@@ -22,18 +22,48 @@ def _now_rfc3339() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _require_admin(request: Request) -> None:
-    token = os.environ.get("OPENPOSTER_ADMIN_TOKEN")
-    if not token:
-        raise http_error(500, "internal", "admin token not configured")
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+async def _require_admin(request: Request) -> None:
+    """Accept either:
+    - legacy OPENPOSTER_ADMIN_TOKEN (dev)
+    - a claimed admin session token (preferred)
+    """
 
     auth = request.headers.get("authorization") or ""
     if not auth.startswith("Bearer "):
         raise http_error(401, "unauthorized", "missing bearer token")
 
     provided = auth.split(" ", 1)[1].strip()
-    if provided != token:
-        raise http_error(403, "forbidden", "invalid admin token")
+
+    # Legacy: static admin token (kept for dev/backwards compat)
+    legacy = os.environ.get("OPENPOSTER_ADMIN_TOKEN")
+    if legacy and provided == legacy:
+        return
+
+    # New: session token stored as a hash in DB
+    from ..db import AdminSession
+
+    h = _token_hash(provided)
+    async with request.app.state.Session() as session:
+        row = await session.get(AdminSession, h)
+        if row is None:
+            raise http_error(403, "forbidden", "invalid admin token")
+
+        # expiry check
+        now = datetime.now(timezone.utc)
+        try:
+            # row.expires_at is RFC3339Z
+            exp = datetime.fromisoformat(row.expires_at.replace("Z", "+00:00"))
+        except Exception:
+            exp = None
+        if exp and now >= exp:
+            # prune
+            await session.delete(row)
+            await session.commit()
+            raise http_error(403, "forbidden", "admin session expired")
 
 
 async def _save_upload_to_blob(data_dir: Path, upload: UploadFile) -> tuple[str, int, str]:
@@ -53,6 +83,80 @@ async def _save_upload_to_blob(data_dir: Path, upload: UploadFile) -> tuple[str,
         raise http_error(400, "invalid_request", "only image/jpeg and image/png are supported in v1")
 
     return sha, len(data), mime
+
+
+class ClaimReq(BaseModel):
+    bootstrap_code: str
+
+
+@router.post("/admin/claim")
+async def admin_claim(request: Request, body: ClaimReq):
+    # Only works if you know the bootstrap code (from node logs/CLI).
+    expected = (request.app.state.bootstrap_code or "").strip()
+    if not expected:
+        raise http_error(500, "internal", "bootstrap not configured")
+
+    if body.bootstrap_code.strip() != expected:
+        raise http_error(403, "forbidden", "invalid bootstrap code")
+
+    import secrets
+
+    token = secrets.token_urlsafe(32)
+    token_h = _token_hash(token)
+
+    now = _now_rfc3339()
+    # Long expiry (1 year) for MVP; issuer/user can revoke all later.
+    from datetime import timedelta
+
+    exp = (datetime.now(timezone.utc) + timedelta(days=365)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    from ..db import AdminSession
+
+    async with request.app.state.Session() as session:
+        session.add(AdminSession(token_hash=token_h, created_at=now, expires_at=exp))
+        await session.commit()
+
+    return {
+        "admin": {
+            "token": token,
+            "expires_at": exp,
+            "node_id": request.app.state.node_uuid,
+        }
+    }
+
+
+@router.post("/admin/sessions/revoke_all")
+async def admin_revoke_all(request: Request):
+    await _require_admin(request)
+    from sqlalchemy import delete
+    from ..db import AdminSession
+
+    async with request.app.state.Session() as session:
+        await session.execute(delete(AdminSession))
+        await session.commit()
+
+    return {"ok": True}
+
+
+@router.post("/admin/bootstrap/rotate")
+async def admin_rotate_bootstrap(request: Request):
+    await _require_admin(request)
+
+    import secrets
+
+    cfg = request.app.state.cfg
+    bootstrap_path = cfg.data_dir / "bootstrap_code.txt"
+    new_code = secrets.token_urlsafe(18)
+    bootstrap_path.write_text(new_code)
+    request.app.state.bootstrap_code = new_code
+
+    return {"ok": True}
+
+
+@router.get("/admin/whoami")
+async def admin_whoami(request: Request):
+    await _require_admin(request)
+    return {"admin": {"node_id": request.app.state.node_uuid}}
 
 
 @router.post("/admin/posters")
@@ -78,7 +182,7 @@ async def admin_upload_poster(
     This is intentionally simple for beta testing. It creates a single poster entry and writes blobs to the blob store.
     """
 
-    _require_admin(request)
+    await _require_admin(request)
 
     if media_type not in {"movie", "show", "season", "episode", "collection"}:
         raise http_error(400, "invalid_request", "invalid media_type")
@@ -194,7 +298,7 @@ async def admin_update_links(request: Request, poster_id: str, body: LinksUpdate
     MVP to enable reciprocal linking after upload.
     """
 
-    _require_admin(request)
+    await _require_admin(request)
     from ..db import Poster
 
     links_value = None
@@ -248,7 +352,7 @@ async def admin_update_links(request: Request, poster_id: str, body: LinksUpdate
 
 @router.delete("/admin/posters/{poster_id}")
 async def admin_delete_poster(request: Request, poster_id: str):
-    _require_admin(request)
+    await _require_admin(request)
     from ..db import Poster
 
     now = _now_rfc3339()

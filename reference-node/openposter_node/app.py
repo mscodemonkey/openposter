@@ -10,6 +10,7 @@ from .routes.admin import router as admin_router
 from .routes.blobs import router as blobs_router
 from .routes.changes import router as changes_router
 from .routes.node_descriptor import router as node_descriptor_router
+from .routes.node_info import router as node_info_router
 from .routes.nodes import router as nodes_router
 from .routes.posters import router as posters_router
 from .routes.posters_list import router as posters_list_router
@@ -56,6 +57,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 app.include_router(node_descriptor_router)
+app.include_router(node_info_router)
 app.include_router(search_router, prefix="/v1")
 app.include_router(changes_router, prefix="/v1")
 app.include_router(nodes_router, prefix="/v1")
