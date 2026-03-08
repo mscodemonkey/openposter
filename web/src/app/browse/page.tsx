@@ -354,32 +354,30 @@ export default function BrowsePage() {
                 <Grid key={r.poster_id} item xs={6} sm={4} md={3} lg={2}>
                   <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
                     <CardActionArea component={Link} href={`/p/${encodeURIComponent(r.poster_id)}`}>
-                      <Box sx={{ width: "100%", aspectRatio: "2 / 3" }}>
-                        <CardMedia
-                          component="img"
-                          image={r.assets.preview.url}
-                          alt={r.media.title || r.poster_id}
-                          onError={() => setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }))}
-                          sx={{ width: "100%", height: "100%", objectFit: "contain" }}
-                        />
-                      </Box>
+                      <CardMedia
+                        component="img"
+                        image={r.assets.preview.url}
+                        alt={r.media.title || r.poster_id}
+                        onError={() => setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }))}
+                        sx={{ aspectRatio: "2 / 3", objectFit: "contain" }}
+                      />
+
+                      <CardContent>
+                        <Typography sx={{ fontWeight: 800 }} noWrap>
+                          {r.media.title || "(untitled)"}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" noWrap>
+                          <Link
+                            href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}
+                            style={{ color: "inherit", textDecoration: "none" }}
+                          >
+                            {r.creator.display_name}
+                          </Link>
+                        </Typography>
+                      </CardContent>
                     </CardActionArea>
 
-                    <CardContent sx={{ pb: 0.5 }}>
-                      <Typography sx={{ fontWeight: 800 }} noWrap>
-                        {r.media.title || "(untitled)"}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" noWrap>
-                        <Link
-                          href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}
-                          style={{ color: "inherit", textDecoration: "none" }}
-                        >
-                          {r.creator.display_name}
-                        </Link>
-                      </Typography>
-                    </CardContent>
-
-                    <CardActions sx={{ mt: "auto" }}>
+                    <CardActions>
                       <Button variant="text" size="small" href={r.assets.full.url} target="_blank" rel="noreferrer">
                         View
                       </Button>
