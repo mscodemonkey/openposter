@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./app.css";
 
+import { Suspense } from "react";
+
+import MuiProviders from "./mui-providers";
 import Nav from "./nav";
 import QuickSearchBar from "./QuickSearchBar";
 
@@ -29,9 +32,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <Nav />
-        <QuickSearchBar />
-        {children}
+        <MuiProviders>
+          <Nav />
+          <Suspense fallback={null}>
+            <QuickSearchBar />
+          </Suspense>
+          {children}
+        </MuiProviders>
       </body>
     </html>
   );

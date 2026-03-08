@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Container from "@mui/material/Container";
+import TextField from "@mui/material/TextField";
+
 export default function QuickSearchBar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -10,7 +15,7 @@ export default function QuickSearchBar() {
 
   const [q, setQ] = useState("");
 
-  // Keep the box in sync with the current URL (so it feels predictable).
+  // Keep the box in sync with the current URL.
   useEffect(() => {
     try {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -23,45 +28,44 @@ export default function QuickSearchBar() {
   const onBrowse = pathname === "/browse";
 
   return (
-    <div className="op-quick-search">
-      <form
-        className="op-row"
-        style={{ width: "100%", gap: 10 }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          const trimmed = q.trim();
-          if (!trimmed) {
-            // If the user clears it, take them back to the main posters page.
-            router.push("/browse");
-            return;
-          }
-          router.push(`/browse?q=${encodeURIComponent(trimmed)}`);
-        }}
-      >
-        <input
-          className="op-input"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Quick search posters…"
-          aria-label="Quick search posters"
-          style={{ flex: 1, minWidth: 220 }}
-        />
-        <button type="submit" className="op-btn">
-          Search
-        </button>
-        {onBrowse && q.trim() !== "" && (
-          <button
-            type="button"
-            className="op-btn"
-            onClick={() => {
-              setQ("");
+    <Box sx={{ borderBottom: 1, borderColor: "divider", py: 1.5, backgroundColor: "background.default" }}>
+      <Container maxWidth="lg">
+        <Box
+          component="form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const trimmed = q.trim();
+            if (!trimmed) {
               router.push("/browse");
-            }}
-          >
-            Clear
-          </button>
-        )}
-      </form>
-    </div>
+              return;
+            }
+            router.push(`/browse?q=${encodeURIComponent(trimmed)}`);
+          }}
+          sx={{ display: "flex", gap: 1.5, alignItems: "center" }}
+        >
+          <TextField
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Quick search posters…"
+            size="small"
+            fullWidth
+            inputProps={{ "aria-label": "Quick search posters" }}
+          />
+          <Button type="submit">Search</Button>
+          {onBrowse && q.trim() !== "" && (
+            <Button
+              type="button"
+              variant="outlined"
+              onClick={() => {
+                setQ("");
+                router.push("/browse");
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </Box>
+      </Container>
+    </Box>
   );
 }

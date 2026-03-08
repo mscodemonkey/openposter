@@ -133,14 +133,20 @@ export default function OnboardingPage() {
 
   async function startUrlClaim() {
     setStatus("Starting URL verification...");
-    const info = await issuerStartUrlClaim(token, publicUrl);
+    const info = (await issuerStartUrlClaim(token, publicUrl)) as {
+      already_owned?: boolean;
+      dns?: { name?: string; value?: string };
+      http?: { url?: string; body?: string };
+    };
     setClaimInfo(info);
     setStatus(info.already_owned ? "Already owned." : "Add the DNS or HTTP proof, then verify.");
   }
 
   async function verifyUrlClaim() {
     setStatus("Verifying...");
-    const res = await issuerVerifyUrlClaim(token, { public_url: publicUrl, method: verifyMethod });
+    const res = (await issuerVerifyUrlClaim(token, { public_url: publicUrl, method: verifyMethod })) as {
+      verified?: boolean;
+    };
     if (!res.verified) {
       setStatus("Not verified yet. Try again in a minute.");
       return;

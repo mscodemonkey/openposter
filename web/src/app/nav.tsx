@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import {
-  clearCreatorConnection,
-  loadCreatorConnection,
-} from "@/lib/storage";
+import AppBar from "@mui/material/AppBar";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Toolbar from "@mui/material/Toolbar";
+import Typography from "@mui/material/Typography";
+
+import { clearCreatorConnection, loadCreatorConnection } from "@/lib/storage";
 
 export default function Nav() {
-  // IMPORTANT: keep initial render deterministic to avoid hydration mismatch.
-  // We'll refresh from storage in an effect.
   const [connected, setConnected] = useState(false);
   const [nodeUrl, setNodeUrl] = useState<string | null>(null);
   const [hasNodeUrlOnly, setHasNodeUrlOnly] = useState(false);
@@ -20,8 +21,6 @@ export default function Nav() {
     setConnected(Boolean(conn));
     setNodeUrl(conn?.nodeUrl || null);
 
-    // If we have a saved node URL but no token (sessionStorage cleared),
-    // show a more helpful hint than just "Not connected".
     try {
       const savedNode = window.localStorage.getItem("openposter.creatorConnection.nodeUrl.v1");
       setHasNodeUrlOnly(Boolean(savedNode) && !conn);
@@ -33,44 +32,66 @@ export default function Nav() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
-    // simple polling: storage events don't always fire in same tab
     const t = setInterval(refresh, 1000);
     return () => clearInterval(t);
   }, []);
 
   return (
-    <nav className="op-nav">
-      <Link href="/">Home</Link>
-      <Link href="/browse">Posters</Link>
-      <Link href="/creators">Creators</Link>
-      <Link href="/upload">Upload</Link>
-      <Link href="/library">My library</Link>
-      <Link href="/onboarding">Onboarding</Link>
-      <Link href="/settings">Settings</Link>
+    <AppBar position="sticky" color="transparent" elevation={0}>
+      <Toolbar sx={{ gap: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+          <Link href="/" style={{ color: "inherit", textDecoration: "none" }}>
+            OpenPoster
+          </Link>
+        </Typography>
 
-      <div className="op-spacer" />
+        <Button component={Link} href="/browse" color="inherit">
+          Posters
+        </Button>
+        <Button component={Link} href="/creators" color="inherit">
+          Creators
+        </Button>
+        <Button component={Link} href="/upload" color="inherit">
+          Upload
+        </Button>
+        <Button component={Link} href="/library" color="inherit">
+          My library
+        </Button>
+        <Button component={Link} href="/onboarding" color="inherit">
+          Onboarding
+        </Button>
+        <Button component={Link} href="/settings" color="inherit">
+          Settings
+        </Button>
 
-      {connected ? (
-        <div className="op-row">
-          <span className="op-subtle op-text-sm">
-            Connected: <code className="op-code">{nodeUrl}</code>
-          </span>
-          <button
-            className="op-btn op-btn--sm"
-            onClick={() => {
-              clearCreatorConnection();
-              refresh();
-            }}
-            title="Disconnect (clears stored node + token)"
-          >
-            Disconnect
-          </button>
-        </div>
-      ) : hasNodeUrlOnly ? (
-        <span className="op-subtle op-text-sm">Token missing (open Settings)</span>
-      ) : (
-        <span className="op-subtle op-text-sm">Not connected</span>
-      )}
-    </nav>
+        <Box sx={{ flex: 1 }} />
+
+        {connected ? (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Connected: <code>{nodeUrl}</code>
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                clearCreatorConnection();
+                refresh();
+              }}
+            >
+              Disconnect
+            </Button>
+          </Box>
+        ) : hasNodeUrlOnly ? (
+          <Typography variant="body2" color="text.secondary">
+            Token missing (open Settings)
+          </Typography>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            Not connected
+          </Typography>
+        )}
+      </Toolbar>
+    </AppBar>
   );
 }
