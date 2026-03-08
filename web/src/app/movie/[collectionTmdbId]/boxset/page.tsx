@@ -2,27 +2,108 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 
+import Link from "next/link";
+
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardActions from "@mui/material/CardActions";
+import CardContent from "@mui/material/CardContent";
+import CardMedia from "@mui/material/CardMedia";
+import Container from "@mui/material/Container";
+import Grid from "@mui/material/Grid";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+
 import { INDEXER_BASE_URL } from "@/lib/config";
 import RelatedArtworkSection from "@/components/RelatedArtworkSection";
 import type { PosterEntry, SearchResponse } from "@/lib/types";
 
 type PosterImg = { src: string; title: string };
 
-function PosterGridIndexed({ items }: { items: PosterEntry[] }) {
+function PosterCard({
+  poster,
+  primaryActionLabel,
+  primaryActionHref,
+  showPosterLink,
+}: {
+  poster: PosterEntry;
+  primaryActionLabel?: string;
+  primaryActionHref?: string;
+  showPosterLink?: boolean;
+}) {
   return (
-    <div className="op-grid op-grid--posters op-mt-10">
-      {items.map((p) => (
-        <div key={p.poster_id} className="op-card">
-          <a className="op-link" href={`/p/${encodeURIComponent(p.poster_id)}`}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="op-img" src={p.assets.preview.url} alt={p.media.title || p.poster_id} />
-          </a>
-        </div>
-      ))}
-    </div>
+    <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <CardMedia
+        component="img"
+        image={poster.assets.preview.url}
+        alt={poster.media.title || poster.poster_id}
+        sx={{ aspectRatio: "2 / 3", objectFit: "contain" }}
+      />
+      <CardContent sx={{ flexGrow: 1 }}>
+        <Typography sx={{ fontWeight: 800 }} noWrap>
+          {poster.media.title || "(untitled)"}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" noWrap>
+          {poster.creator.display_name}
+        </Typography>
+      </CardContent>
+      <CardActions sx={{ px: 2 }}>
+        {primaryActionHref && (
+          <Button
+            variant="text"
+            size="small"
+            href={primaryActionHref}
+            target={primaryActionHref.startsWith("/") ? undefined : "_blank"}
+            rel={primaryActionHref.startsWith("/") ? undefined : "noreferrer"}
+            sx={{ pl: 0, minWidth: 0 }}
+          >
+            {primaryActionLabel || "VIEW"}
+          </Button>
+        )}
+        {showPosterLink && (
+          <Button
+            component={Link}
+            variant="text"
+            size="small"
+            href={`/p/${encodeURIComponent(poster.poster_id)}`}
+            sx={{ minWidth: 0 }}
+          >
+            POSTER
+          </Button>
+        )}
+      </CardActions>
+    </Card>
   );
 }
 
+function PosterGrid({
+  items,
+  primaryAction,
+  showPosterLink,
+}: {
+  items: PosterEntry[];
+  primaryAction?: (p: PosterEntry) => { label: string; href: string } | null;
+  showPosterLink?: boolean;
+}) {
+  return (
+    <Grid container spacing={2}>
+      {items.map((p) => {
+        const act = primaryAction ? primaryAction(p) : null;
+        return (
+          <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+            <PosterCard
+              poster={p}
+              primaryActionLabel={act?.label}
+              primaryActionHref={act?.href}
+              showPosterLink={showPosterLink}
+            />
+          </Grid>
+        );
+      })}
+    </Grid>
+  );
+}
 
 function TedMovieBoxSetDemo() {
   // Demo assets downloaded from mediux.pro/sets/41948 (Boxset Posters section)
@@ -43,55 +124,83 @@ function TedMovieBoxSetDemo() {
   ];
 
   return (
-    <div className="op-page">
-      <div className="op-page-bg" style={{ backgroundImage: `url(${boxsetPosters[0]?.src})` }} />
-      <div className="op-page-content">
-        <div>
-      <div className="op-row op-row--between">
-        <div>
-          <h1 className="op-title-lg">ted</h1>
-          <div className="op-subtle op-mt-6 op-title-meta">MOVIE COLLECTION | willtong93</div>
-        </div>
-        <a className="op-link op-text-sm" href="/tv/201834/boxset">
-          Back to TV box set →
-        </a>
-      </div>
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Stack direction="row" alignItems="baseline" justifyContent="space-between" spacing={2}>
+            <Box>
+              <Typography variant="h4" sx={{ fontWeight: 800 }}>
+                ted
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                MOVIE COLLECTION | willtong93
+              </Typography>
+            </Box>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Related artwork</h2>
-        <div className="op-grid op-grid--posters op-mt-10">
-          <div className="op-card">
-            <a className="op-link" href="/tv/201834/boxset">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                className="op-img"
-                src="/demo/ted-boxset/c4ae91b4-a5ee-404d-a65d-9d42f81f64b0.jpg"
-                alt="ted (2024) TV Box Set"
-              />
-            </a>
-            <div className="op-poster-meta">
-              <div className="op-poster-title">ted (2024) TV Box Set</div>
-            </div>
-          </div>
-        </div>
-      </section>
+            <Button component={Link} variant="text" href="/tv/201834/boxset" sx={{ minWidth: 0 }}>
+              Back to TV box set →
+            </Button>
+          </Stack>
+        </Box>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Movie box set posters</h2>
-        <div className="op-grid op-grid--posters op-mt-10">
-          {boxsetPosters.map((p) => (
-            <div key={p.src} className="op-card">
-              <a className="op-link" href={p.src} target="_blank" rel="noreferrer">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="op-img" src={p.src} alt={p.title} />
-              </a>
-            </div>
-          ))}
-        </div>
-      </section>
-        </div>
-      </div>
-    </div>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Related artwork
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+                <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                  <CardMedia
+                    component="img"
+                    image="/demo/ted-boxset/c4ae91b4-a5ee-404d-a65d-9d42f81f64b0.jpg"
+                    alt="ted (2024) TV Box Set"
+                    sx={{ aspectRatio: "2 / 3", objectFit: "contain" }}
+                  />
+                  <CardContent sx={{ flexGrow: 1 }}>
+                    <Typography sx={{ fontWeight: 800 }} noWrap>
+                      ted (2024) TV Box Set
+                    </Typography>
+                  </CardContent>
+                  <CardActions sx={{ px: 2 }}>
+                    <Button component={Link} variant="text" size="small" href="/tv/201834/boxset" sx={{ pl: 0, minWidth: 0 }}>
+                      BOX SET
+                    </Button>
+                  </CardActions>
+                </Card>
+              </Grid>
+            </Grid>
+          </Box>
+        </Box>
+
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Movie box set posters
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            <Grid container spacing={2}>
+              {boxsetPosters.map((p) => (
+                <Grid key={p.src} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+                  <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <CardMedia
+                      component="img"
+                      image={p.src}
+                      alt={p.title}
+                      sx={{ aspectRatio: "2 / 3", objectFit: "contain" }}
+                    />
+                    <CardActions sx={{ px: 2 }}>
+                      <Button variant="text" size="small" href={p.src} target="_blank" rel="noreferrer" sx={{ pl: 0, minWidth: 0 }}>
+                        VIEW
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+        </Box>
+      </Stack>
+    </Container>
   );
 }
 
@@ -140,48 +249,70 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
     })();
   }, [base, collectionTmdbId]);
 
-  if (error) return <div className="op-alert op-alert--error">{error}</div>;
+  if (error) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        <Typography color="error">{error}</Typography>
+      </Container>
+    );
+  }
 
   // If not found or not linked yet, fall back to demo.
   if (!collection) return <TedMovieBoxSetDemo />;
 
   return (
-    <div className="op-page">
-      <div className="op-page-bg" style={{ backgroundImage: `url(${collection.assets.preview.url})` }} />
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>
+            {(() => {
+              const t = collection.media.title || "Movie Collection";
+              // UX: don't repeat "collection"/"box set" in the title line
+              return (
+                t.replace(/\s+collection\s*$/i, "")
+                  .replace(/\s+box\s*set\s*$/i, "")
+                  .trim() || t
+              );
+            })()}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            MOVIE BOX SET | {collection.creator.display_name}
+          </Typography>
+        </Box>
 
-      <div className="op-page-content">
-        <div className="op-row op-row--between">
-          <div>
-            <h1 className="op-title-lg">
-              {(() => {
-                const t = collection.media.title || "Movie Collection";
-                // UX: don't repeat "collection"/"box set" in the title line
-                return t.replace(/\s+collection\s*$/i, "").replace(/\s+box\s*set\s*$/i, "").trim() || t;
-              })()}
-            </h1>
-            <div className="op-subtle op-mt-6 op-title-meta">
-              {(collection ? "MOVIE BOX SET" : movies.length <= 1 ? "MOVIE" : "MOVIE BOX SET")} | {collection.creator.display_name}
-            </div>
-          </div>
-        </div>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Box set poster
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            <PosterGrid
+              items={[collection]}
+              primaryAction={(p) => ({ label: "POSTER", href: `/p/${encodeURIComponent(p.poster_id)}` })}
+            />
+          </Box>
+        </Box>
 
-        <section className="op-section">
-          <h2 className="op-section-title">Box set poster</h2>
-          <PosterGridIndexed items={[collection]} />
-        </section>
-
-        <section className="op-section">
-          <h2 className="op-section-title">Movies</h2>
-          {movies.length === 0 ? (
-            <p className="op-subtle op-mt-12">No movies linked yet.</p>
-          ) : (
-            <PosterGridIndexed items={movies} />
-          )}
-        </section>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Movies
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            {movies.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No movies linked yet.
+              </Typography>
+            ) : (
+              <PosterGrid
+                items={movies}
+                primaryAction={(p) => ({ label: "POSTER", href: `/p/${encodeURIComponent(p.poster_id)}` })}
+              />
+            )}
+          </Box>
+        </Box>
 
         <RelatedArtworkSection base={base} links={collection.links || null} />
-      </div>
-    </div>
+      </Stack>
+    </Container>
   );
 }
 
@@ -192,9 +323,5 @@ export default function MovieBoxsetPage({
 }) {
   const { collectionTmdbId } = use(params);
 
-  return (
-    <div className="op-container">
-      <MovieBoxsetReal collectionTmdbId={collectionTmdbId} />
-    </div>
-  );
+  return <MovieBoxsetReal collectionTmdbId={collectionTmdbId} />;
 }
