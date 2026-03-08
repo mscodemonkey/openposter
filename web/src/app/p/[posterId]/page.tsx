@@ -218,7 +218,7 @@ export default function PosterPage({ params }: { params: Promise<{ posterId: str
     setLinksDraft(JSON.stringify(next, null, 2));
   }
 
-  const attribution = (poster as unknown as { attribution?: PosterAttribution }).attribution;
+  const attribution = poster ? (poster as unknown as { attribution?: PosterAttribution }).attribution : undefined;
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
