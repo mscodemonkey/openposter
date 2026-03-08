@@ -30,14 +30,14 @@
   top: 0;
   left: 0;
   width: 100vw;
-  height: 60vh;
+  height: 80vh;
   background-size: cover;
   background-position: center top;
   opacity: 0.25;
   pointer-events: none;
   z-index: 0;
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 70%);
-  mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 70%);
+  -webkit-mask-image: linear-gradient(#0000 50px, #000 30%, #0000 70%);
+  mask-image: linear-gradient(#0000 50px, #000 30%, #0000 70%);
 }
 
 .op-container--narrow {
