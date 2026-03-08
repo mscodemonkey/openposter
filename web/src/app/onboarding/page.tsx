@@ -52,7 +52,7 @@ export default function OnboardingPage() {
 
   // node claim
   const [localUrl, setLocalUrl] = useState("http://localhost:8081");
-  const [bootstrapCode, setBootstrapCode] = useState("");
+  const [pairCode, setPairCode] = useState("");
   // stored via saveCreatorConnection; we don't currently show it in the UI
   const [, setNodeAdminToken] = useState<string>("");
   const [claimedNodeId, setClaimedNodeId] = useState<string>("");
@@ -110,12 +110,12 @@ export default function OnboardingPage() {
     // Step 1: claim an admin session token from the node itself.
     setStatus("Claiming node admin...");
     const base = localUrl.replace(/\/+$/, "");
-    const r = await fetch(`${base}/v1/admin/claim`, {
+    const r = await fetch(`${base}/v1/admin/pair`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ bootstrap_code: bootstrapCode }),
+      body: JSON.stringify({ pair_code: pairCode }),
     });
-    if (!r.ok) throw new Error(`node claim failed: ${r.status}`);
+    if (!r.ok) throw new Error(`node pair failed: ${r.status}`);
     const json = (await r.json()) as { admin: { token: string } };
     setNodeAdminToken(json.admin.token);
 
@@ -355,27 +355,19 @@ export default function OnboardingPage() {
               This step should be done from the same Wi‑Fi/LAN as your server.
             </p>
             <p className="op-subtle op-mt-6">
-              You’ll paste a one-time <strong>bootstrap code</strong> from your node. This is how OpenPoster knows you
-              really have admin access to that machine.
+              We’ll connect you by using a short <strong>pairing code</strong>.
             </p>
 
             <div className="op-card op-card--padded op-mt-12">
-              <div className="op-subtle"><strong>Where do I find the bootstrap code?</strong></div>
+              <div className="op-subtle"><strong>How do I get the pairing code?</strong></div>
               <div className="op-text-sm op-mt-8">
-                Your node writes it to a file on disk:
-                {" "}
-                <code className="op-code">/data/bootstrap_code.txt</code>
+                1) Enter your Local URL below.
               </div>
               <div className="op-text-sm op-mt-8">
-                If you’re running the local dev stack (docker compose), run one of these from the repo root:
+                2) Click <strong>Open pairing code page</strong>.
               </div>
-              <pre className="op-pre op-mt-8">docker compose -f reference-node/compose.multi.yml exec node_a cat /data/bootstrap_code.txt
-# (or node_b)
-docker compose -f reference-node/compose.multi.yml exec node_b cat /data/bootstrap_code.txt</pre>
               <div className="op-text-sm op-mt-8">
-                If you’re running without Docker, look in your node’s data directory for
-                {" "}
-                <code className="op-code">bootstrap_code.txt</code>.
+                3) Your node will show a 6‑digit code. Copy it here, then click <strong>Connect my node</strong>.
               </div>
             </div>
 
@@ -390,20 +382,34 @@ docker compose -f reference-node/compose.multi.yml exec node_b cat /data/bootstr
                 />
               </label>
               <label className="op-label">
-                <div className="op-label-hint">Bootstrap code</div>
+                <div className="op-label-hint">Pairing code</div>
                 <input
                   className="op-input"
-                  value={bootstrapCode}
-                  onChange={(e) => setBootstrapCode(e.target.value)}
-                  placeholder="(from your node logs)"
+                  value={pairCode}
+                  onChange={(e) => setPairCode(e.target.value)}
+                  placeholder="e.g. 123456"
                 />
               </label>
-              <button
-                className="op-btn"
-                onClick={() => void claimNodeAdmin().catch((e) => setStatus(e?.message || String(e)))}
-              >
-                Connect my node
-              </button>
+
+              <div className="op-row">
+                <button
+                  type="button"
+                  className="op-btn"
+                  onClick={() => {
+                    const base = localUrl.replace(/\/+$/, "");
+                    window.open(`${base}/admin/pair`, "_blank", "noopener,noreferrer");
+                  }}
+                >
+                  Open pairing code page
+                </button>
+                <button
+                  className="op-btn"
+                  onClick={() => void claimNodeAdmin().catch((e) => setStatus(e?.message || String(e)))}
+                >
+                  Connect my node
+                </button>
+              </div>
+
               {claimedNodeId ? <div className="op-subtle op-text-sm">Connected. Node ID: {claimedNodeId}</div> : null}
             </div>
           </div>

@@ -31,6 +31,7 @@ export default function Nav() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
     // simple polling: storage events don't always fire in same tab
     const t = setInterval(refresh, 1000);

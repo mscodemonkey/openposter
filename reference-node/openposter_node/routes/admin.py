@@ -85,13 +85,25 @@ async def _save_upload_to_blob(data_dir: Path, upload: UploadFile) -> tuple[str,
     return sha, len(data), mime
 
 
+def _issue_admin_token() -> tuple[str, str]:
+    import secrets
+
+    token = secrets.token_urlsafe(32)
+    # 1 year expiry for MVP
+    from datetime import timedelta
+
+    exp = (datetime.now(timezone.utc) + timedelta(days=365)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return token, exp
+
+
 class ClaimReq(BaseModel):
     bootstrap_code: str
 
 
 @router.post("/admin/claim")
 async def admin_claim(request: Request, body: ClaimReq):
-    # Only works if you know the bootstrap code (from node logs/CLI).
+    """Legacy bootstrap claim (works from CLI/logs)."""
+
     expected = (request.app.state.bootstrap_code or "").strip()
     if not expected:
         raise http_error(500, "internal", "bootstrap not configured")
@@ -99,16 +111,10 @@ async def admin_claim(request: Request, body: ClaimReq):
     if body.bootstrap_code.strip() != expected:
         raise http_error(403, "forbidden", "invalid bootstrap code")
 
-    import secrets
-
-    token = secrets.token_urlsafe(32)
+    token, exp = _issue_admin_token()
     token_h = _token_hash(token)
 
     now = _now_rfc3339()
-    # Long expiry (1 year) for MVP; issuer/user can revoke all later.
-    from datetime import timedelta
-
-    exp = (datetime.now(timezone.utc) + timedelta(days=365)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     from ..db import AdminSession
 
@@ -116,13 +122,52 @@ async def admin_claim(request: Request, body: ClaimReq):
         session.add(AdminSession(token_hash=token_h, created_at=now, expires_at=exp))
         await session.commit()
 
-    return {
-        "admin": {
-            "token": token,
-            "expires_at": exp,
-            "node_id": request.app.state.node_uuid,
-        }
-    }
+    return {"admin": {"token": token, "expires_at": exp, "node_id": request.app.state.node_uuid}}
+
+
+class PairReq(BaseModel):
+    pair_code: str
+
+
+@router.post("/admin/pair")
+async def admin_pair(request: Request, body: PairReq):
+    """Friendly pairing: user reads a short code from GET /admin/pair and enters it here.
+
+    Intended for same-LAN onboarding.
+    """
+
+    cfg = request.app.state.cfg
+    pair_file = cfg.data_dir / "pairing_code.json"
+    if not pair_file.exists():
+        raise http_error(400, "invalid_request", "pairing code not generated yet; open /admin/pair first")
+
+    try:
+        import json
+
+        obj = json.loads(pair_file.read_text())
+        expected = str(obj.get("code") or "").strip()
+        expires_at = str(obj.get("expires_at") or "").strip()
+        exp = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    except Exception:
+        raise http_error(500, "internal", "invalid pairing code state")
+
+    now = datetime.now(timezone.utc)
+    if not expected or exp <= now:
+        raise http_error(403, "forbidden", "pairing code expired; refresh /admin/pair")
+
+    if str(body.pair_code or "").strip() != expected:
+        raise http_error(403, "forbidden", "invalid pairing code")
+
+    token, exp_rfc = _issue_admin_token()
+    token_h = _token_hash(token)
+
+    from ..db import AdminSession
+
+    async with request.app.state.Session() as session:
+        session.add(AdminSession(token_hash=token_h, created_at=_now_rfc3339(), expires_at=exp_rfc))
+        await session.commit()
+
+    return {"admin": {"token": token, "expires_at": exp_rfc, "node_id": request.app.state.node_uuid}}
 
 
 @router.post("/admin/sessions/revoke_all")

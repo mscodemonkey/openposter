@@ -11,6 +11,7 @@ from .routes.blobs import router as blobs_router
 from .routes.changes import router as changes_router
 from .routes.node_descriptor import router as node_descriptor_router
 from .routes.node_info import router as node_info_router
+from .routes.pair_ui import router as pair_ui_router
 from .routes.nodes import router as nodes_router
 from .routes.posters import router as posters_router
 from .routes.posters_list import router as posters_list_router
@@ -65,3 +66,4 @@ app.include_router(posters_list_router, prefix="/v1")
 app.include_router(posters_router, prefix="/v1")
 app.include_router(blobs_router, prefix="/v1")
 app.include_router(admin_router, prefix="/v1")
+app.include_router(pair_ui_router)
