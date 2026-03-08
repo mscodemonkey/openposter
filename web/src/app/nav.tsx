@@ -9,16 +9,11 @@ import {
 } from "@/lib/storage";
 
 export default function Nav() {
-  const [connected, setConnected] = useState(() => Boolean(loadCreatorConnection()));
-  const [nodeUrl, setNodeUrl] = useState<string | null>(() => loadCreatorConnection()?.nodeUrl || null);
-  const [hasNodeUrlOnly, setHasNodeUrlOnly] = useState(() => {
-    try {
-      const savedNode = window.localStorage.getItem("openposter.creatorConnection.nodeUrl.v1");
-      return Boolean(savedNode) && !loadCreatorConnection();
-    } catch {
-      return false;
-    }
-  });
+  // IMPORTANT: keep initial render deterministic to avoid hydration mismatch.
+  // We'll refresh from storage in an effect.
+  const [connected, setConnected] = useState(false);
+  const [nodeUrl, setNodeUrl] = useState<string | null>(null);
+  const [hasNodeUrlOnly, setHasNodeUrlOnly] = useState(false);
 
   function refresh() {
     const conn = loadCreatorConnection();
@@ -36,6 +31,7 @@ export default function Nav() {
   }
 
   useEffect(() => {
+    refresh();
     // simple polling: storage events don't always fire in same tab
     const t = setInterval(refresh, 1000);
     return () => clearInterval(t);

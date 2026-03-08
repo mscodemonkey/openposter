@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from .lifecycle import attach_lifecycle
 from .routes.auth_routes import router as auth_router
@@ -10,6 +11,19 @@ from .routes.nodes_routes import router as nodes_router
 from .routes.url_claim_routes import router as url_claim_router
 
 app = FastAPI(title="OpenPoster Issuer", version="0.1.0")
+
+# CORS: allow the local web UI to call the issuer from the browser.
+# (MVP: permissive; tighten later.)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/v1/health")
