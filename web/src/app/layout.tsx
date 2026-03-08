@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import "./app.css";
+// NOTE: Temporarily not loading custom global CSS; rely on MUI defaults + CssBaseline.
+// import "./globals.css";
+// import "./app.css";
 
 import { Suspense } from "react";
 
