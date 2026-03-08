@@ -376,16 +376,35 @@ export default function BrowsePage() {
                     </CardContent>
 
                     <CardActions sx={{ px: 2 }}>
-                      <Button
-                        variant="text"
-                        size="small"
-                        href={r.assets.full.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        sx={{ pl: 0, minWidth: 0 }}
-                      >
-                        VIEW
-                      </Button>
+                      {(() => {
+                        const isBoxset = r.media.type === "show" || r.media.type === "collection";
+                        if (isBoxset) {
+                          return (
+                            <Button
+                              component={Link}
+                              variant="text"
+                              size="small"
+                              href={`/p/${encodeURIComponent(r.poster_id)}`}
+                              sx={{ pl: 0, minWidth: 0 }}
+                            >
+                              POSTER
+                            </Button>
+                          );
+                        }
+
+                        return (
+                          <Button
+                            variant="text"
+                            size="small"
+                            href={r.assets.full.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            sx={{ pl: 0, minWidth: 0 }}
+                          >
+                            VIEW
+                          </Button>
+                        );
+                      })()}
 
                       {(() => {
                         const t = r.media.type;
