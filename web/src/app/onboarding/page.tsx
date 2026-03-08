@@ -273,8 +273,15 @@ export default function OnboardingPage() {
                     className="op-btn"
                     onClick={() =>
                       void doSignup().catch((e) => {
-                        setStatus(e?.message || String(e));
+                        const msg = e?.message || String(e);
                         // Common case: they accidentally hit signup with an existing email.
+                        if (String(msg).toLowerCase().includes("already registered")) {
+                          setStatus(
+                            "That email is already registered. Click “I’ve got an account, log me in!” and sign in instead."
+                          );
+                        } else {
+                          setStatus(msg);
+                        }
                         setAccountMode("login");
                       })
                     }
@@ -286,6 +293,8 @@ export default function OnboardingPage() {
                   </div>
                 </>
               )}
+
+              {status && <div className="op-card op-card--padded">{status}</div>}
             </div>
           </div>
         )}
