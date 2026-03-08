@@ -192,7 +192,7 @@ export default function BrowsePage() {
 
   return (
     <div className="op-container">
-      <h1 className="op-title-lg">Browse</h1>
+      <h1 className="op-title-lg">Posters</h1>
       <p className="op-subtle op-mt-6">
         Indexer: <code className="op-code">{INDEXER_BASE_URL}</code>
       </p>
@@ -208,7 +208,7 @@ export default function BrowsePage() {
               className="op-link op-text-sm"
               onClick={() => setFiltersOpen((v) => !v)}
             >
-              {filtersOpen ? "Hide filters" : "Show filters"}
+              {filtersOpen ? "Hide advanced search" : "Advanced search"}
             </button>
           </div>
 
@@ -251,7 +251,7 @@ export default function BrowsePage() {
         {filtersOpen && (
           <div className="op-card op-card--padded op-mt-12">
             <div className="op-row op-row--between">
-              <div className="op-subtle">Filter results</div>
+              <div className="op-subtle">Advanced search</div>
               <button
                 className="op-btn op-btn--sm"
                 onClick={() => {

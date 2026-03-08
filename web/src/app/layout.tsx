@@ -4,6 +4,7 @@ import "./globals.css";
 import "./app.css";
 
 import Nav from "./nav";
+import QuickSearchBar from "./QuickSearchBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <Nav />
+        <QuickSearchBar />
         {children}
       </body>
     </html>

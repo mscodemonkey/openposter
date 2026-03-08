@@ -27,15 +27,12 @@ export default function Nav() {
   return (
     <nav className="op-nav">
       <a href="/">Home</a>
-      <a href="/browse">Browse</a>
-      <a href="/search">Search</a>
+      <a href="/browse">Posters</a>
       <a href="/creators">Creators</a>
       <a href="/connect">Connect node</a>
       <a href="/upload">Upload</a>
       <a href="/library">My library</a>
       <a href="/register">Register</a>
-      <a href="/tv/201834/boxset">Ted TV box set (demo)</a>
-      <a href="/movie/1703/boxset">Ted Movie box set (demo)</a>
 
       <div className="op-spacer" />
 
