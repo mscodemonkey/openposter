@@ -9,7 +9,10 @@ from passlib.context import CryptContext
 
 from .config import Config
 
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# NOTE: We intentionally avoid bcrypt for MVP because passlib+bcrypt backend
+# compatibility has been brittle across versions (and bcrypt has a 72-byte
+# password limit). PBKDF2 is slower but reliable and portable.
+_pwd = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def normalize_email(email: str) -> str:
