@@ -2,6 +2,25 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import Link from "next/link";
+
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardActions from "@mui/material/CardActions";
+import CardContent from "@mui/material/CardContent";
+import CardMedia from "@mui/material/CardMedia";
+import Collapse from "@mui/material/Collapse";
+import Container from "@mui/material/Container";
+import Divider from "@mui/material/Divider";
+import Grid from "@mui/material/GridLegacy";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { PosterEntry } from "@/lib/types";
 
@@ -25,9 +44,9 @@ export default function BrowsePage() {
   const [q, setQ] = useState<string>("");
 
   const [copied, setCopied] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [shareAnchor, setShareAnchor] = useState<null | HTMLElement>(null);
 
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const [items, setItems] = useState<PosterEntry[] | null>(null);
   const [brokenPosterIds, setBrokenPosterIds] = useState<Record<string, true>>({});
@@ -74,17 +93,17 @@ export default function BrowsePage() {
       setTmdbId(nextTmdbId);
       setQ(nextQ);
 
-      // UX: keep filters tucked away unless the user is already filtering.
+      // Keep advanced search tucked away unless a filter is active.
       const hasAnyFilter =
         !!nextCreatorId || !!nextCreatorQ || !!nextMediaType || !!nextTmdbId || !!nextQ;
-      setFiltersOpen(hasAnyFilter);
+      setAdvancedOpen(hasAnyFilter);
     } catch {
       setCreatorId("");
       setCreatorQ("");
       setMediaType("");
       setTmdbId("");
       setQ("");
-      setFiltersOpen(false);
+      setAdvancedOpen(false);
     }
   }, []);
 
@@ -104,9 +123,9 @@ export default function BrowsePage() {
     return tmdbId.trim() !== "" || q.trim() !== "";
   }
 
-  function copyShareLink() {
+  async function copyShareLink() {
     try {
-      void navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     } catch {
@@ -137,7 +156,12 @@ export default function BrowsePage() {
   function hasArtwork(r: PosterEntry): boolean {
     const preview = r?.assets?.preview?.url;
     const full = r?.assets?.full?.url;
-    return typeof preview === "string" && preview.length > 0 && typeof full === "string" && full.length > 0;
+    return (
+      typeof preview === "string" &&
+      preview.length > 0 &&
+      typeof full === "string" &&
+      full.length > 0
+    );
   }
 
   async function loadFirst() {
@@ -148,7 +172,7 @@ export default function BrowsePage() {
       if (!r.ok) throw new Error(`browse failed: ${r.status}`);
       const json = (await r.json()) as PagedResponse;
 
-      // UX: Browse should only show posters that actually have artwork to view/download.
+      // Only show posters with real artwork URLs.
       setItems(json.results.filter(hasArtwork));
       setBrokenPosterIds({});
       setNextCursor(json.next_cursor || null);
@@ -165,7 +189,10 @@ export default function BrowsePage() {
       const r = await fetch(buildUrl(nextCursor));
       if (!r.ok) throw new Error(`browse failed: ${r.status}`);
       const json = (await r.json()) as PagedResponse;
-      setItems((prev) => ([...(prev || []), ...json.results.filter(hasArtwork)]));
+      setItems((prev) => [
+        ...(prev || []),
+        ...json.results.filter(hasArtwork),
+      ]);
       setNextCursor(json.next_cursor || null);
     } finally {
       setLoadingMore(false);
@@ -173,7 +200,6 @@ export default function BrowsePage() {
   }
 
   useEffect(() => {
-    // keep URL shareable
     try {
       syncUrl({
         creatorId,
@@ -186,186 +212,207 @@ export default function BrowsePage() {
       // ignore
     }
 
-    void loadFirst().catch((e) => setError(e?.message || String(e)));
+    void loadFirst().catch((e: unknown) =>
+      setError(e instanceof Error ? e.message : String(e))
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creatorId, creatorQ, mediaType, tmdbId, q]);
 
   return (
-    <div className="op-container">
-      <h1 className="op-title-lg">Posters</h1>
-      <p className="op-subtle op-mt-6">
-        Indexer: <code className="op-code">{INDEXER_BASE_URL}</code>
-      </p>
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>
+            Posters
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Indexer: <code>{INDEXER_BASE_URL}</code>
+          </Typography>
+        </Box>
 
-      <section className="op-section">
-        <div className="op-row op-row--between">
-          <div className="op-row" style={{ gap: 10 }}>
-            <h2 className="op-section-title" style={{ margin: 0 }}>
-              Results
-            </h2>
-            <button
-              type="button"
-              className="op-link op-text-sm"
-              onClick={() => setFiltersOpen((v) => !v)}
-            >
-              {filtersOpen ? "Hide advanced search" : "Advanced search"}
-            </button>
-          </div>
-
-          <div style={{ position: "relative" }}>
-            <button
-              type="button"
-              className="op-btn op-btn--sm"
-              onClick={() => setShareOpen((v) => !v)}
-            >
-              Share ▾
-            </button>
-
-            {shareOpen && (
-              <div
-                className="op-card op-card--padded"
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: "calc(100% + 8px)",
-                  minWidth: 200,
-                  zIndex: 10,
-                }}
+        <Paper sx={{ p: 2 }}>
+          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                Results
+              </Typography>
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => setAdvancedOpen((v) => !v)}
               >
-                <button
-                  type="button"
-                  className="op-btn op-btn--sm"
-                  style={{ width: "100%" }}
-                  onClick={() => {
-                    copyShareLink();
-                    setShareOpen(false);
-                  }}
-                >
-                  {copied ? "Copied" : "Copy link"}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+                {advancedOpen ? "Hide advanced search" : "Advanced search"}
+              </Button>
+            </Stack>
 
-        {filtersOpen && (
-          <div className="op-card op-card--padded op-mt-12">
-            <div className="op-row op-row--between">
-              <div className="op-subtle">Advanced search</div>
-              <button
-                className="op-btn op-btn--sm"
-                onClick={() => {
-                  setCreatorId("");
-                  setCreatorQ("");
-                  setMediaType("");
-                  setTmdbId("");
-                  setQ("");
-                  setShareOpen(false);
-                }}
-              >
-                Clear
-              </button>
-            </div>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={(e) => setShareAnchor(e.currentTarget)}
+            >
+              Share
+            </Button>
+          </Stack>
 
-            <div className="op-form-grid-2 op-mt-10">
-              <label className="op-label">
-                <CreatorPicker
-                  indexerBaseUrl={INDEXER_BASE_URL}
-                  value={creatorId}
-                  onChange={(v) => setCreatorId(v)}
-                  query={creatorQ}
-                  onQueryChange={(v) => setCreatorQ(v)}
-                  initialOptions={facets?.creators || []}
-                  label="Creator"
-                />
-              </label>
+          <Menu
+            open={Boolean(shareAnchor)}
+            anchorEl={shareAnchor}
+            onClose={() => setShareAnchor(null)}
+          >
+            <MenuItem
+              onClick={() => {
+                void copyShareLink();
+                setShareAnchor(null);
+              }}
+            >
+              {copied ? "Copied" : "Copy link"}
+            </MenuItem>
+          </Menu>
 
-              <label className="op-label">
-                <div className="op-label-hint">Media type</div>
-                <select
-                  className="op-select"
+          <Collapse in={advancedOpen}>
+            <Divider sx={{ my: 2 }} />
+            <Stack spacing={2}>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                <Box sx={{ flex: 1 }}>
+                  <CreatorPicker
+                    indexerBaseUrl={INDEXER_BASE_URL}
+                    value={creatorId}
+                    onChange={(v) => setCreatorId(v)}
+                    query={creatorQ}
+                    onQueryChange={(v) => setCreatorQ(v)}
+                    initialOptions={facets?.creators || []}
+                    label="Creator"
+                  />
+                </Box>
+
+                <TextField
+                  select
+                  label="Media type"
                   value={mediaType}
                   onChange={(e) => setMediaType(e.target.value)}
+                  SelectProps={{ native: true }}
+                  sx={{ minWidth: 220 }}
                 >
-                  <option value="">(any)</option>
+                  <option value="">Any</option>
                   {(facets?.media_types || []).map((t) => (
                     <option key={t.type} value={t.type}>
                       {t.type} ({t.count})
                     </option>
                   ))}
-                </select>
-              </label>
-            </div>
+                </TextField>
+              </Stack>
 
-            <div className="op-form-grid-2 op-mt-10">
-              <label className="op-label">
-                <div className="op-label-hint">Title contains</div>
-                <input className="op-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="optional" />
-              </label>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                <TextField
+                  label="Title contains"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  fullWidth
+                />
+                <TextField
+                  label="TMDB id"
+                  value={tmdbId}
+                  onChange={(e) => setTmdbId(e.target.value)}
+                  sx={{ minWidth: 220 }}
+                />
+              </Stack>
 
-              <label className="op-label">
-                <div className="op-label-hint">TMDB id</div>
-                <input className="op-input" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} placeholder="optional" />
-              </label>
-            </div>
-          </div>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setCreatorId("");
+                    setCreatorQ("");
+                    setMediaType("");
+                    setTmdbId("");
+                    setQ("");
+                  }}
+                >
+                  Clear
+                </Button>
+              </Stack>
+            </Stack>
+          </Collapse>
+        </Paper>
+
+        {error && (
+          <Paper sx={{ p: 2, borderColor: "error.main" }}>
+            <Typography color="error">{error}</Typography>
+          </Paper>
         )}
 
-        {error && <div className="op-alert op-alert--error">{error}</div>}
+        {loading || items === null ? (
+          <Typography color="text.secondary">Loading…</Typography>
+        ) : items.filter((r) => !brokenPosterIds[r.poster_id]).length === 0 ? (
+          <Typography color="text.secondary">No posters.</Typography>
+        ) : (
+          <Grid container spacing={2}>
+            {items
+              .filter((r) => !brokenPosterIds[r.poster_id])
+              .map((r) => (
+                <Grid key={r.poster_id} xs={12} sm={6} md={4} lg={3}>
+                  <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <Link href={`/p/${encodeURIComponent(r.poster_id)}`} style={{ textDecoration: "none" }}>
+                      <CardMedia
+                        component="img"
+                        height={360}
+                        image={r.assets.preview.url}
+                        alt={r.media.title || r.poster_id}
+                        onError={() => setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }))}
+                        sx={{ objectFit: "cover" }}
+                      />
+                    </Link>
+                    <CardContent sx={{ flex: 1 }}>
+                      <Typography sx={{ fontWeight: 800 }} noWrap>
+                        {r.media.title || "(untitled)"}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        <Link
+                          href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}
+                          style={{ color: "inherit" }}
+                        >
+                          {r.creator.display_name}
+                        </Link>
+                      </Typography>
+                    </CardContent>
+                    <CardActions>
+                      <Button
+                        size="small"
+                        variant="text"
+                        href={r.assets.full.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Download
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="text"
+                        href={r.creator.home_node}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Node
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
+          </Grid>
+        )}
 
-      {loading || items === null ? (
-        <p className="op-subtle op-mt-12">Loading…</p>
-      ) : items.length === 0 ? (
-        <p className="op-subtle op-mt-12">No posters.</p>
-      ) : (
-        <div className="op-grid op-grid--posters op-mt-12">
-          {items
-            .filter((r) => !brokenPosterIds[r.poster_id])
-            .map((r) => (
-              <div key={r.poster_id} className="op-card">
-                <a className="op-link" href={`/p/${encodeURIComponent(r.poster_id)}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    className="op-img"
-                    src={r.assets.preview.url}
-                    alt={r.media.title || r.poster_id}
-                    onError={() => {
-                      // If the image URL 404s (or is otherwise unreachable), hide it.
-                      setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }));
-                    }}
-                  />
-                </a>
-                <div className="op-poster-meta">
-                  <div className="op-poster-title">{r.media.title || "(untitled)"}</div>
-                  <div className="op-subtle op-text-sm">
-                    <a className="op-link" href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}>
-                      {r.creator.display_name}
-                    </a>
-                  </div>
-                  <div className="op-row op-mt-8">
-                    <a className="op-link op-text-sm" href={r.assets.full.url} target="_blank" rel="noreferrer">
-                      Download
-                    </a>
-                    <a className="op-link op-text-sm" href={r.creator.home_node} target="_blank" rel="noreferrer">
-                      Node
-                    </a>
-                  </div>
-                </div>
-              </div>
-            ))}
-        </div>
-      )}
-
-        <div className="op-mt-16">
-          {nextCursor ? (
-            <button className="op-btn" onClick={() => void loadMore().catch((e) => setError(e?.message || String(e)))} disabled={loadingMore}>
+        {items && nextCursor && (
+          <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
+            <Button
+              variant="outlined"
+              disabled={loadingMore}
+              onClick={() => void loadMore().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
+            >
               {loadingMore ? "Loading…" : "Load more"}
-            </button>
-          ) : (
-            <div className="op-faint op-text-sm">End of list.</div>
-          )}
-        </div>
-      </section>
-    </div>
+            </Button>
+          </Box>
+        )}
+      </Stack>
+    </Container>
   );
 }
