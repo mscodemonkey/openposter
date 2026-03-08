@@ -12,6 +12,7 @@ dependencies = [
   "httpx>=0.27",
   "passlib>=1.7.4",
   "PyJWT>=2.8",
+  "dnspython>=2.6",
 ]
 
 [project.optional-dependencies]

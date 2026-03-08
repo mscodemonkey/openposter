@@ -64,6 +64,21 @@ class NodeUrl(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class UrlClaim(Base):
+    __tablename__ = "url_claims"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    public_url: Mapped[str] = mapped_column(String, index=True)
+    owner_user_id: Mapped[str] = mapped_column(String, ForeignKey("users.user_id"), index=True)
+
+    token: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (UniqueConstraint("public_url", "owner_user_id", name="uniq_url_claim"),)
+
+
 def new_uuid() -> str:
     return str(uuid.uuid4())
 

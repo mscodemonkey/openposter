@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from ..auth import require_user_id
-from ..db import Node, NodeAdmin, NodeUrl, new_uuid
+from ..db import Node, NodeAdmin, NodeUrl, UrlClaim, new_uuid
 from ..util import canonicalize_public_url
 
 router = APIRouter()
@@ -147,6 +147,38 @@ async def attach_url(req: AttachUrlReq, request: Request):
 
         existing = (await s.execute(select(NodeUrl).where(NodeUrl.public_url == url))).scalar_one_or_none()
         if existing is None:
+            # Require URL claim verification (except for localhost/private/IP dev URLs).
+            from urllib.parse import urlparse
+            import ipaddress
+
+            host = (urlparse(url).hostname or "").lower()
+            skip_verify = False
+            if host == "localhost":
+                skip_verify = True
+            else:
+                try:
+                    ip = ipaddress.ip_address(host)
+                    if ip.is_private or ip.is_loopback:
+                        skip_verify = True
+                except Exception:
+                    skip_verify = False
+
+            if not skip_verify:
+                claim = (
+                    await s.execute(
+                        select(UrlClaim).where(
+                            UrlClaim.public_url == url,
+                            UrlClaim.owner_user_id == user_id,
+                            UrlClaim.verified_at.is_not(None),
+                        )
+                    )
+                ).scalar_one_or_none()
+                if claim is None:
+                    raise HTTPException(
+                        status_code=403,
+                        detail={"error": {"code": "url_not_verified", "message": "public URL not verified"}},
+                    )
+
             s.add(NodeUrl(public_url=url, node_id=node_id, owner_user_id=user_id))
             await s.commit()
             return {"public_url": url, "node_id": node_id, "replaced": False}
