@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   ISSUER_BASE_URL,
@@ -9,7 +9,6 @@ import {
   issuerClaimNode,
   issuerHandleAvailability,
   issuerLogin,
-  issuerMe,
   issuerSignup,
   issuerStartUrlClaim,
   issuerVerifyUrlClaim,
@@ -21,12 +20,23 @@ import {
   saveIssuerSession,
 } from "@/lib/issuer_storage";
 
-export default function OnboardingPage() {
-  const [step, setStep] = useState<"welcome" | "account" | "creator" | "claim" | "public_url" | "done">("welcome");
+import { saveCreatorConnection } from "@/lib/storage";
 
-  // issuer session
-  const [token, setToken] = useState<string>("");
-  const [userEmail, setUserEmail] = useState<string>("");
+export default function OnboardingPage() {
+  // issuer session (load from localStorage once)
+  const [token, setToken] = useState<string>(() => loadIssuerToken() || "");
+  const [userEmail, setUserEmail] = useState<string>(() => loadIssuerUser()?.email || "");
+
+  const [step, setStep] = useState<"welcome" | "account" | "creator" | "claim" | "public_url" | "done">(() => {
+    if (loadIssuerToken() && loadIssuerUser()) return "creator";
+    try {
+      const done = window.localStorage.getItem("openposter.onboarded.v1");
+      if (done === "browsing") return "done";
+    } catch {
+      // ignore
+    }
+    return "welcome";
+  });
 
   // account
   const [accountMode, setAccountMode] = useState<"login" | "signup">("login");
@@ -47,32 +57,18 @@ export default function OnboardingPage() {
 
   // public url attach
   const [publicUrl, setPublicUrl] = useState<string>("");
-  const [claimInfo, setClaimInfo] = useState<any>(null);
+  const [claimInfo, setClaimInfo] = useState<
+    | null
+    | {
+        already_owned?: boolean;
+        dns?: { name?: string; value?: string };
+        http?: { url?: string; body?: string };
+      }
+  >(null);
   const [verifyMethod, setVerifyMethod] = useState<"dns" | "http">("dns");
 
   const issuer = useMemo(() => ISSUER_BASE_URL, []);
 
-  useEffect(() => {
-    const t = loadIssuerToken();
-    const u = loadIssuerUser();
-    if (t && u) {
-      setToken(t);
-      setUserEmail(u.email);
-      // best-effort; if token is stale user will fail later.
-      setStep("creator");
-      return;
-    }
-
-    // If they previously chose "just browsing", don't block them.
-    try {
-      const done = window.localStorage.getItem("openposter.onboarded.v1");
-      if (done === "browsing") {
-        setStep("done");
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
 
   async function doLogin() {
     setStatus("Logging in...");
@@ -118,11 +114,16 @@ export default function OnboardingPage() {
       body: JSON.stringify({ bootstrap_code: bootstrapCode }),
     });
     if (!r.ok) throw new Error(`node claim failed: ${r.status}`);
-    const json = (await r.json()) as any;
+    const json = (await r.json()) as { admin: { token: string } };
     setNodeAdminToken(json.admin.token);
 
+    // Persist for upload/library/admin tooling.
+    saveCreatorConnection({ nodeUrl: localUrl.replace(/\/+$/, ""), adminToken: json.admin.token });
+
     // Step 2: register/claim the node in the issuer.
-    const out = await issuerClaimNode(token, { local_url: localUrl, node_admin_token: json.admin.token });
+    const out = (await issuerClaimNode(token, { local_url: localUrl, node_admin_token: json.admin.token })) as {
+      node: { node_id: string };
+    };
     setClaimedNodeId(out.node.node_id);
     setStatus("Node claimed.");
     setStep("public_url");
@@ -215,32 +216,30 @@ export default function OnboardingPage() {
 
         {step === "account" && (
           <div className="op-card op-card--padded op-mt-12">
-            <div className="op-row op-row--between">
-              <h2 className="op-section-title">1) Your OpenPoster account</h2>
-              <div className="op-row">
-                <button
-                  type="button"
-                  className="op-btn op-btn--sm"
-                  onClick={() => setAccountMode("login")}
-                  disabled={accountMode === "login"}
-                >
-                  Log in
-                </button>
-                <button
-                  type="button"
-                  className="op-btn op-btn--sm"
-                  onClick={() => setAccountMode("signup")}
-                  disabled={accountMode === "signup"}
-                >
-                  Create account
-                </button>
-              </div>
+            <h1 className="op-title-lg">Welcome, creator!</h1>
+            <h2 className="op-section-title op-mt-10">Let’s get you logged in…</h2>
+            <p className="op-subtle op-mt-6">
+              Creators are the reason OpenPoster exists. Thanks for being here — your work is what makes libraries feel
+              personal.
+            </p>
+
+            <h3 className="op-section-title op-mt-16" style={{ fontSize: 16 }}>
+              Do you have an OpenPoster account already, or would you like to create one now?
+            </h3>
+
+            <div className="op-row op-mt-10">
+              <button type="button" className="op-btn" onClick={() => setAccountMode("login")}>
+                I’ve got an account, log me in!
+              </button>
+              <button type="button" className="op-btn" onClick={() => setAccountMode("signup")}>
+                I’m new here, sign me up!
+              </button>
             </div>
 
             <div className="op-stack op-mt-12">
               {accountMode === "signup" && (
                 <label className="op-label">
-                  <div className="op-label-hint">Display name (not unique)</div>
+                  <div className="op-label-hint">Display name</div>
                   <input className="op-input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
                 </label>
               )}
@@ -251,16 +250,27 @@ export default function OnboardingPage() {
               </label>
               <label className="op-label">
                 <div className="op-label-hint">Password</div>
-                <input className="op-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <input
+                  className="op-input"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
               </label>
 
               {accountMode === "login" ? (
-                <button className="op-btn" onClick={() => void doLogin().catch((e) => setStatus(e?.message || String(e)))}>
-                  Log in
+                <button
+                  className="op-btn"
+                  onClick={() => void doLogin().catch((e) => setStatus(e?.message || String(e)))}
+                >
+                  Log me in
                 </button>
               ) : (
-                <button className="op-btn" onClick={() => void doSignup().catch((e) => setStatus(e?.message || String(e)))}>
-                  Create account
+                <button
+                  className="op-btn"
+                  onClick={() => void doSignup().catch((e) => setStatus(e?.message || String(e)))}
+                >
+                  Sign me up
                 </button>
               )}
             </div>
@@ -336,7 +346,14 @@ export default function OnboardingPage() {
                 <button className="op-btn" onClick={() => void startUrlClaim().catch((e) => setStatus(e?.message || String(e)))}>
                   Start verification
                 </button>
-                <select className="op-select" value={verifyMethod} onChange={(e) => setVerifyMethod(e.target.value as any)}>
+                <select
+                  className="op-select"
+                  value={verifyMethod}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setVerifyMethod(v === "http" ? "http" : "dns");
+                  }}
+                >
                   <option value="dns">DNS TXT</option>
                   <option value="http">HTTP file</option>
                 </select>
