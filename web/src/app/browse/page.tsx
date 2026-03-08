@@ -382,12 +382,19 @@ export default function BrowsePage() {
                         href={r.assets.full.url}
                         target="_blank"
                         rel="noreferrer"
-                        sx={{ pl: 0 }}
+                        sx={{ pl: 0, minWidth: 0 }}
                       >
-                        View
+                        VIEW
                       </Button>
-                      <Button variant="text" size="small" href={r.creator.home_node} target="_blank" rel="noreferrer">
-                        Node
+                      <Button
+                        variant="text"
+                        size="small"
+                        href={r.creator.home_node}
+                        target="_blank"
+                        rel="noreferrer"
+                        sx={{ minWidth: 0 }}
+                      >
+                        NODE
                       </Button>
                     </CardActions>
                   </Card>
