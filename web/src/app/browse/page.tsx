@@ -353,18 +353,21 @@ export default function BrowsePage() {
               .map((r) => (
                 <Grid key={r.poster_id} item xs={6} sm={4} md={3} lg={2}>
                   <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                    <CardActionArea component={Link} href={`/p/${encodeURIComponent(r.poster_id)}`}>
-                      <CardMedia
-                        component="img"
-                        image={r.assets.preview.url}
-                        alt={r.media.title || r.poster_id}
-                        onError={() => setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }))}
-                        sx={{ aspectRatio: "2 / 3", objectFit: "contain" }}
-                      />
-                    </CardActionArea>
+                    <CardMedia
+                      component="img"
+                      image={r.assets.preview.url}
+                      alt={r.media.title || r.poster_id}
+                      onError={() => setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }))}
+                      sx={{ aspectRatio: "2 / 3", objectFit: "contain" }}
+                    />
 
                     <CardContent sx={{ flexGrow: 1 }}>
-                      <Typography sx={{ fontWeight: 800 }} noWrap>
+                      <Typography
+                        component={Link}
+                        href={`/p/${encodeURIComponent(r.poster_id)}`}
+                        sx={{ fontWeight: 800, display: "block" }}
+                        noWrap
+                      >
                         {r.media.title || "(untitled)"}
                       </Typography>
                       <Typography variant="body2" color="text.secondary" noWrap>
