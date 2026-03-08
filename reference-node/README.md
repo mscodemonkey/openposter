@@ -31,17 +31,26 @@ The reference node can import `seed.json` on first run.
 
 ## Uploading posters (beta helper)
 
-### Recommended: bootstrap admin sessions
+### Recommended: pairing code (friendly)
 
-The node now supports a "bootstrap claim" flow for admin access:
+The node exposes a local pairing page:
+- Open: `http://<your-node>/admin/pair`
+- It shows a short 6-digit pairing code.
+
+In the Web UI, **Onboarding** will open this page for you and ask you to enter the code.
+
+Under the hood:
+- `POST /v1/admin/pair` exchanges the pairing code for a long-lived admin session token.
+
+### Advanced / fallback: bootstrap admin sessions
+
+The node also supports a "bootstrap claim" flow for admin access:
 - Your node generates a bootstrap code on first run and stores it at: `/data/bootstrap_code.txt`
 - You exchange that bootstrap code for a long-lived admin session token:
   - `POST /v1/admin/claim`
 - You can revoke all admin sessions and rotate the bootstrap code:
   - `POST /v1/admin/sessions/revoke_all`
   - `POST /v1/admin/bootstrap/rotate`
-
-The Web UI uses this during **Onboarding**.
 
 ### Legacy (dev/backwards compat): OPENPOSTER_ADMIN_TOKEN
 

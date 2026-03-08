@@ -72,7 +72,7 @@ For beta testing, you can run the reference node and (optionally) an indexer usi
   - node ownership + public URL attachment
 
 4) Claim your node (local URL)
-- You’ll paste a **bootstrap code** from the node’s logs/CLI.
+- You’ll open your node’s local pairing page (`/admin/pair`) and copy a 6-digit pairing code.
 - This creates a long-lived node-admin session token (can be revoked/rotated).
 
 5) Attach your public URL (with verification)
