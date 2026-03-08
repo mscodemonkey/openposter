@@ -44,9 +44,6 @@ function PosterCard({
         <Typography sx={{ fontWeight: 800 }} noWrap>
           {poster.media.title || "(untitled)"}
         </Typography>
-        <Typography variant="body2" color="text.secondary" noWrap>
-          {poster.creator.display_name}
-        </Typography>
       </CardContent>
       <CardActions sx={{ px: 2 }}>
         {primaryActionHref && (
