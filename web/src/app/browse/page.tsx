@@ -25,6 +25,7 @@ export default function BrowsePage() {
   const [q, setQ] = useState<string>("");
 
   const [copied, setCopied] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -101,6 +102,16 @@ export default function BrowsePage() {
 
   function useSearchEndpoint() {
     return tmdbId.trim() !== "" || q.trim() !== "";
+  }
+
+  function copyShareLink() {
+    try {
+      void navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // ignore
+    }
   }
 
   function buildUrl(cursor?: string | null) {
@@ -201,20 +212,40 @@ export default function BrowsePage() {
             </button>
           </div>
 
-          <button
-            className="op-btn op-btn--sm"
-            onClick={() => {
-              try {
-                void navigator.clipboard.writeText(window.location.href);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1200);
-              } catch {
-                // ignore
-              }
-            }}
-          >
-            {copied ? "Copied" : "Copy link"}
-          </button>
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              className="op-btn op-btn--sm"
+              onClick={() => setShareOpen((v) => !v)}
+            >
+              Share ▾
+            </button>
+
+            {shareOpen && (
+              <div
+                className="op-card op-card--padded"
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "calc(100% + 8px)",
+                  minWidth: 200,
+                  zIndex: 10,
+                }}
+              >
+                <button
+                  type="button"
+                  className="op-btn op-btn--sm"
+                  style={{ width: "100%" }}
+                  onClick={() => {
+                    copyShareLink();
+                    setShareOpen(false);
+                  }}
+                >
+                  {copied ? "Copied" : "Copy link"}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {filtersOpen && (
@@ -229,6 +260,7 @@ export default function BrowsePage() {
                   setMediaType("");
                   setTmdbId("");
                   setQ("");
+                  setShareOpen(false);
                 }}
               >
                 Clear
