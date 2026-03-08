@@ -362,12 +362,7 @@ export default function BrowsePage() {
                     />
 
                     <CardContent sx={{ flexGrow: 1 }}>
-                      <Typography
-                        component={Link}
-                        href={`/p/${encodeURIComponent(r.poster_id)}`}
-                        sx={{ fontWeight: 800, display: "block" }}
-                        noWrap
-                      >
+                      <Typography sx={{ fontWeight: 800 }} noWrap>
                         {r.media.title || "(untitled)"}
                       </Typography>
                       <Typography variant="body2" color="text.secondary" noWrap>
@@ -380,8 +375,15 @@ export default function BrowsePage() {
                       </Typography>
                     </CardContent>
 
-                    <CardActions sx={{ px: 1 }}>
-                      <Button variant="text" size="small" href={r.assets.full.url} target="_blank" rel="noreferrer">
+                    <CardActions sx={{ px: 2 }}>
+                      <Button
+                        variant="text"
+                        size="small"
+                        href={r.assets.full.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        sx={{ pl: 0 }}
+                      >
                         View
                       </Button>
                       <Button variant="text" size="small" href={r.creator.home_node} target="_blank" rel="noreferrer">
