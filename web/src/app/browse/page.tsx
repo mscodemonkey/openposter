@@ -6,14 +6,9 @@ import Link from "next/link";
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Card from "@mui/material/Card";
-import CardActions from "@mui/material/CardActions";
-import CardContent from "@mui/material/CardContent";
-import CardMedia from "@mui/material/CardMedia";
 import Collapse from "@mui/material/Collapse";
 import Container from "@mui/material/Container";
 import Divider from "@mui/material/Divider";
-import Grid from "@mui/material/GridLegacy";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
@@ -346,59 +341,44 @@ export default function BrowsePage() {
         ) : items.filter((r) => !brokenPosterIds[r.poster_id]).length === 0 ? (
           <Typography color="text.secondary">No posters.</Typography>
         ) : (
-          <Grid container spacing={2}>
+          <div className="op-grid op-grid--posters">
             {items
               .filter((r) => !brokenPosterIds[r.poster_id])
               .map((r) => (
-                <Grid key={r.poster_id} xs={12} sm={6} md={4} lg={3}>
-                  <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                    <Link href={`/p/${encodeURIComponent(r.poster_id)}`} style={{ textDecoration: "none" }}>
-                      <CardMedia
-                        component="img"
-                        height={360}
-                        image={r.assets.preview.url}
-                        alt={r.media.title || r.poster_id}
-                        onError={() => setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }))}
-                        sx={{ objectFit: "cover" }}
-                      />
-                    </Link>
-                    <CardContent sx={{ flex: 1 }}>
-                      <Typography sx={{ fontWeight: 800 }} noWrap>
-                        {r.media.title || "(untitled)"}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" noWrap>
-                        <Link
-                          href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}
-                          style={{ color: "inherit" }}
-                        >
-                          {r.creator.display_name}
-                        </Link>
-                      </Typography>
-                    </CardContent>
-                    <CardActions>
-                      <Button
-                        size="small"
-                        variant="text"
-                        href={r.assets.full.url}
-                        target="_blank"
-                        rel="noreferrer"
+                <div key={r.poster_id} className="op-card">
+                  <Link className="op-link" href={`/p/${encodeURIComponent(r.poster_id)}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      className="op-img"
+                      src={r.assets.preview.url}
+                      alt={r.media.title || r.poster_id}
+                      onError={() => setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }))}
+                    />
+                  </Link>
+
+                  <div className="op-poster-meta">
+                    <div className="op-poster-title">{r.media.title || "(untitled)"}</div>
+                    <div className="op-subtle op-text-sm">
+                      <Link
+                        className="op-link"
+                        href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}
                       >
-                        Download
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="text"
-                        href={r.creator.home_node}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Node
-                      </Button>
-                    </CardActions>
-                  </Card>
-                </Grid>
+                        {r.creator.display_name}
+                      </Link>
+                    </div>
+
+                    <div className="op-poster-actions">
+                      <a className="op-link" href={r.assets.full.url} target="_blank" rel="noreferrer">
+                        DOWNLOAD
+                      </a>
+                      <a className="op-link" href={r.creator.home_node} target="_blank" rel="noreferrer">
+                        NODE
+                      </a>
+                    </div>
+                  </div>
+                </div>
               ))}
-          </Grid>
+          </div>
         )}
 
         {items && nextCursor && (
