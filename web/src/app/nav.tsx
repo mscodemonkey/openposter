@@ -10,11 +10,21 @@ import {
 export default function Nav() {
   const [connected, setConnected] = useState(false);
   const [nodeUrl, setNodeUrl] = useState<string | null>(null);
+  const [hasNodeUrlOnly, setHasNodeUrlOnly] = useState(false);
 
   function refresh() {
     const conn = loadCreatorConnection();
     setConnected(Boolean(conn));
     setNodeUrl(conn?.nodeUrl || null);
+
+    // If we have a saved node URL but no token (sessionStorage cleared),
+    // show a more helpful hint than just "Not connected".
+    try {
+      const savedNode = window.localStorage.getItem("openposter.creatorConnection.nodeUrl.v1");
+      setHasNodeUrlOnly(Boolean(savedNode) && !conn);
+    } catch {
+      setHasNodeUrlOnly(false);
+    }
   }
 
   useEffect(() => {
@@ -51,6 +61,8 @@ export default function Nav() {
             Disconnect
           </button>
         </div>
+      ) : hasNodeUrlOnly ? (
+        <span className="op-subtle op-text-sm">Token missing (open Settings)</span>
       ) : (
         <span className="op-subtle op-text-sm">Not connected</span>
       )}
