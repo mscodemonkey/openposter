@@ -1,6 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+
+import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CardMedia from "@mui/material/CardMedia";
+import Paper from "@mui/material/Paper";
+import Typography from "@mui/material/Typography";
+import Grid from "@mui/material/GridLegacy";
 
 import type { PosterEntry } from "@/lib/types";
 
@@ -22,30 +31,6 @@ function targetHref(p: PosterEntry): string {
   if (p.media.type === "show" && p.media.tmdb_id) return `/tv/${encodeURIComponent(String(p.media.tmdb_id))}/boxset`;
   if (p.media.type === "collection" && p.media.tmdb_id) return `/movie/${encodeURIComponent(String(p.media.tmdb_id))}/boxset`;
   return `/p/${encodeURIComponent(p.poster_id)}`;
-}
-
-function PosterGridCaptioned({ items }: { items: PosterEntry[] }) {
-  return (
-    <div className="op-grid op-grid--posters op-mt-10">
-      {items.map((p) => {
-        const href = targetHref(p);
-        return (
-          <div key={p.poster_id} className="op-card">
-            <a className="op-link" href={href}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="op-img" src={p.assets.preview.url} alt={p.media.title || p.poster_id} />
-            </a>
-            <div className="op-poster-meta">
-              <a className="op-link" href={href}>
-                <div className="op-poster-title">{p.media.title || "(untitled)"}</div>
-                <div className="op-subtle op-text-sm">{typeLabel(p)}</div>
-              </a>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 export default function RelatedArtworkSection({
@@ -84,13 +69,45 @@ export default function RelatedArtworkSection({
   }, [base, filteredLinks]);
 
   if (filteredLinks.length === 0) return null;
-  if (items === null) return <p className="op-subtle op-mt-12">Loading related…</p>;
+  if (items === null) return <Typography color="text.secondary">Loading related…</Typography>;
   if (items.length === 0) return null;
 
   return (
-    <section className="op-section">
-      <h2 className="op-section-title">{title}</h2>
-      <PosterGridCaptioned items={items} />
-    </section>
+    <Paper sx={{ p: 2.5 }}>
+      <Typography variant="h6" sx={{ fontWeight: 800 }}>
+        {title}
+      </Typography>
+
+      <Box sx={{ mt: 1.5 }}>
+        <Grid container spacing={2}>
+          {items.map((p) => {
+            const href = targetHref(p);
+            return (
+              <Grid key={p.poster_id} item xs={12} sm={6} md={4} lg={3}>
+                <Card>
+                  <Link href={href} style={{ textDecoration: "none" }}>
+                    <CardMedia
+                      component="img"
+                      height={320}
+                      image={p.assets.preview.url}
+                      alt={p.media.title || p.poster_id}
+                      sx={{ objectFit: "cover" }}
+                    />
+                  </Link>
+                  <CardContent>
+                    <Typography sx={{ fontWeight: 800 }} noWrap>
+                      {p.media.title || "(untitled)"}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" noWrap>
+                      {typeLabel(p)}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            );
+          })}
+        </Grid>
+      </Box>
+    </Paper>
   );
 }
