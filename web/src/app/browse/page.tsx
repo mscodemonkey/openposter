@@ -9,6 +9,10 @@ import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardActions from "@mui/material/CardActions";
+import IconButton from "@mui/material/IconButton";
+
+import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
+import HubIcon from "@mui/icons-material/Hub";
 import CardContent from "@mui/material/CardContent";
 import CardMedia from "@mui/material/CardMedia";
 import Collapse from "@mui/material/Collapse";
@@ -380,12 +384,24 @@ export default function BrowsePage() {
                     </CardContent>
 
                     <CardActions sx={{ pt: 0, mt: "auto" }}>
-                      <Button size="small" variant="text" href={r.assets.full.url} target="_blank" rel="noreferrer">
-                        Download
-                      </Button>
-                      <Button size="small" variant="text" href={r.creator.home_node} target="_blank" rel="noreferrer">
-                        Node
-                      </Button>
+                      <IconButton
+                        aria-label="Download"
+                        href={r.assets.full.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        size="small"
+                      >
+                        <CloudDownloadIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        aria-label="Node"
+                        href={r.creator.home_node}
+                        target="_blank"
+                        rel="noreferrer"
+                        size="small"
+                      >
+                        <HubIcon fontSize="small" />
+                      </IconButton>
                     </CardActions>
                   </Card>
                 </Grid>
