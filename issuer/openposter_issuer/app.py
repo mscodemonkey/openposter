@@ -5,6 +5,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .lifecycle import attach_lifecycle
 from .routes.auth_routes import router as auth_router
+from .routes.creator_routes import router as creator_router
 
 app = FastAPI(title="OpenPoster Issuer", version="0.1.0")
 
@@ -38,3 +39,4 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 app.include_router(auth_router)
+app.include_router(creator_router)
