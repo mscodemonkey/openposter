@@ -1,6 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardActions from "@mui/material/CardActions";
+import CardContent from "@mui/material/CardContent";
+import CardMedia from "@mui/material/CardMedia";
+import Container from "@mui/material/Container";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import Grid from "@mui/material/GridLegacy";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { IndexerNodesResponse, PosterEntry, SearchResponse } from "@/lib/types";
@@ -13,6 +33,44 @@ type StatsResponse = {
 };
 
 const MEDIA_TYPES = ["", "movie", "show", "season", "episode", "collection"];
+
+function PosterGrid({ items }: { items: PosterEntry[] }) {
+  return (
+    <Grid container spacing={2} sx={{ mt: 0.5 }}>
+      {items.map((r) => (
+        <Grid key={r.poster_id} item xs={12} sm={6} md={4} lg={3}>
+          <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+            <Link href={`/p/${encodeURIComponent(r.poster_id)}`} style={{ textDecoration: "none" }}>
+              <CardMedia
+                component="img"
+                height={320}
+                image={r.assets.preview.url}
+                alt={r.media.title || r.poster_id}
+                sx={{ objectFit: "cover" }}
+              />
+            </Link>
+            <CardContent sx={{ flex: 1 }}>
+              <Typography sx={{ fontWeight: 800 }} noWrap>
+                {r.media.title || "(untitled)"}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {r.creator.display_name}
+              </Typography>
+            </CardContent>
+            <CardActions>
+              <Button size="small" variant="text" href={r.assets.full.url} target="_blank" rel="noreferrer">
+                Download
+              </Button>
+              <Button size="small" variant="text" component={Link} href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}>
+                Creator
+              </Button>
+            </CardActions>
+          </Card>
+        </Grid>
+      ))}
+    </Grid>
+  );
+}
 
 export default function Home() {
   const [tmdbId, setTmdbId] = useState<string>("");
@@ -75,9 +133,7 @@ export default function Home() {
     setError(null);
     try {
       const base = INDEXER_BASE_URL.replace(/\/+$/, "");
-      const res = await fetch(
-        base + "/v1/recent?limit=40&cursor=" + encodeURIComponent(recentCursor)
-      );
+      const res = await fetch(base + "/v1/recent?limit=40&cursor=" + encodeURIComponent(recentCursor));
       if (!res.ok) throw new Error(`recent failed: ${res.status}`);
       const json = (await res.json()) as RecentResponse;
       setRecent((prev) => ({
@@ -95,179 +151,184 @@ export default function Home() {
       try {
         await Promise.all([loadNodes(), loadRecent(), loadStats()]);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setError(msg);
+        setError(e instanceof Error ? e.message : String(e));
       }
     })();
   }, []);
 
   return (
-    <div className="op-container">
-      <header className="op-header">
-        <h1>OpenPoster (beta UI)</h1>
-        <div className="op-subtle op-mt-6">
-          Indexer: <code className="op-code">{INDEXER_BASE_URL}</code>
-        </div>
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Typography variant="h3" sx={{ fontWeight: 900, letterSpacing: -0.5 }}>
+            OpenPoster
+          </Typography>
+          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+            Community-run poster artwork — published from creator-owned nodes.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Indexer: <code>{INDEXER_BASE_URL}</code>
+          </Typography>
+        </Box>
+
+        {/* Summary/stats block (TODO from mediux-style section) */}
         {stats && (
-          <div className="op-subtle op-text-sm op-mt-6">
-            Indexed posters: <strong>{stats.posters}</strong> · Nodes up: {stats.nodes.up}/{stats.nodes.total}
-          </div>
+          <Paper sx={{ p: 2.5 }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between">
+              <Box>
+                <Typography variant="overline" color="text.secondary">
+                  Total posters
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                  {stats.posters}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="overline" color="text.secondary">
+                  Nodes online
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                  {stats.nodes.up}/{stats.nodes.total}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="overline" color="text.secondary">
+                  Quick links
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  <Link href="/browse">Browse posters</Link>
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  <Link href="/onboarding">Creator onboarding</Link>
+                </Typography>
+              </Box>
+            </Stack>
+          </Paper>
         )}
-      </header>
 
-      {error && (
-        <div className="op-alert op-alert--error">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
+        {error && <Alert severity="error">{error}</Alert>}
 
-      <section className="op-section">
-        <div className="op-row op-row--between">
-          <h2 className="op-section-title">Posters</h2>
-          <a className="op-link op-text-sm" href="/browse">
-            Browse posters →
-          </a>
-        </div>
+        <Paper sx={{ p: 2.5 }}>
+          <Stack spacing={1.5}>
+            <Stack direction="row" spacing={1} alignItems="baseline" justifyContent="space-between">
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                Search posters
+              </Typography>
+              <Button component={Link} href="/browse" variant="outlined" size="small">
+                Browse
+              </Button>
+            </Stack>
 
-        <p className="op-subtle op-mt-6">
-          Search by TMDB id or title keyword (MVP substring match on indexed titles).
-        </p>
+            <Typography variant="body2" color="text.secondary">
+              Search by TMDB id or title keyword (MVP substring match on indexed titles).
+            </Typography>
 
-        <div className="op-form-grid-2 op-mt-10">
-          <label className="op-label">
-            <div className="op-label-hint">Title contains</div>
-            <input className="op-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="optional" />
-          </label>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+              <TextField label="Title contains" value={q} onChange={(e) => setQ(e.target.value)} fullWidth />
+              <TextField
+                select
+                label="Media type"
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                SelectProps={{ native: true }}
+                sx={{ minWidth: 220 }}
+              >
+                {MEDIA_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t === "" ? "Any" : t}
+                  </option>
+                ))}
+              </TextField>
+              <TextField label="TMDB id" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} sx={{ minWidth: 180 }} />
+              <Button onClick={() => void runSearch().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}>
+                Search
+              </Button>
+            </Stack>
 
-          <label className="op-label">
-            <div className="op-label-hint">Media type</div>
-            <select className="op-select" value={type} onChange={(e) => setType(e.target.value)}>
-              {MEDIA_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t === "" ? "(any)" : t}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+            {search && (
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  {search.results.length} result(s)
+                </Typography>
+                <PosterGrid items={search.results} />
+              </Box>
+            )}
+          </Stack>
+        </Paper>
 
-        <div className="op-form-grid-title-year op-mt-10">
-          <label className="op-label">
-            <div className="op-label-hint">TMDB id</div>
-            <input className="op-input" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} placeholder="optional" />
-          </label>
-          <div className="op-row op-justify-end">
-            <button
-              className="op-btn"
-              onClick={() => void runSearch().catch((e) => setError(e?.message || String(e)))}
-            >
-              Search
-            </button>
-          </div>
-        </div>
+        <Paper sx={{ p: 2.5 }}>
+          <Stack spacing={1.5}>
+            <Stack direction="row" spacing={1} alignItems="baseline" justifyContent="space-between">
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                Recent uploads
+              </Typography>
+              <Button component={Link} href="/browse" variant="outlined" size="small">
+                Browse all
+              </Button>
+            </Stack>
 
-        {search && (
-          <div className="op-mt-12">
-            <div className="op-subtle">{search.results.length} result(s)</div>
-            <PosterGrid items={search.results} />
-          </div>
-        )}
-      </section>
+            {recent ? (
+              recent.results.length > 0 ? (
+                <>
+                  <PosterGrid items={recent.results} />
+                  <Box sx={{ pt: 1 }}>
+                    {recentCursor ? (
+                      <Button
+                        variant="outlined"
+                        onClick={() => void loadMoreRecent().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
+                        disabled={loadingMoreRecent}
+                      >
+                        {loadingMoreRecent ? "Loading…" : "Load more"}
+                      </Button>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        End of list.
+                      </Typography>
+                    )}
+                  </Box>
+                </>
+              ) : (
+                <Typography color="text.secondary">No recent posters.</Typography>
+              )
+            ) : (
+              <Typography color="text.secondary">Loading…</Typography>
+            )}
+          </Stack>
+        </Paper>
 
-      <section className="op-section">
-        <div className="op-row op-row--between">
-          <h2 className="op-section-title">Recent uploads (via indexer)</h2>
-          <a className="op-link op-text-sm" href="/browse">
-            Browse all →
-          </a>
-        </div>
+        <Paper sx={{ p: 2.5 }}>
+          <Stack spacing={1.5}>
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              Indexer node status
+            </Typography>
 
-        {recent ? (
-          recent.results.length > 0 ? (
-            <>
-              <PosterGrid items={recent.results} />
-              <div className="op-mt-16">
-                {recentCursor ? (
-                  <button
-                    className="op-btn"
-                    onClick={() => void loadMoreRecent().catch((e) => setError(e?.message || String(e)))}
-                    disabled={loadingMoreRecent}
-                  >
-                    {loadingMoreRecent ? "Loading…" : "Load more"}
-                  </button>
-                ) : (
-                  <div className="op-faint op-text-sm">End of list.</div>
-                )}
-              </div>
-            </>
-          ) : (
-            <p className="op-subtle op-mt-10">No recent posters.</p>
-          )
-        ) : (
-          <p className="op-subtle op-mt-10">Loading…</p>
-        )}
-      </section>
-
-      <section className="op-section">
-        <h2 className="op-section-title">Indexer node status</h2>
-        {nodes ? (
-          <table className="op-table">
-            <thead>
-              <tr>
-                <th>URL</th>
-                <th>Status</th>
-                <th>Last crawled</th>
-                <th>Down since</th>
-              </tr>
-            </thead>
-            <tbody>
-              {nodes.nodes.map((n) => (
-                <tr key={n.url}>
-                  <td>
-                    <code className="op-code">{n.url}</code>
-                  </td>
-                  <td>{n.status}</td>
-                  <td>{n.last_crawled_at || "-"}</td>
-                  <td>{n.down_since || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="op-subtle op-mt-10">Loading…</p>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function PosterGrid({ items }: { items: PosterEntry[] }) {
-  return (
-    <div className="op-grid op-grid--posters">
-      {items.map((r) => (
-        <div key={r.poster_id} className="op-card">
-          <a className="op-link" href={`/p/${encodeURIComponent(r.poster_id)}`}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="op-img" src={r.assets.preview.url} alt={r.media.title || r.poster_id} />
-          </a>
-          <div className="op-poster-meta">
-            <div className="op-poster-title">{r.media.title || "(untitled)"}</div>
-            <div className="op-subtle op-text-sm">
-              <a className="op-link" href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}>
-                {r.creator.display_name}
-              </a>
-            </div>
-            <div className="op-row op-mt-8">
-              <a className="op-link op-text-sm" href={r.assets.full.url} target="_blank" rel="noreferrer">
-                Download
-              </a>
-              <a className="op-link op-text-sm" href={r.creator.home_node} target="_blank" rel="noreferrer">
-                Node
-              </a>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
+            {nodes ? (
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>URL</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Last crawled</TableCell>
+                    <TableCell>Down since</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {nodes.nodes.map((n) => (
+                    <TableRow key={n.url}>
+                      <TableCell sx={{ wordBreak: "break-word" }}>{n.url}</TableCell>
+                      <TableCell>{n.status}</TableCell>
+                      <TableCell>{n.last_crawled_at || "-"}</TableCell>
+                      <TableCell>{n.down_since || "-"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <Typography color="text.secondary">Loading…</Typography>
+            )}
+          </Stack>
+        </Paper>
+      </Stack>
+    </Container>
   );
 }
