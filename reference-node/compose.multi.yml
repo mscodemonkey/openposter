@@ -100,3 +100,19 @@ services:
       retries: 10
     volumes:
       - ./data-indexer:/data
+
+  web:
+    build: ../web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_TELEMETRY_DISABLED=1
+      # Helps file watching work reliably with bind mounts.
+      - CHOKIDAR_USEPOLLING=1
+      # Browser hits indexer via host port mapping.
+      - NEXT_PUBLIC_INDEXER_BASE_URL=http://localhost:8090
+    restart: unless-stopped
+    volumes:
+      - ../web:/app
+      - /app/node_modules
+      - /app/.next
