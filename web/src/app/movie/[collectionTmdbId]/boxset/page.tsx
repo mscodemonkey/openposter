@@ -66,7 +66,7 @@ function PosterCard({
             href={`/p/${encodeURIComponent(poster.poster_id)}`}
             sx={{ minWidth: 0 }}
           >
-            POSTER
+            DETAILS
           </Button>
         )}
       </CardActions>
@@ -284,7 +284,7 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
           <Box sx={{ mt: 1.5 }}>
             <PosterGrid
               items={[collection]}
-              primaryAction={(p) => ({ label: "POSTER", href: `/p/${encodeURIComponent(p.poster_id)}` })}
+              primaryAction={(p) => ({ label: "DETAILS", href: `/p/${encodeURIComponent(p.poster_id)}` })}
             />
           </Box>
         </Box>
@@ -301,7 +301,7 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
             ) : (
               <PosterGrid
                 items={movies}
-                primaryAction={(p) => ({ label: "POSTER", href: `/p/${encodeURIComponent(p.poster_id)}` })}
+                primaryAction={(p) => ({ label: "DETAILS", href: `/p/${encodeURIComponent(p.poster_id)}` })}
               />
             )}
           </Box>
