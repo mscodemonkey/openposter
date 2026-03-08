@@ -56,23 +56,31 @@ Creator nodes can trust multiple issuers (including self-issued).
 
 For beta testing, you can run the reference node and (optionally) an indexer using Docker Compose.
 
-### First-run checklist for node operators
+### First-run checklist (friendly)
 
-1) Set `OPENPOSTER_BASE_URL` correctly
-- This is the URL other people will use to reach your node.
-- If you set it wrong, clients may get `localhost` links that don’t work for anyone else.
+1) Run the stack (node + web + issuer)
+- The easiest way to try OpenPoster is the multi-compose stack below.
 
-2) Set an admin token (for ingest)
-- Set `OPENPOSTER_ADMIN_TOKEN` to a long random string.
-- Anyone with this token can upload/delete posters on your node.
+2) Open the Web UI
+- Go to: **http://localhost:3000**
+- Click **Onboarding** in the top menu.
 
-3) Decide your redistribution policy
-- `public-cache-ok` vs `mirrors-approved` vs `none`.
+3) Create/log into your OpenPoster account (Issuer)
+- The Issuer is the network registry for:
+  - unique user emails
+  - unique creator handles
+  - node ownership + public URL attachment
 
-4) Register your node with a seed directory/indexer (when available)
-- For now, nodes can register with other nodes using `POST /v1/nodes`.
+4) Claim your node (local URL)
+- You’ll paste a **bootstrap code** from the node’s logs/CLI.
+- This creates a long-lived node-admin session token (can be revoked/rotated).
 
-The reference node is intentionally minimal: it’s a working starting point and a compatibility target.
+5) Attach your public URL (with verification)
+- For real public URLs, you must prove you control the domain using either:
+  - DNS TXT record: `_openposter.<your-hostname>`
+  - or an HTTP file at `/.well-known/openposter-claim.txt`
+
+> Note: `OPENPOSTER_ADMIN_TOKEN` still exists for dev/backwards compatibility, but the intended flow is bootstrap-claim + admin sessions.
 
 ### Requirements
 - Docker + Docker Compose
@@ -84,7 +92,7 @@ cd reference-node
 docker compose up --build
 ```
 
-### Multi-node + indexer (recommended for testing)
+### Multi-node + indexer + issuer + web (recommended for testing)
 
 ```bash
 cd reference-node
@@ -92,10 +100,12 @@ docker compose -f compose.multi.yml up --build
 ```
 
 Services:
+- Web UI: http://localhost:3000
+- Issuer: http://localhost:8085
 - Node A: http://localhost:8081
 - Node B: http://localhost:8082
 - Mirror for A: http://localhost:8083
-- Directory (bootstrap): http://localhost:8084
+- Directory (bootstrap node list): http://localhost:8084
 - Indexer: http://localhost:8090
 
 Then open:
@@ -107,7 +117,7 @@ The container stores data under `reference-node/data/` (mounted to `/data` in th
 - `blobs/sha256/<hashhex>` – blob files
 - `keys/` – signing keys (Ed25519)
 
-> Note: the reference node currently supports **read-only** protocol endpoints. Upload/admin tooling will be added separately.
+> Note: the reference node includes a minimal admin/upload API for beta testing, plus a new bootstrap-claim admin session flow.
 
 ---
 
