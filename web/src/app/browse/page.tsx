@@ -9,10 +9,6 @@ import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardActions from "@mui/material/CardActions";
-import IconButton from "@mui/material/IconButton";
-
-import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
-import HubIcon from "@mui/icons-material/Hub";
 import CardContent from "@mui/material/CardContent";
 import CardMedia from "@mui/material/CardMedia";
 import Collapse from "@mui/material/Collapse";
@@ -355,7 +351,7 @@ export default function BrowsePage() {
             {items
               .filter((r) => !brokenPosterIds[r.poster_id])
               .map((r) => (
-                <Grid key={r.poster_id} item xs={6} sm={3} md={2} lg={2}>
+                <Grid key={r.poster_id} item xs={6} sm={4} md={3} lg={2}>
                   <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
                     <CardActionArea component={Link} href={`/p/${encodeURIComponent(r.poster_id)}`}>
                       <Box sx={{ width: "100%", aspectRatio: "2 / 3" }}>
@@ -383,25 +379,13 @@ export default function BrowsePage() {
                       </Typography>
                     </CardContent>
 
-                    <CardActions sx={{ pt: 0, mt: "auto" }}>
-                      <IconButton
-                        aria-label="Download"
-                        href={r.assets.full.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        size="small"
-                      >
-                        <CloudDownloadIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        aria-label="Node"
-                        href={r.creator.home_node}
-                        target="_blank"
-                        rel="noreferrer"
-                        size="small"
-                      >
-                        <HubIcon fontSize="small" />
-                      </IconButton>
+                    <CardActions sx={{ mt: "auto" }}>
+                      <Button size="small" href={r.assets.full.url} target="_blank" rel="noreferrer">
+                        View
+                      </Button>
+                      <Button size="small" href={r.creator.home_node} target="_blank" rel="noreferrer">
+                        Node
+                      </Button>
                     </CardActions>
                   </Card>
                 </Grid>
