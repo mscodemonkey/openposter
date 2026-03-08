@@ -101,6 +101,24 @@ services:
     volumes:
       - ./data-indexer:/data
 
+  issuer:
+    build: ../issuer
+    ports:
+      - "8085:8085"
+    environment:
+      - OPENPOSTER_ISSUER_BASE_URL=http://localhost:8085
+      - OPENPOSTER_ISSUER_JWT_SECRET=dev-jwt-secret-change-me
+      - OPENPOSTER_ISSUER_JWT_ISSUER=openposter-issuer
+      - OPENPOSTER_ISSUER_JWT_EXP_SECONDS=31536000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8085/v1/health').read(); print('ok')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - ./data-issuer:/data
+
   web:
     build: ../web
     ports:
