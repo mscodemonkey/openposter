@@ -10,6 +10,7 @@ import {
   issuerHandleAvailability,
   issuerLogin,
   issuerMe,
+  issuerSignup,
   issuerStartUrlClaim,
   issuerVerifyUrlClaim,
 } from "@/lib/issuer";
@@ -21,15 +22,17 @@ import {
 } from "@/lib/issuer_storage";
 
 export default function OnboardingPage() {
-  const [step, setStep] = useState<"account" | "creator" | "claim" | "public_url" | "done">("account");
+  const [step, setStep] = useState<"welcome" | "account" | "creator" | "claim" | "public_url" | "done">("welcome");
 
   // issuer session
   const [token, setToken] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string>("");
 
   // account
+  const [accountMode, setAccountMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("Martin");
   const [status, setStatus] = useState<string | null>(null);
 
   // creator
@@ -56,6 +59,18 @@ export default function OnboardingPage() {
       setToken(t);
       setUserEmail(u.email);
       // best-effort; if token is stale user will fail later.
+      setStep("creator");
+      return;
+    }
+
+    // If they previously chose "just browsing", don't block them.
+    try {
+      const done = window.localStorage.getItem("openposter.onboarded.v1");
+      if (done === "browsing") {
+        setStep("done");
+      }
+    } catch {
+      // ignore
     }
   }, []);
 
@@ -66,6 +81,16 @@ export default function OnboardingPage() {
     setToken(res.token);
     setUserEmail(res.user.email);
     setStatus("Logged in.");
+    setStep("creator");
+  }
+
+  async function doSignup() {
+    setStatus("Creating account...");
+    const res = await issuerSignup({ email, password, display_name: displayName });
+    saveIssuerSession(res.token, res.user);
+    setToken(res.token);
+    setUserEmail(res.user.email);
+    setStatus("Account created.");
     setStep("creator");
   }
 
@@ -155,11 +180,71 @@ export default function OnboardingPage() {
           ) : null}
         </div>
 
+        {step === "welcome" && (
+          <div className="op-card op-card--padded op-mt-12">
+            <h2 className="op-section-title">Welcome to the OpenPoster network!</h2>
+            <p className="op-subtle op-mt-6">
+              OpenPoster is a community-run poster network where creators can publish artwork from their own nodes, and
+              everyone can browse, search, and share — without relying on one central site forever.
+            </p>
+
+            <h2 className="op-section-title op-mt-16">Let’s get started</h2>
+            <p className="op-subtle op-mt-6">Firstly are you just browsing posters or are you a creator?</p>
+
+            <div className="op-stack op-mt-12">
+              <button
+                className="op-btn"
+                onClick={() => {
+                  try {
+                    window.localStorage.setItem("openposter.onboarded.v1", "browsing");
+                  } catch {
+                    // ignore
+                  }
+                  window.location.href = "/browse";
+                }}
+              >
+                I’m just browsing
+              </button>
+
+              <button className="op-btn" onClick={() => setStep("account")}>
+                I’m a creator
+              </button>
+            </div>
+          </div>
+        )}
+
         {step === "account" && (
           <div className="op-card op-card--padded op-mt-12">
-            <h2 className="op-section-title">1) Log in</h2>
-            <p className="op-subtle op-mt-6">Create account will be added next. For now: log in.</p>
+            <div className="op-row op-row--between">
+              <h2 className="op-section-title">1) Your OpenPoster account</h2>
+              <div className="op-row">
+                <button
+                  type="button"
+                  className="op-btn op-btn--sm"
+                  onClick={() => setAccountMode("login")}
+                  disabled={accountMode === "login"}
+                >
+                  Log in
+                </button>
+                <button
+                  type="button"
+                  className="op-btn op-btn--sm"
+                  onClick={() => setAccountMode("signup")}
+                  disabled={accountMode === "signup"}
+                >
+                  Create account
+                </button>
+              </div>
+            </div>
+
             <div className="op-stack op-mt-12">
+              {accountMode === "signup" && (
+                <label className="op-label">
+                  <div className="op-label-hint">Display name (not unique)</div>
+                  <input className="op-input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+                </label>
+              )}
+
               <label className="op-label">
                 <div className="op-label-hint">Email</div>
                 <input className="op-input" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -168,9 +253,16 @@ export default function OnboardingPage() {
                 <div className="op-label-hint">Password</div>
                 <input className="op-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
               </label>
-              <button className="op-btn" onClick={() => void doLogin().catch((e) => setStatus(e?.message || String(e)))}>
-                Log in
-              </button>
+
+              {accountMode === "login" ? (
+                <button className="op-btn" onClick={() => void doLogin().catch((e) => setStatus(e?.message || String(e)))}>
+                  Log in
+                </button>
+              ) : (
+                <button className="op-btn" onClick={() => void doSignup().catch((e) => setStatus(e?.message || String(e)))}>
+                  Create account
+                </button>
+              )}
             </div>
           </div>
         )}
