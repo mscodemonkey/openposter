@@ -366,7 +366,7 @@ export default function BrowsePage() {
                         sx={{ aspectRatio: "2 / 3", objectFit: "contain", flexShrink: 0 }}
                       />
 
-                      <CardContent sx={{ flexGrow: 1, width: "100%" }}>
+                      <CardContent sx={{ flexGrow: 1 }}>
                         <Typography sx={{ fontWeight: 800 }} noWrap>
                           {r.media.title || "(untitled)"}
                         </Typography>
@@ -381,7 +381,7 @@ export default function BrowsePage() {
                       </CardContent>
                     </CardActionArea>
 
-                    <CardActions>
+                    <CardActions sx={{ px: 1 }}>
                       <Button variant="text" size="small" href={r.assets.full.url} target="_blank" rel="noreferrer">
                         View
                       </Button>
