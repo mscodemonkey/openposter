@@ -1,6 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardActions from "@mui/material/CardActions";
+import CardContent from "@mui/material/CardContent";
+import CardMedia from "@mui/material/CardMedia";
+import Container from "@mui/material/Container";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Grid from "@mui/material/GridLegacy";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { PosterEntry } from "@/lib/types";
@@ -23,6 +36,7 @@ export default function CreatorPage({ params }: { params: { creatorId: string } 
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [brokenPosterIds, setBrokenPosterIds] = useState<Record<string, true>>({});
 
   async function loadCreatorInfo() {
     const r = await fetch(`${base}/v1/creators?limit=500`);
@@ -58,7 +72,7 @@ export default function CreatorPage({ params }: { params: { creatorId: string } 
       const r = await fetch(u.toString());
       if (!r.ok) throw new Error(`by_creator failed: ${r.status}`);
       const json = (await r.json()) as PagedResponse;
-      setItems((prev) => ([...(prev || []), ...json.results]));
+      setItems((prev) => [...(prev || []), ...json.results]);
       setNextCursor(json.next_cursor || null);
     } finally {
       setLoadingMore(false);
@@ -77,65 +91,92 @@ export default function CreatorPage({ params }: { params: { creatorId: string } 
   }, [creatorId]);
 
   return (
-    <div className="op-container">
-      <div className="op-row op-row--between">
-        <div>
-          <h1 className="op-title-lg">{creatorName || creatorId}</h1>
-          <div className="op-subtle op-text-sm">
-            Creator id: <code className="op-code">{creatorId}</code>
-          </div>
-        </div>
-        <div>
-          <a className="op-link op-text-sm" href={`/browse?creator_id=${encodeURIComponent(creatorId)}`}>
-            Browse with filters →
-          </a>
-        </div>
-      </div>
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-end" }} justifyContent="space-between">
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h4" sx={{ fontWeight: 800 }} noWrap>
+              {creatorName || creatorId}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Creator id: <code>{creatorId}</code>
+            </Typography>
+          </Box>
 
-      {error && <div className="op-alert op-alert--error">{error}</div>}
+          <Button
+            component={Link}
+            href={`/browse?creator_id=${encodeURIComponent(creatorId)}`}
+            variant="outlined"
+          >
+            Browse posters
+          </Button>
+        </Stack>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Posters</h2>
+        {error && <Alert severity="error">{error}</Alert>}
+
+        <Typography variant="h6" sx={{ fontWeight: 800 }}>
+          Posters
+        </Typography>
 
         {items === null ? (
-          <p className="op-subtle op-mt-12">Loading…</p>
+          <Typography color="text.secondary">Loading…</Typography>
         ) : items.length === 0 ? (
-          <p className="op-subtle op-mt-12">No posters.</p>
+          <Typography color="text.secondary">No posters.</Typography>
         ) : (
-          <div className="op-grid op-grid--posters">
-            {items.map((r) => (
-              <div key={r.poster_id} className="op-card">
-                <a className="op-link" href={`/p/${encodeURIComponent(r.poster_id)}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img className="op-img" src={r.assets.preview.url} alt={r.media.title || r.poster_id} />
-                </a>
-                <div className="op-poster-meta">
-                  <div className="op-poster-title">{r.media.title || "(untitled)"}</div>
-                  <div className="op-subtle op-text-sm">{r.media.type} · TMDB {r.media.tmdb_id}</div>
-                  <div className="op-row op-mt-8">
-                    <a className="op-link op-text-sm" href={r.assets.full.url} target="_blank" rel="noreferrer">
-                      Download
-                    </a>
-                    <a className="op-link op-text-sm" href={r.creator.home_node} target="_blank" rel="noreferrer">
-                      Node
-                    </a>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <Grid container spacing={2}>
+            {items
+              .filter((r) => !brokenPosterIds[r.poster_id])
+              .map((r) => (
+                <Grid key={r.poster_id} item xs={12} sm={6} md={4} lg={3}>
+                  <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <Link href={`/p/${encodeURIComponent(r.poster_id)}`} style={{ textDecoration: "none" }}>
+                      <CardMedia
+                        component="img"
+                        height={360}
+                        image={r.assets.preview.url}
+                        alt={r.media.title || r.poster_id}
+                        onError={() => setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }))}
+                        sx={{ objectFit: "cover" }}
+                      />
+                    </Link>
+                    <CardContent sx={{ flex: 1 }}>
+                      <Typography sx={{ fontWeight: 800 }} noWrap>
+                        {r.media.title || "(untitled)"}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {r.media.type} · TMDB {r.media.tmdb_id}
+                      </Typography>
+                    </CardContent>
+                    <CardActions>
+                      <Button size="small" variant="text" href={r.assets.full.url} target="_blank" rel="noreferrer">
+                        Download
+                      </Button>
+                      <Button size="small" variant="text" href={r.creator.home_node} target="_blank" rel="noreferrer">
+                        Node
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
+          </Grid>
         )}
 
-        <div className="op-mt-16">
+        <Box sx={{ pt: 1 }}>
           {nextCursor ? (
-            <button className="op-btn" onClick={() => void loadMore().catch((e) => setError(e?.message || String(e)))} disabled={loadingMore}>
+            <Button
+              variant="outlined"
+              onClick={() => void loadMore().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
+              disabled={loadingMore}
+            >
               {loadingMore ? "Loading…" : "Load more"}
-            </button>
+            </Button>
           ) : (
-            <div className="op-faint op-text-sm">End of list.</div>
+            <Typography variant="body2" color="text.secondary">
+              End of list.
+            </Typography>
           )}
-        </div>
-      </section>
-    </div>
+        </Box>
+      </Stack>
+    </Container>
   );
 }

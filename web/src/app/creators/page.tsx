@@ -1,6 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardActions from "@mui/material/CardActions";
+import CardContent from "@mui/material/CardContent";
+import Container from "@mui/material/Container";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
 
@@ -29,6 +40,7 @@ export default function CreatorsPage() {
   useEffect(() => {
     void (async () => {
       try {
+        setError(null);
         const r = await fetch(url);
         if (!r.ok) throw new Error(`creators failed: ${r.status}`);
         setData((await r.json()) as CreatorsResponse);
@@ -39,50 +51,73 @@ export default function CreatorsPage() {
   }, [url]);
 
   return (
-    <div className="op-container op-container--narrow">
-      <h1 className="op-title-lg">Creators</h1>
-      <p className="op-subtle op-mt-6">
-        Indexer: <code className="op-code">{INDEXER_BASE_URL}</code>
-      </p>
+    <Container maxWidth="md" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>
+            Creators
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Indexer: <code>{INDEXER_BASE_URL}</code>
+          </Typography>
+        </Box>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Find a creator</h2>
-        <input className="op-input op-mt-10" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search creator names…" />
-      </section>
+        <TextField
+          label="Find a creator"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search creator names…"
+        />
 
-      {error && <div className="op-alert op-alert--error">{error}</div>}
+        {error && <Alert severity="error">{error}</Alert>}
 
-      {!data ? (
-        <p className="op-subtle op-mt-12">Loading…</p>
-      ) : (
-        <div className="op-section op-stack">
-          {data.results.map((c) => (
-            <div key={c.creator_id} className="op-card op-card--padded">
-              <div className="op-row op-row--between">
-                <div>
-                  <div className="op-card-title">{c.display_name || c.creator_id}</div>
-                  <div className="op-subtle op-text-sm">
-                    <code className="op-code">{c.creator_id}</code>
-                  </div>
-                </div>
-                <div className="op-text-right">
-                  <div className="op-text-sm op-subtle-strong">{c.count} poster(s)</div>
-                  <div className="op-text-sm op-faint">{c.last_changed_at || "-"}</div>
-                </div>
-              </div>
+        {!data ? (
+          <Typography color="text.secondary">Loading…</Typography>
+        ) : (
+          <Stack spacing={1.5}>
+            {data.results.map((c) => (
+              <Card key={c.creator_id}>
+                <CardContent>
+                  <Stack direction="row" spacing={2} alignItems="flex-start" justifyContent="space-between">
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontWeight: 800 }} noWrap>
+                        {c.display_name || c.creator_id}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        <code>{c.creator_id}</code>
+                      </Typography>
+                    </Box>
 
-              <div className="op-row op-row--between op-mt-10">
-                <a className="op-link" href={`/creator/${encodeURIComponent(c.creator_id)}`}>
-                  View creator →
-                </a>
-                <a className="op-link" href={`/browse?creator_id=${encodeURIComponent(c.creator_id)}`}>
-                  Browse posters →
-                </a>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+                    <Box sx={{ textAlign: "right" }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {c.count} poster(s)
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {c.last_changed_at || "-"}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </CardContent>
+                <CardActions>
+                  <Link href={`/creator/${encodeURIComponent(c.creator_id)}`} style={{ textDecoration: "none" }}>
+                    <Typography variant="body2" sx={{ px: 1 }}>
+                      View creator →
+                    </Typography>
+                  </Link>
+                  <Link
+                    href={`/browse?creator_id=${encodeURIComponent(c.creator_id)}`}
+                    style={{ textDecoration: "none" }}
+                  >
+                    <Typography variant="body2" sx={{ px: 1 }}>
+                      Browse posters →
+                    </Typography>
+                  </Link>
+                </CardActions>
+              </Card>
+            ))}
+          </Stack>
+        )}
+      </Stack>
+    </Container>
   );
 }
