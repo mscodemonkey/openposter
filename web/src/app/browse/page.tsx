@@ -6,9 +6,15 @@ import Link from "next/link";
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardActionArea from "@mui/material/CardActionArea";
+import CardActions from "@mui/material/CardActions";
+import CardContent from "@mui/material/CardContent";
+import CardMedia from "@mui/material/CardMedia";
 import Collapse from "@mui/material/Collapse";
 import Container from "@mui/material/Container";
 import Divider from "@mui/material/Divider";
+import Grid from "@mui/material/GridLegacy";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
@@ -341,44 +347,50 @@ export default function BrowsePage() {
         ) : items.filter((r) => !brokenPosterIds[r.poster_id]).length === 0 ? (
           <Typography color="text.secondary">No posters.</Typography>
         ) : (
-          <div className="op-grid op-grid--posters">
+          <Grid container spacing={2}>
             {items
               .filter((r) => !brokenPosterIds[r.poster_id])
               .map((r) => (
-                <div key={r.poster_id} className="op-card">
-                  <Link className="op-link" href={`/p/${encodeURIComponent(r.poster_id)}`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      className="op-img"
-                      src={r.assets.preview.url}
-                      alt={r.media.title || r.poster_id}
-                      onError={() => setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }))}
-                    />
-                  </Link>
+                <Grid key={r.poster_id} item xs={6} sm={4} md={3} lg={2}>
+                  <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <CardActionArea component={Link} href={`/p/${encodeURIComponent(r.poster_id)}`}>
+                      <Box sx={{ width: "100%", aspectRatio: "2 / 3" }}>
+                        <CardMedia
+                          component="img"
+                          image={r.assets.preview.url}
+                          alt={r.media.title || r.poster_id}
+                          onError={() => setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }))}
+                          sx={{ width: "100%", height: "100%", objectFit: "contain" }}
+                        />
+                      </Box>
+                    </CardActionArea>
 
-                  <div className="op-poster-meta">
-                    <div className="op-poster-title">{r.media.title || "(untitled)"}</div>
-                    <div className="op-subtle op-text-sm">
-                      <Link
-                        className="op-link"
-                        href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}
-                      >
-                        {r.creator.display_name}
-                      </Link>
-                    </div>
+                    <CardContent sx={{ pb: 0.5 }}>
+                      <Typography sx={{ fontWeight: 800 }} noWrap>
+                        {r.media.title || "(untitled)"}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        <Link
+                          href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}
+                          style={{ color: "inherit", textDecoration: "none" }}
+                        >
+                          {r.creator.display_name}
+                        </Link>
+                      </Typography>
+                    </CardContent>
 
-                    <div className="op-poster-actions">
-                      <a className="op-link" href={r.assets.full.url} target="_blank" rel="noreferrer">
-                        DOWNLOAD
-                      </a>
-                      <a className="op-link" href={r.creator.home_node} target="_blank" rel="noreferrer">
-                        NODE
-                      </a>
-                    </div>
-                  </div>
-                </div>
+                    <CardActions sx={{ pt: 0, mt: "auto" }}>
+                      <Button size="small" variant="text" href={r.assets.full.url} target="_blank" rel="noreferrer">
+                        Download
+                      </Button>
+                      <Button size="small" variant="text" href={r.creator.home_node} target="_blank" rel="noreferrer">
+                        Node
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
               ))}
-          </div>
+          </Grid>
         )}
 
         {items && nextCursor && (

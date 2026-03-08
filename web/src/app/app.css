@@ -177,24 +177,7 @@ h3.op-section-title {
 }
 
 .op-poster-meta {
-  padding: 8px 10px 10px;
-}
-
-.op-poster-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 4px;
-}
-
-.op-poster-actions a,
-.op-poster-actions button {
-  font-size: 12px;
-  opacity: 0.9;
-}
-
-.op-poster-actions a:hover,
-.op-poster-actions button:hover {
-  opacity: 1;
+  padding: 10px;
 }
 
 .op-poster-title {
@@ -332,13 +315,6 @@ h3.op-section-title {
   display: block;
 }
 
-/* Poster art: keep a consistent portrait ratio and never crop (scale to fit). */
-.op-grid--posters .op-img {
-  aspect-ratio: 2 / 3;
-  height: auto;
-  object-fit: contain;
-  background: rgba(255, 255, 255, 0.04);
-}
 
 /* Text */
 .op-text-sm {
