@@ -419,7 +419,7 @@ export default function BrowsePage() {
                               href={`/tv/${encodeURIComponent(String(tmdb))}/boxset`}
                               sx={{ minWidth: 0 }}
                             >
-                              BOXSET
+                              BOX SET
                             </Button>
                           );
                         }
@@ -432,7 +432,7 @@ export default function BrowsePage() {
                               href={`/movie/${encodeURIComponent(String(tmdb))}/boxset`}
                               sx={{ minWidth: 0 }}
                             >
-                              BOXSET
+                              BOX SET
                             </Button>
                           );
                         }
