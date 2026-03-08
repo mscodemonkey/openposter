@@ -29,6 +29,7 @@ export default function BrowsePage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [items, setItems] = useState<PosterEntry[] | null>(null);
+  const [brokenPosterIds, setBrokenPosterIds] = useState<Record<string, true>>({});
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -138,6 +139,7 @@ export default function BrowsePage() {
 
       // UX: Browse should only show posters that actually have artwork to view/download.
       setItems(json.results.filter(hasArtwork));
+      setBrokenPosterIds({});
       setNextCursor(json.next_cursor || null);
     } finally {
       setLoading(false);
@@ -285,30 +287,40 @@ export default function BrowsePage() {
         <p className="op-subtle op-mt-12">No posters.</p>
       ) : (
         <div className="op-grid op-grid--posters op-mt-12">
-          {items.map((r) => (
-            <div key={r.poster_id} className="op-card">
-              <a className="op-link" href={`/p/${encodeURIComponent(r.poster_id)}`}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="op-img" src={r.assets.preview.url} alt={r.media.title || r.poster_id} />
-              </a>
-              <div className="op-poster-meta">
-                <div className="op-poster-title">{r.media.title || "(untitled)"}</div>
-                <div className="op-subtle op-text-sm">
-                  <a className="op-link" href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}>
-                    {r.creator.display_name}
-                  </a>
-                </div>
-                <div className="op-row op-mt-8">
-                  <a className="op-link op-text-sm" href={r.assets.full.url} target="_blank" rel="noreferrer">
-                    Download
-                  </a>
-                  <a className="op-link op-text-sm" href={r.creator.home_node} target="_blank" rel="noreferrer">
-                    Node
-                  </a>
+          {items
+            .filter((r) => !brokenPosterIds[r.poster_id])
+            .map((r) => (
+              <div key={r.poster_id} className="op-card">
+                <a className="op-link" href={`/p/${encodeURIComponent(r.poster_id)}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="op-img"
+                    src={r.assets.preview.url}
+                    alt={r.media.title || r.poster_id}
+                    onError={() => {
+                      // If the image URL 404s (or is otherwise unreachable), hide it.
+                      setBrokenPosterIds((prev) => ({ ...prev, [r.poster_id]: true }));
+                    }}
+                  />
+                </a>
+                <div className="op-poster-meta">
+                  <div className="op-poster-title">{r.media.title || "(untitled)"}</div>
+                  <div className="op-subtle op-text-sm">
+                    <a className="op-link" href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}>
+                      {r.creator.display_name}
+                    </a>
+                  </div>
+                  <div className="op-row op-mt-8">
+                    <a className="op-link op-text-sm" href={r.assets.full.url} target="_blank" rel="noreferrer">
+                      Download
+                    </a>
+                    <a className="op-link op-text-sm" href={r.creator.home_node} target="_blank" rel="noreferrer">
+                      Node
+                    </a>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       )}
 
