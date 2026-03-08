@@ -29,10 +29,9 @@ export default function Nav() {
       <a href="/">Home</a>
       <a href="/browse">Posters</a>
       <a href="/creators">Creators</a>
-      <a href="/connect">Connect node</a>
       <a href="/upload">Upload</a>
       <a href="/library">My library</a>
-      <a href="/register">Register</a>
+      <a href="/settings">Settings</a>
 
       <div className="op-spacer" />
 
