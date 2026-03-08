@@ -14,7 +14,7 @@ import CardMedia from "@mui/material/CardMedia";
 import Collapse from "@mui/material/Collapse";
 import Container from "@mui/material/Container";
 import Divider from "@mui/material/Divider";
-import Grid from "@mui/material/GridLegacy";
+import Grid from "@mui/material/Grid";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
@@ -351,7 +351,7 @@ export default function BrowsePage() {
             {items
               .filter((r) => !brokenPosterIds[r.poster_id])
               .map((r) => (
-                <Grid key={r.poster_id} item xs={6} sm={4} md={3} lg={2}>
+                <Grid key={r.poster_id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
                   <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
                     <CardMedia
                       component="img"
