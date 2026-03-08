@@ -351,7 +351,7 @@ export default function BrowsePage() {
             {items
               .filter((r) => !brokenPosterIds[r.poster_id])
               .map((r) => (
-                <Grid key={r.poster_id} item xs={6} sm={4} md={3} lg={2}>
+                <Grid key={r.poster_id} item xs={6} sm={3} md={2} lg={2}>
                   <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
                     <CardActionArea component={Link} href={`/p/${encodeURIComponent(r.poster_id)}`}>
                       <Box sx={{ width: "100%", aspectRatio: "2 / 3" }}>
