@@ -339,6 +339,26 @@ export default function OnboardingPage() {
               really have admin access to that machine.
             </p>
 
+            <div className="op-card op-card--padded op-mt-12">
+              <div className="op-subtle"><strong>Where do I find the bootstrap code?</strong></div>
+              <div className="op-text-sm op-mt-8">
+                Your node writes it to a file on disk:
+                {" "}
+                <code className="op-code">/data/bootstrap_code.txt</code>
+              </div>
+              <div className="op-text-sm op-mt-8">
+                If you’re running the local dev stack (docker compose), run one of these from the repo root:
+              </div>
+              <pre className="op-pre op-mt-8">docker compose -f reference-node/compose.multi.yml exec node_a cat /data/bootstrap_code.txt
+# (or node_b)
+docker compose -f reference-node/compose.multi.yml exec node_b cat /data/bootstrap_code.txt</pre>
+              <div className="op-text-sm op-mt-8">
+                If you’re running without Docker, look in your node’s data directory for
+                {" "}
+                <code className="op-code">bootstrap_code.txt</code>.
+              </div>
+            </div>
+
             <div className="op-stack op-mt-12">
               <label className="op-label">
                 <div className="op-label-hint">Local URL (your server on the LAN)</div>
