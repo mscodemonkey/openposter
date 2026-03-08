@@ -41,6 +41,7 @@ export default function Nav() {
       <a href="/creators">Creators</a>
       <a href="/upload">Upload</a>
       <a href="/library">My library</a>
+      <a href="/onboarding">Onboarding</a>
       <a href="/settings">Settings</a>
 
       <div className="op-spacer" />
