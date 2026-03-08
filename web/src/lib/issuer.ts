@@ -28,7 +28,11 @@ export async function issuerSignup(params: {
       display_name: params.display_name || null,
     }),
   });
-  if (!r.ok) throw new Error(`signup failed: ${r.status}`);
+  if (!r.ok) {
+    const j = (await r.json().catch(() => null)) as any;
+    const msg = j?.error?.message || `signup failed: ${r.status}`;
+    throw new Error(msg);
+  }
   return (await r.json()) as SignupResponse;
 }
 
@@ -41,7 +45,11 @@ export async function issuerLogin(params: {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email: params.email, password: params.password }),
   });
-  if (!r.ok) throw new Error(`login failed: ${r.status}`);
+  if (!r.ok) {
+    const j = (await r.json().catch(() => null)) as any;
+    const msg = j?.error?.message || `login failed: ${r.status}`;
+    throw new Error(msg);
+  }
   return (await r.json()) as LoginResponse;
 }
 
@@ -72,7 +80,11 @@ export async function issuerClaimHandle(token: string, handle: string): Promise<
     },
     body: JSON.stringify({ handle }),
   });
-  if (!r.ok) throw new Error(`claim handle failed: ${r.status}`);
+  if (!r.ok) {
+    const j = (await r.json().catch(() => null)) as any;
+    const msg = j?.error?.message || `claim handle failed: ${r.status}`;
+    throw new Error(msg);
+  }
 }
 
 export async function issuerClaimNode(
@@ -84,7 +96,11 @@ export async function issuerClaimNode(
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify(params),
   });
-  if (!r.ok) throw new Error(`claim node failed: ${r.status}`);
+  if (!r.ok) {
+    const j = (await r.json().catch(() => null)) as any;
+    const msg = j?.error?.message || `claim node failed: ${r.status}`;
+    throw new Error(msg);
+  }
   return (await r.json()) as unknown;
 }
 
@@ -94,7 +110,11 @@ export async function issuerStartUrlClaim(token: string, public_url: string): Pr
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify({ public_url }),
   });
-  if (!r.ok) throw new Error(`start url claim failed: ${r.status}`);
+  if (!r.ok) {
+    const j = (await r.json().catch(() => null)) as any;
+    const msg = j?.error?.message || `start url claim failed: ${r.status}`;
+    throw new Error(msg);
+  }
   return (await r.json()) as unknown;
 }
 
@@ -107,7 +127,11 @@ export async function issuerVerifyUrlClaim(
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify(params),
   });
-  if (!r.ok) throw new Error(`verify url claim failed: ${r.status}`);
+  if (!r.ok) {
+    const j = (await r.json().catch(() => null)) as any;
+    const msg = j?.error?.message || `verify url claim failed: ${r.status}`;
+    throw new Error(msg);
+  }
   return (await r.json()) as unknown;
 }
 
@@ -120,6 +144,10 @@ export async function issuerAttachUrl(
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify(params),
   });
-  if (!r.ok) throw new Error(`attach url failed: ${r.status}`);
+  if (!r.ok) {
+    const j = (await r.json().catch(() => null)) as any;
+    const msg = j?.error?.message || `attach url failed: ${r.status}`;
+    throw new Error(msg);
+  }
   return (await r.json()) as unknown;
 }

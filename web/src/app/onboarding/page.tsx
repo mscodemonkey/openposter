@@ -268,12 +268,23 @@ export default function OnboardingPage() {
                   Log me in
                 </button>
               ) : (
-                <button
-                  className="op-btn"
-                  onClick={() => void doSignup().catch((e) => setStatus(e?.message || String(e)))}
-                >
-                  Sign me up
-                </button>
+                <>
+                  <button
+                    className="op-btn"
+                    onClick={() =>
+                      void doSignup().catch((e) => {
+                        setStatus(e?.message || String(e));
+                        // Common case: they accidentally hit signup with an existing email.
+                        setAccountMode("login");
+                      })
+                    }
+                  >
+                    Sign me up
+                  </button>
+                  <div className="op-subtle op-text-sm">
+                    Already have an account? Click “I’ve got an account, log me in!” above.
+                  </div>
+                </>
               )}
             </div>
           </div>
