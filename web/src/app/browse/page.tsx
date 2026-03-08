@@ -94,13 +94,13 @@ export default function BrowsePage() {
         const fc = await fetch(`${base}/v1/facets`);
         if (!fc.ok) throw new Error(`facets failed: ${fc.status}`);
         setFacets((await fc.json()) as FacetsResponse);
-      } catch (e: any) {
-        setError(e?.message || String(e));
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
       }
     })();
   }, [base]);
 
-  function useSearchEndpoint() {
+  function shouldUseSearchEndpoint() {
     return tmdbId.trim() !== "" || q.trim() !== "";
   }
 
@@ -115,7 +115,7 @@ export default function BrowsePage() {
   }
 
   function buildUrl(cursor?: string | null) {
-    if (useSearchEndpoint()) {
+    if (shouldUseSearchEndpoint()) {
       const u = new URL(`${base}/v1/search`);
       u.searchParams.set("limit", "40");
       if (tmdbId) u.searchParams.set("tmdb_id", tmdbId);

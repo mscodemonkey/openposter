@@ -75,42 +75,51 @@ export async function issuerClaimHandle(token: string, handle: string): Promise<
   if (!r.ok) throw new Error(`claim handle failed: ${r.status}`);
 }
 
-export async function issuerClaimNode(token: string, params: { local_url: string; node_admin_token: string }) {
+export async function issuerClaimNode(
+  token: string,
+  params: { local_url: string; node_admin_token: string }
+): Promise<unknown> {
   const r = await fetch(`${issuerBase()}/v1/nodes/claim`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify(params),
   });
   if (!r.ok) throw new Error(`claim node failed: ${r.status}`);
-  return (await r.json()) as any;
+  return (await r.json()) as unknown;
 }
 
-export async function issuerStartUrlClaim(token: string, public_url: string) {
+export async function issuerStartUrlClaim(token: string, public_url: string): Promise<unknown> {
   const r = await fetch(`${issuerBase()}/v1/url_claims/start`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify({ public_url }),
   });
   if (!r.ok) throw new Error(`start url claim failed: ${r.status}`);
-  return (await r.json()) as any;
+  return (await r.json()) as unknown;
 }
 
-export async function issuerVerifyUrlClaim(token: string, params: { public_url: string; method: "dns" | "http" }) {
+export async function issuerVerifyUrlClaim(
+  token: string,
+  params: { public_url: string; method: "dns" | "http" }
+): Promise<unknown> {
   const r = await fetch(`${issuerBase()}/v1/url_claims/verify`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify(params),
   });
   if (!r.ok) throw new Error(`verify url claim failed: ${r.status}`);
-  return (await r.json()) as any;
+  return (await r.json()) as unknown;
 }
 
-export async function issuerAttachUrl(token: string, params: { node_id: string; public_url: string }) {
+export async function issuerAttachUrl(
+  token: string,
+  params: { node_id: string; public_url: string }
+): Promise<unknown> {
   const r = await fetch(`${issuerBase()}/v1/nodes/attach_url`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify(params),
   });
   if (!r.ok) throw new Error(`attach url failed: ${r.status}`);
-  return (await r.json()) as any;
+  return (await r.json()) as unknown;
 }

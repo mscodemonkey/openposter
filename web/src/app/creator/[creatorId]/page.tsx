@@ -69,8 +69,8 @@ export default function CreatorPage({ params }: { params: { creatorId: string } 
     void (async () => {
       try {
         await Promise.all([loadCreatorInfo(), loadFirst()]);
-      } catch (e: any) {
-        setError(e?.message || String(e));
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps

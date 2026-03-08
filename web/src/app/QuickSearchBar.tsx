@@ -13,6 +13,7 @@ export default function QuickSearchBar() {
   // Keep the box in sync with the current URL (so it feels predictable).
   useEffect(() => {
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQ(sp.get("q") || "");
     } catch {
       // ignore

@@ -94,8 +94,9 @@ export default function Home() {
     void (async () => {
       try {
         await Promise.all([loadNodes(), loadRecent(), loadStats()]);
-      } catch (e: any) {
-        setError(e?.message || String(e));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
       }
     })();
   }, []);
@@ -122,9 +123,9 @@ export default function Home() {
 
       <section className="op-section">
         <div className="op-row op-row--between">
-          <h2 className="op-section-title">Search</h2>
-          <a className="op-link op-text-sm" href="/search">
-            Advanced search →
+          <h2 className="op-section-title">Posters</h2>
+          <a className="op-link op-text-sm" href="/browse">
+            Browse posters →
           </a>
         </div>
 

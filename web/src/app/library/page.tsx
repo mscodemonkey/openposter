@@ -82,8 +82,8 @@ export default function LibraryPage() {
         try {
           // eslint-disable-next-line no-await-in-loop
           await checkIndexed(p);
-        } catch (e: any) {
-          setError(e?.message || String(e));
+        } catch (e: unknown) {
+          setError(e instanceof Error ? e.message : String(e));
         }
       }
     }

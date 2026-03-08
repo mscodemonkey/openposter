@@ -32,8 +32,8 @@ export default function CreatorsPage() {
         const r = await fetch(url);
         if (!r.ok) throw new Error(`creators failed: ${r.status}`);
         setData((await r.json()) as CreatorsResponse);
-      } catch (e: any) {
-        setError(e?.message || String(e));
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
       }
     })();
   }, [url]);

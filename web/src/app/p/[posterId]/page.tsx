@@ -71,15 +71,13 @@ export default function PosterPage({
     void (async () => {
       try {
         const r = await fetch(`${base}/v1/posters/${encodeURIComponent(decodedPosterId)}`);
-        if (!r.ok) throw new Error(`poster failed: ${r.status}`);
-        const json = (await r.json()) as any;
-        if (json?.error === "not_found") {
+        if (r.status === 404) {
           setPoster(null);
           setError("Not found");
           return;
         }
-
-        const p = json as PosterEntry;
+        if (!r.ok) throw new Error(`poster failed: ${r.status}`);
+        const p = (await r.json()) as PosterEntry;
         setPoster(p);
         const lv = (p.links || []) as PosterLink[];
         setLinksValue(lv);
@@ -113,8 +111,8 @@ export default function PosterPage({
             setMoreByCreator(cjson.results.filter((x) => x.poster_id !== p.poster_id));
           }
         }
-      } catch (e: any) {
-        setError(e?.message || String(e));
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
       }
     })();
   }, [base, decodedPosterId]);
@@ -205,24 +203,29 @@ export default function PosterPage({
 
               <div className="op-mt-16 op-text-sm">
                 <div className="op-subtle">Attribution</div>
-                <div className="op-kv op-mt-10">
-                  <div><strong>License</strong></div>
-                  <div>{(poster as any).attribution?.license || "-"}</div>
+                {(() => {
+                  const attribution = (poster as unknown as { attribution?: { license?: string; redistribution?: string; source_url?: string } }).attribution;
+                  return (
+                    <div className="op-kv op-mt-10">
+                      <div><strong>License</strong></div>
+                      <div>{attribution?.license || "-"}</div>
 
-                  <div><strong>Redistribution</strong></div>
-                  <div>{(poster as any).attribution?.redistribution || "-"}</div>
+                      <div><strong>Redistribution</strong></div>
+                      <div>{attribution?.redistribution || "-"}</div>
 
-                  <div><strong>Source</strong></div>
-                  <div>
-                    {(poster as any).attribution?.source_url ? (
-                      <a className="op-link" href={(poster as any).attribution.source_url} target="_blank" rel="noreferrer">
-                        {(poster as any).attribution.source_url}
-                      </a>
-                    ) : (
-                      "-"
-                    )}
-                  </div>
-                </div>
+                      <div><strong>Source</strong></div>
+                      <div>
+                        {attribution?.source_url ? (
+                          <a className="op-link" href={attribution.source_url} target="_blank" rel="noreferrer">
+                            {attribution.source_url}
+                          </a>
+                        ) : (
+                          "-"
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -286,8 +289,8 @@ export default function PosterPage({
                     setLinksValue(lv);
                     setLinksDraft(JSON.stringify(lv, null, 2));
                   }
-                } catch (e: any) {
-                  setLinksStatus(e?.message || String(e));
+                } catch (e: unknown) {
+                  setLinksStatus(e instanceof Error ? e.message : String(e));
                 } finally {
                   setLinksSaving(false);
                 }
@@ -341,8 +344,8 @@ export default function PosterPage({
                   if (!r.ok) throw new Error(`search failed: ${r.status}`);
                   const json = (await r.json()) as SearchResponse;
                   setLinkSearchResults(json.results.filter((x) => x.poster_id !== poster.poster_id));
-                } catch (e: any) {
-                  setLinkSearchError(e?.message || String(e));
+                } catch (e: unknown) {
+                  setLinkSearchError(e instanceof Error ? e.message : String(e));
                 } finally {
                   setLinkSearchLoading(false);
                 }
@@ -488,8 +491,8 @@ export default function PosterPage({
                                 if (!Array.isArray(parsed)) throw new Error("links_json must be a JSON array");
                                 setLinksValue(parsed as PosterLink[]);
                                 setLinksStatus("Draft applied (not saved yet).");
-                              } catch (e: any) {
-                                setLinksStatus(e?.message || String(e));
+                              } catch (e: unknown) {
+                                setLinksStatus(e instanceof Error ? e.message : String(e));
                               }
                             }}
                           >

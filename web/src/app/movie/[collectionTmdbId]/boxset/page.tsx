@@ -134,8 +134,8 @@ function MovieBoxsetReal({ collectionTmdbId }: { collectionTmdbId: string }) {
         }
 
         setMovies(fetched);
-      } catch (e: any) {
-        setError(e?.message || String(e));
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
       }
     })();
   }, [base, collectionTmdbId]);

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import {
@@ -52,7 +53,8 @@ export default function OnboardingPage() {
   // node claim
   const [localUrl, setLocalUrl] = useState("http://localhost:8081");
   const [bootstrapCode, setBootstrapCode] = useState("");
-  const [nodeAdminToken, setNodeAdminToken] = useState<string>("");
+  // stored via saveCreatorConnection; we don't currently show it in the UI
+  const [, setNodeAdminToken] = useState<string>("");
   const [claimedNodeId, setClaimedNodeId] = useState<string>("");
 
   // public url attach
@@ -279,28 +281,47 @@ export default function OnboardingPage() {
 
         {step === "creator" && (
           <div className="op-card op-card--padded op-mt-12">
-            <h2 className="op-section-title">2) Pick your creator handle</h2>
+            <h1 className="op-title-lg">Nice.</h1>
+            <h2 className="op-section-title op-mt-10">Let’s pick your creator name</h2>
             <p className="op-subtle op-mt-6">
-              Handle rules: 3–32 chars, lowercase letters, numbers, underscore.
+              This is your <strong>unique</strong> creator handle across the network. It’s how people will find your
+              artwork.
             </p>
+            <p className="op-subtle op-mt-6">
+              Rules: 3–32 characters. Use lowercase letters, numbers, and underscores.
+            </p>
+
             <div className="op-stack op-mt-12">
               <label className="op-label">
                 <div className="op-label-hint">Creator handle</div>
-                <input className="op-input" value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="e.g. martinjsteven" />
+                <input
+                  className="op-input"
+                  value={handle}
+                  onChange={(e) => {
+                    setHandle(e.target.value);
+                    setHandleAvailable(null);
+                  }}
+                  placeholder="e.g. martinjsteven"
+                />
               </label>
+
               <div className="op-row">
-                <button className="op-btn" onClick={() => void checkHandle().catch((e) => setStatus(e?.message || String(e)))}>
-                  Check availability
+                <button
+                  className="op-btn"
+                  onClick={() => void checkHandle().catch((e) => setStatus(e?.message || String(e)))}
+                >
+                  Check name
                 </button>
-                {handleAvailable === true && <span className="op-subtle">Available</span>}
-                {handleAvailable === false && <span className="op-subtle">Taken</span>}
+                {handleAvailable === true && <span className="op-subtle">That one’s available</span>}
+                {handleAvailable === false && <span className="op-subtle">That one’s taken</span>}
               </div>
+
               <button
                 className="op-btn"
                 disabled={!handle || handleAvailable === false}
                 onClick={() => void claimCreatorHandle().catch((e) => setStatus(e?.message || String(e)))}
               >
-                Claim handle
+                Lock it in
               </button>
             </div>
           </div>
@@ -308,44 +329,109 @@ export default function OnboardingPage() {
 
         {step === "claim" && (
           <div className="op-card op-card--padded op-mt-12">
-            <h2 className="op-section-title">3) Claim your node (local URL)</h2>
+            <h1 className="op-title-lg">Next up: your node</h1>
+            <h2 className="op-section-title op-mt-10">Connect to your node (on your local network)</h2>
             <p className="op-subtle op-mt-6">
-              This step must be done on the same LAN as your node.
+              This step should be done from the same Wi‑Fi/LAN as your server.
             </p>
+            <p className="op-subtle op-mt-6">
+              You’ll paste a one-time <strong>bootstrap code</strong> from your node. This is how OpenPoster knows you
+              really have admin access to that machine.
+            </p>
+
             <div className="op-stack op-mt-12">
               <label className="op-label">
-                <div className="op-label-hint">Local URL</div>
-                <input className="op-input" value={localUrl} onChange={(e) => setLocalUrl(e.target.value)} />
+                <div className="op-label-hint">Local URL (your server on the LAN)</div>
+                <input
+                  className="op-input"
+                  value={localUrl}
+                  onChange={(e) => setLocalUrl(e.target.value)}
+                  placeholder="http://192.168.1.10:8080"
+                />
               </label>
               <label className="op-label">
-                <div className="op-label-hint">Bootstrap code (from node logs/CLI)</div>
-                <input className="op-input" value={bootstrapCode} onChange={(e) => setBootstrapCode(e.target.value)} />
+                <div className="op-label-hint">Bootstrap code</div>
+                <input
+                  className="op-input"
+                  value={bootstrapCode}
+                  onChange={(e) => setBootstrapCode(e.target.value)}
+                  placeholder="(from your node logs)"
+                />
               </label>
-              <button className="op-btn" onClick={() => void claimNodeAdmin().catch((e) => setStatus(e?.message || String(e)))}>
-                Claim node
+              <button
+                className="op-btn"
+                onClick={() => void claimNodeAdmin().catch((e) => setStatus(e?.message || String(e)))}
+              >
+                Connect my node
               </button>
-              {nodeAdminToken ? <div className="op-subtle op-text-sm">Node admin token saved for this session.</div> : null}
-              {claimedNodeId ? <div className="op-subtle op-text-sm">Node ID: {claimedNodeId}</div> : null}
+              {claimedNodeId ? <div className="op-subtle op-text-sm">Connected. Node ID: {claimedNodeId}</div> : null}
             </div>
           </div>
         )}
 
         {step === "public_url" && (
           <div className="op-card op-card--padded op-mt-12">
-            <h2 className="op-section-title">4) Attach your public URL</h2>
+            <h1 className="op-title-lg">Almost there</h1>
+            <h2 className="op-section-title op-mt-10">Add your public URL</h2>
             <p className="op-subtle op-mt-6">
-              You must verify control of the domain before the issuer will attach it.
+              This is the URL other people will use to reach your node.
             </p>
+            <p className="op-subtle op-mt-6">
+              To stop URL hijacking, OpenPoster asks you to prove you control the domain (DNS or a simple text file).
+            </p>
+
             <div className="op-stack op-mt-12">
               <label className="op-label">
                 <div className="op-label-hint">Public URL</div>
-                <input className="op-input" value={publicUrl} onChange={(e) => setPublicUrl(e.target.value)} placeholder="https://posters.example.com" />
+                <input
+                  className="op-input"
+                  value={publicUrl}
+                  onChange={(e) => {
+                    setPublicUrl(e.target.value);
+                    setClaimInfo(null);
+                  }}
+                  placeholder="https://posters.example.com"
+                />
               </label>
 
               <div className="op-row">
-                <button className="op-btn" onClick={() => void startUrlClaim().catch((e) => setStatus(e?.message || String(e)))}>
-                  Start verification
+                <button
+                  className="op-btn"
+                  onClick={() => void startUrlClaim().catch((e) => setStatus(e?.message || String(e)))}
+                >
+                  Get verification instructions
                 </button>
+              </div>
+
+              {claimInfo && !claimInfo.already_owned && (
+                <div className="op-card op-card--padded">
+                  <div className="op-subtle">Option 1 (recommended): DNS TXT</div>
+                  <div className="op-text-sm op-mt-6">
+                    Add a TXT record:
+                  </div>
+                  <div className="op-text-sm op-mt-6">
+                    Name: <code className="op-code">{claimInfo.dns?.name}</code>
+                  </div>
+                  <div className="op-text-sm op-mt-6">
+                    Value: <code className="op-code">{claimInfo.dns?.value}</code>
+                  </div>
+
+                  <div className="op-subtle op-mt-16">Option 2: upload a file</div>
+                  <div className="op-text-sm op-mt-6">
+                    Create a text file at:
+                  </div>
+                  <div className="op-text-sm op-mt-6">
+                    <code className="op-code">{claimInfo.http?.url}</code>
+                  </div>
+                  <div className="op-text-sm op-mt-6">
+                    with this exact content:
+                    {" "}
+                    <code className="op-code">{claimInfo.http?.body}</code>
+                  </div>
+                </div>
+              )}
+
+              <div className="op-row">
                 <select
                   className="op-select"
                   value={verifyMethod}
@@ -354,35 +440,24 @@ export default function OnboardingPage() {
                     setVerifyMethod(v === "http" ? "http" : "dns");
                   }}
                 >
-                  <option value="dns">DNS TXT</option>
-                  <option value="http">HTTP file</option>
+                  <option value="dns">Verify using DNS</option>
+                  <option value="http">Verify using file</option>
                 </select>
-                <button className="op-btn" onClick={() => void verifyUrlClaim().catch((e) => setStatus(e?.message || String(e)))}>
-                  Verify
+
+                <button
+                  className="op-btn"
+                  onClick={() => void verifyUrlClaim().catch((e) => setStatus(e?.message || String(e)))}
+                >
+                  Check now
                 </button>
               </div>
 
-              {claimInfo && !claimInfo.already_owned && (
-                <div className="op-card op-card--padded">
-                  <div className="op-subtle">DNS TXT</div>
-                  <div className="op-text-sm op-mt-6">
-                    Name: <code className="op-code">{claimInfo.dns?.name}</code>
-                  </div>
-                  <div className="op-text-sm op-mt-6">
-                    Value: <code className="op-code">{claimInfo.dns?.value}</code>
-                  </div>
-                  <div className="op-subtle op-mt-12">HTTP file</div>
-                  <div className="op-text-sm op-mt-6">
-                    URL: <code className="op-code">{claimInfo.http?.url}</code>
-                  </div>
-                  <div className="op-text-sm op-mt-6">
-                    Body: <code className="op-code">{claimInfo.http?.body}</code>
-                  </div>
-                </div>
-              )}
-
-              <button className="op-btn" disabled={!claimedNodeId || !publicUrl} onClick={() => void attachUrl().catch((e) => setStatus(e?.message || String(e)))}>
-                Attach public URL to node
+              <button
+                className="op-btn"
+                disabled={!claimedNodeId || !publicUrl}
+                onClick={() => void attachUrl().catch((e) => setStatus(e?.message || String(e)))}
+              >
+                Save my public URL
               </button>
             </div>
           </div>
@@ -390,15 +465,15 @@ export default function OnboardingPage() {
 
         {step === "done" && (
           <div className="op-card op-card--padded op-mt-12">
-            <h2 className="op-section-title">Done</h2>
-            <p className="op-subtle op-mt-6">You’re onboarded. Next: Upload posters.</p>
+            <h1 className="op-title-lg">You’re all set</h1>
+            <p className="op-subtle op-mt-6">Next: upload your first poster.</p>
             <div className="op-row op-mt-12">
-              <a className="op-link" href="/upload">
+              <Link className="op-link" href="/upload">
                 Go to Upload →
-              </a>
-              <a className="op-link" href="/settings">
+              </Link>
+              <Link className="op-link" href="/settings">
                 Settings →
-              </a>
+              </Link>
             </div>
           </div>
         )}
