@@ -386,6 +386,40 @@ export default function BrowsePage() {
                       >
                         VIEW
                       </Button>
+
+                      {(() => {
+                        const t = r.media.type;
+                        const tmdb = r.media.tmdb_id;
+                        if (!tmdb) return null;
+                        if (t === "show") {
+                          return (
+                            <Button
+                              component={Link}
+                              variant="text"
+                              size="small"
+                              href={`/tv/${encodeURIComponent(String(tmdb))}/boxset`}
+                              sx={{ minWidth: 0 }}
+                            >
+                              BOXSET
+                            </Button>
+                          );
+                        }
+                        if (t === "collection") {
+                          return (
+                            <Button
+                              component={Link}
+                              variant="text"
+                              size="small"
+                              href={`/movie/${encodeURIComponent(String(tmdb))}/boxset`}
+                              sx={{ minWidth: 0 }}
+                            >
+                              BOXSET
+                            </Button>
+                          );
+                        }
+                        return null;
+                      })()}
+
                       <Button
                         variant="text"
                         size="small"
