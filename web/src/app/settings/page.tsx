@@ -1,16 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
-import { clearCreatorConnection, loadCreatorConnection, saveCreatorConnection } from "@/lib/storage";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Container from "@mui/material/Container";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+
 import { ISSUER_BASE_URL } from "@/lib/issuer";
 import { clearIssuerSession, loadIssuerUser } from "@/lib/issuer_storage";
+import { clearCreatorConnection, loadCreatorConnection, saveCreatorConnection } from "@/lib/storage";
 
 export default function SettingsPage() {
   const existing = loadCreatorConnection();
   const issuerUser = loadIssuerUser();
 
-  // Node admin session (local URL + admin session token)
   const [nodeUrl, setNodeUrl] = useState(existing?.nodeUrl || "http://localhost:8081");
   const [adminToken, setAdminToken] = useState(existing?.adminToken || "");
   const [connStatus, setConnStatus] = useState<string | null>(null);
@@ -23,112 +32,105 @@ export default function SettingsPage() {
       if (!r.ok) throw new Error(`Health failed: ${r.status}`);
       setConnStatus("OK: node reachable");
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setConnStatus(`Error: ${msg}`);
+      setConnStatus(e instanceof Error ? e.message : String(e));
     }
   }
 
-
   return (
-    <div className="op-container op-container--narrow">
-      <h1 className="op-title-lg">Settings</h1>
+    <Container maxWidth="sm" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>
+            Settings
+          </Typography>
+        </Box>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Account</h2>
-        <div className="op-card op-card--padded op-mt-12">
-          <div className="op-subtle">
-            Issuer: <code className="op-code">{ISSUER_BASE_URL}</code>
-          </div>
-          <div className="op-mt-10">
+        <Paper sx={{ p: 3 }}>
+          <Stack spacing={1.25}>
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              Account
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Issuer: <code>{ISSUER_BASE_URL}</code>
+            </Typography>
+
             {issuerUser ? (
-              <>
-                <div className="op-subtle">
-                  Logged in as <code className="op-code">{issuerUser.email}</code>
-                </div>
-                <div className="op-mt-12">
-                  <button
-                    className="op-btn"
-                    onClick={() => {
-                      clearIssuerSession();
-                      window.location.href = "/onboarding";
-                    }}
-                  >
-                    Log out
-                  </button>
-                </div>
-              </>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+                <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                  Logged in as <strong>{issuerUser.email}</strong>
+                </Typography>
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    clearIssuerSession();
+                    window.location.href = "/onboarding";
+                  }}
+                >
+                  Log out
+                </Button>
+              </Stack>
             ) : (
-              <div className="op-subtle">
-                Not logged in. Go to <a className="op-link" href="/onboarding">Onboarding</a>.
-              </div>
+              <Alert severity="info">
+                Not logged in. Go to <Link href="/onboarding">Onboarding</Link>.
+              </Alert>
             )}
-          </div>
-        </div>
-      </section>
+          </Stack>
+        </Paper>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Node admin session</h2>
-        <p className="op-subtle op-mt-6">
-          Used for uploading and managing posters on your node. The recommended way to set this up is via{" "}
-          <a className="op-link" href="/onboarding">Onboarding</a>.
-        </p>
+        <Paper sx={{ p: 3 }}>
+          <Stack spacing={1.5}>
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              Node admin session
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Used for uploading and managing posters on your node. The recommended way to set this up is via{" "}
+              <Link href="/onboarding">Onboarding</Link>.
+            </Typography>
 
-        <div className="op-section op-stack">
-          <label className="op-label">
-            <div className="op-label-hint">Local URL</div>
-            <input
-              className="op-input"
+            <TextField
+              label="Local URL"
               value={nodeUrl}
               onChange={(e) => setNodeUrl(e.target.value)}
               placeholder="http://192.168.1.10:8080"
             />
-          </label>
 
-          <label className="op-label">
-            <div className="op-label-hint">Node admin token</div>
-            <input
-              className="op-input"
+            <TextField
+              label="Node admin token"
               value={adminToken}
               onChange={(e) => setAdminToken(e.target.value)}
-              placeholder="(created by onboarding / bootstrap claim)"
+              placeholder="(created during onboarding)"
               type="password"
             />
-          </label>
 
-          <div className="op-row">
-            <button
-              className="op-btn"
-              onClick={() => {
-                saveCreatorConnection({
-                  nodeUrl: nodeUrl.replace(/\/+$/, ""),
-                  adminToken,
-                });
-                setConnStatus("Saved.");
-              }}
-            >
-              Save
-            </button>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+              <Button
+                onClick={() => {
+                  saveCreatorConnection({ nodeUrl: nodeUrl.replace(/\/+$/, ""), adminToken });
+                  setConnStatus("Saved.");
+                }}
+              >
+                Save
+              </Button>
+              <Button variant="outlined" onClick={() => void testConnection()}>
+                Test
+              </Button>
+              <Button
+                color="error"
+                variant="outlined"
+                onClick={() => {
+                  clearCreatorConnection();
+                  setAdminToken("");
+                  setConnStatus("Disconnected.");
+                }}
+              >
+                Disconnect
+              </Button>
+            </Stack>
 
-            <button className="op-btn" onClick={() => void testConnection()}>
-              Test
-            </button>
-
-            <button
-              className="op-btn"
-              onClick={() => {
-                clearCreatorConnection();
-                setAdminToken("");
-                setConnStatus("Cleared.");
-              }}
-            >
-              Disconnect
-            </button>
-          </div>
-
-          {connStatus && <div className="op-card op-card--padded op-mt-6">{connStatus}</div>}
-        </div>
-      </section>
-
-    </div>
+            {connStatus && <Alert severity={connStatus.startsWith("OK") ? "success" : "info"}>{connStatus}</Alert>}
+          </Stack>
+        </Paper>
+      </Stack>
+    </Container>
   );
 }
