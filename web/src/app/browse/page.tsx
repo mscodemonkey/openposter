@@ -380,10 +380,10 @@ export default function BrowsePage() {
                     </CardContent>
 
                     <CardActions sx={{ mt: "auto" }}>
-                      <Button size="small" href={r.assets.full.url} target="_blank" rel="noreferrer">
+                      <Button variant="text" size="small" href={r.assets.full.url} target="_blank" rel="noreferrer">
                         View
                       </Button>
-                      <Button size="small" href={r.creator.home_node} target="_blank" rel="noreferrer">
+                      <Button variant="text" size="small" href={r.creator.home_node} target="_blank" rel="noreferrer">
                         Node
                       </Button>
                     </CardActions>
