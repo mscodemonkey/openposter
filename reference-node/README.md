@@ -31,7 +31,21 @@ The reference node can import `seed.json` on first run.
 
 ## Uploading posters (beta helper)
 
-If you set `OPENPOSTER_ADMIN_TOKEN`, you can upload posters using the admin API.
+### Recommended: bootstrap admin sessions
+
+The node now supports a "bootstrap claim" flow for admin access:
+- Your node generates a bootstrap code on first run and stores it at: `/data/bootstrap_code.txt`
+- You exchange that bootstrap code for a long-lived admin session token:
+  - `POST /v1/admin/claim`
+- You can revoke all admin sessions and rotate the bootstrap code:
+  - `POST /v1/admin/sessions/revoke_all`
+  - `POST /v1/admin/bootstrap/rotate`
+
+The Web UI uses this during **Onboarding**.
+
+### Legacy (dev/backwards compat): OPENPOSTER_ADMIN_TOKEN
+
+If you set `OPENPOSTER_ADMIN_TOKEN`, you can still upload posters using the admin API.
 
 A small helper script is included:
 
@@ -83,5 +97,5 @@ The container uses `/data` for persistence:
 
 ## Notes
 
-- This reference node currently supports read-only protocol endpoints.
-- Upload/admin endpoints will be added separately.
+- The reference node includes minimal admin/upload endpoints for beta testing.
+- Stable node identity: `GET /v1/node` exposes a UUID `node_id` (persisted to `/data/node_uuid.txt`).

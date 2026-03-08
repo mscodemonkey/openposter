@@ -5,6 +5,7 @@ This service crawls OpenPoster nodes and maintains a local SQLite index for brow
 ## What it does
 
 - Discovers nodes from configured seed nodes and their `/v1/nodes` lists
+- (Upcoming) can also seed from the Issuer directory list (`issuer /v1/nodes`) when configured
 - Crawls each node’s `/v1/changes?since=...`
 - Fetches poster entries from `/v1/posters/{poster_id}`
 - Verifies poster signatures using the node descriptor `/.well-known/openposter-node`
