@@ -1,12 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
+
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Container from "@mui/material/Container";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 
 import { loadCreatorConnection } from "@/lib/storage";
 
 export default function UploadPage() {
   const conn = loadCreatorConnection();
-
   const baseUrl = useMemo(() => conn?.nodeUrl?.replace(/\/+$/, "") || "", [conn]);
 
   const [tmdbId, setTmdbId] = useState("2316");
@@ -29,7 +38,7 @@ export default function UploadPage() {
 
   async function upload() {
     if (!conn) {
-      setStatus("Not connected. Go to /connect first.");
+      setStatus("Not connected. Go to Settings first.");
       return;
     }
     if (!previewFile || !fullFile) {
@@ -70,135 +79,133 @@ export default function UploadPage() {
     setStatus("Uploaded. Redirecting to My library...");
     setTimeout(() => {
       window.location.href = "/library?check=1";
-    }, 400);
+    }, 500);
   }
 
   return (
-    <div className="op-container op-container--narrow">
-      <h1 className="op-title-lg">Upload poster</h1>
-      <p className="op-subtle op-mt-6">
-        Uploads to your connected node’s <code className="op-code">/v1/admin/posters</code> endpoint.
-      </p>
-      <p className="op-subtle op-mt-8">
-        After upload, you’ll be redirected to <a className="op-link" href="/library">My library</a>.
-      </p>
+    <Container maxWidth="sm" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>
+            Upload poster
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Uploads to your connected node’s <code>/v1/admin/posters</code> endpoint.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            After upload you’ll be redirected to <Link href="/library">My library</Link>.
+          </Typography>
+        </Box>
 
-      {!conn ? (
-        <div className="op-card op-card--padded op-mt-16">
-          Not connected. Go to <a className="op-link" href="/connect">/connect</a> first.
-        </div>
-      ) : (
-        <div className="op-card op-card--padded op-mt-16">
-          Connected node: <code className="op-code">{baseUrl}</code>
-        </div>
-      )}
-
-      <div className="op-section op-stack">
-        <div className="op-form-grid-2">
-          <label className="op-label">
-            <div className="op-label-hint">TMDB id</div>
-            <input className="op-input" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} />
-          </label>
-          <label className="op-label">
-            <div className="op-label-hint">Media type</div>
-            <select className="op-select" value={mediaType} onChange={(e) => setMediaType(e.target.value)}>
-              {["movie", "show", "season", "episode", "collection"].map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="op-form-grid-2">
-          <label className="op-label">
-            <div className="op-label-hint">Show TMDB id (for season/episode)</div>
-            <input className="op-input" value={showTmdbId} onChange={(e) => setShowTmdbId(e.target.value)} placeholder="required for season/episode" />
-          </label>
-          <div className="op-form-grid-2">
-            <label className="op-label">
-              <div className="op-label-hint">Season #</div>
-              <input className="op-input" value={seasonNumber} onChange={(e) => setSeasonNumber(e.target.value)} placeholder="optional" />
-            </label>
-            <label className="op-label">
-              <div className="op-label-hint">Episode #</div>
-              <input className="op-input" value={episodeNumber} onChange={(e) => setEpisodeNumber(e.target.value)} placeholder="optional" />
-            </label>
-          </div>
-        </div>
-
-        <div className="op-form-grid-title-year">
-          <label className="op-label">
-            <div className="op-label-hint">Title</div>
-            <input className="op-input" value={title} onChange={(e) => setTitle(e.target.value)} />
-          </label>
-          <label className="op-label">
-            <div className="op-label-hint">Year</div>
-            <input className="op-input" value={year} onChange={(e) => setYear(e.target.value)} />
-          </label>
-        </div>
-
-        <div className="op-form-grid-2">
-          <label className="op-label">
-            <div className="op-label-hint">Creator id</div>
-            <input className="op-input" value={creatorId} onChange={(e) => setCreatorId(e.target.value)} />
-          </label>
-          <label className="op-label">
-            <div className="op-label-hint">Creator name</div>
-            <input className="op-input" value={creatorName} onChange={(e) => setCreatorName(e.target.value)} />
-          </label>
-        </div>
-
-        <div className="op-form-grid-2">
-          <label className="op-label">
-            <div className="op-label-hint">Redistribution</div>
-            <select className="op-select" value={redistribution} onChange={(e) => setRedistribution(e.target.value)}>
-              {["public-cache-ok", "mirrors-approved", "none"].map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="op-label">
-            <div className="op-label-hint">License</div>
-            <input className="op-input" value={license} onChange={(e) => setLicense(e.target.value)} />
-          </label>
-        </div>
-
-        <label className="op-label">
-          <div className="op-label-hint">Related links (JSON array, optional)</div>
-          <textarea
-            className="op-input"
-            value={linksJson}
-            onChange={(e) => setLinksJson(e.target.value)}
-            placeholder='e.g. [{"rel":"related","href":"/p/<other_poster_id>","title":"Related artwork"}]'
-            rows={3}
-          />
-          <div className="op-subtle op-text-sm op-mt-6">
-            Links are stored with the poster metadata.
-          </div>
-        </label>
-
-        <label className="op-label">
-          <div className="op-label-hint">Preview file (jpg/png)</div>
-          <input type="file" accept="image/jpeg,image/png" onChange={(e) => setPreviewFile(e.target.files?.[0] || null)} />
-        </label>
-
-        <label className="op-label">
-          <div className="op-label-hint">Full file (jpg/png)</div>
-          <input type="file" accept="image/jpeg,image/png" onChange={(e) => setFullFile(e.target.files?.[0] || null)} />
-        </label>
-
-        <button className="op-btn" onClick={() => void upload()}>
-          Upload
-        </button>
-
-        {status && (
-          <pre className="op-card op-card--padded op-pre op-mt-8">{status}</pre>
+        {!conn ? (
+          <Alert severity="warning">
+            Not connected. Go to <Link href="/settings">Settings</Link> first.
+          </Alert>
+        ) : (
+          <Alert severity="success">
+            Connected node: <code>{baseUrl}</code>
+          </Alert>
         )}
-      </div>
-    </div>
+
+        <Paper sx={{ p: 3 }}>
+          <Stack spacing={2}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField label="TMDB id" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} fullWidth />
+              <TextField
+                select
+                label="Media type"
+                value={mediaType}
+                onChange={(e) => setMediaType(e.target.value)}
+                SelectProps={{ native: true }}
+                sx={{ minWidth: 200 }}
+              >
+                {(["movie", "show", "season", "episode", "collection"] as const).map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </TextField>
+            </Stack>
+
+            <TextField
+              label="Show TMDB id (for season/episode)"
+              value={showTmdbId}
+              onChange={(e) => setShowTmdbId(e.target.value)}
+              placeholder="required for season/episode"
+            />
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField label="Season #" value={seasonNumber} onChange={(e) => setSeasonNumber(e.target.value)} fullWidth />
+              <TextField label="Episode #" value={episodeNumber} onChange={(e) => setEpisodeNumber(e.target.value)} fullWidth />
+            </Stack>
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
+              <TextField label="Year" value={year} onChange={(e) => setYear(e.target.value)} sx={{ minWidth: 140 }} />
+            </Stack>
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField label="Creator id" value={creatorId} onChange={(e) => setCreatorId(e.target.value)} fullWidth />
+              <TextField label="Creator name" value={creatorName} onChange={(e) => setCreatorName(e.target.value)} fullWidth />
+            </Stack>
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                select
+                label="Redistribution"
+                value={redistribution}
+                onChange={(e) => setRedistribution(e.target.value)}
+                SelectProps={{ native: true }}
+                sx={{ minWidth: 220 }}
+              >
+                {(["public-cache-ok", "mirrors-approved", "none"] as const).map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </TextField>
+              <TextField label="License" value={license} onChange={(e) => setLicense(e.target.value)} fullWidth />
+            </Stack>
+
+            <TextField
+              label="Related links (JSON array, optional)"
+              value={linksJson}
+              onChange={(e) => setLinksJson(e.target.value)}
+              placeholder='e.g. [{"rel":"related","href":"/p/<other_poster_id>","title":"Related artwork"}]'
+              multiline
+              minRows={3}
+            />
+
+            <Stack spacing={1}>
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 700 }}>
+                Preview file (jpg/png)
+              </Typography>
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                onChange={(e) => setPreviewFile(e.target.files?.[0] || null)}
+              />
+            </Stack>
+
+            <Stack spacing={1}>
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 700 }}>
+                Full file (jpg/png)
+              </Typography>
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                onChange={(e) => setFullFile(e.target.files?.[0] || null)}
+              />
+            </Stack>
+
+            <Button disabled={!conn} onClick={() => void upload()}>
+              Upload
+            </Button>
+
+            {status && <Alert severity={status.startsWith("Upload failed") ? "error" : "info"}>{status}</Alert>}
+          </Stack>
+        </Paper>
+      </Stack>
+    </Container>
   );
 }

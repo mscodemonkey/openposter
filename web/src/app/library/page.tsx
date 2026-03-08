@@ -1,6 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardActions from "@mui/material/CardActions";
+import CardContent from "@mui/material/CardContent";
+import CardMedia from "@mui/material/CardMedia";
+import Container from "@mui/material/Container";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Grid from "@mui/material/GridLegacy";
 
 import { INDEXER_BASE_URL } from "@/lib/config";
 import { loadCreatorConnection } from "@/lib/storage";
@@ -37,12 +51,10 @@ export default function LibraryPage() {
     setLoadingMore(true);
     setError(null);
     try {
-      const r = await fetch(
-        baseUrl + "/v1/posters?limit=50&cursor=" + encodeURIComponent(nextCursor)
-      );
+      const r = await fetch(baseUrl + "/v1/posters?limit=50&cursor=" + encodeURIComponent(nextCursor));
       if (!r.ok) throw new Error(`list failed: ${r.status}`);
       const json = (await r.json()) as SearchResponse;
-      setItems((prev) => ([...(prev || []), ...json.results]));
+      setItems((prev) => [...(prev || []), ...json.results]);
       setNextCursor(json.next_cursor);
 
       if (autoCheck && json.results.length > 0) {
@@ -59,6 +71,7 @@ export default function LibraryPage() {
       return;
     }
     setIndexed((m) => ({ ...m, [p.poster_id]: "checking" }));
+
     const url = new URL(INDEXER_BASE_URL.replace(/\/+$/, "") + "/v1/search");
     url.searchParams.set("tmdb_id", String(p.media.tmdb_id));
     if (p.media.type) url.searchParams.set("type", p.media.type);
@@ -114,7 +127,8 @@ export default function LibraryPage() {
       setAutoCheck(false);
     }
 
-    void loadFirstPage().catch((e) => setError(e?.message || String(e)));
+    void loadFirstPage().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -125,102 +139,113 @@ export default function LibraryPage() {
   }, [autoCheck, items]);
 
   return (
-    <div className="op-container">
-      <h1 className="op-title-lg">My library</h1>
-      <p className="op-subtle op-mt-6">
-        Lists posters from your connected node via <code className="op-code">/v1/posters</code>.
-      </p>
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>
+            My library
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Lists posters from your connected node via <code>/v1/posters</code>.
+          </Typography>
+        </Box>
 
-      {!conn ? (
-        <div className="op-card op-card--padded op-mt-16">
-          Not connected. Go to <a className="op-link" href="/connect">/connect</a> first.
-        </div>
-      ) : (
-        <div className="op-card op-card--padded op-mt-16">
-          Connected node: <code className="op-code">{baseUrl}</code>
-        </div>
-      )}
+        {!conn ? (
+          <Alert severity="warning">
+            Not connected. Go to <Link href="/settings">Settings</Link> first.
+          </Alert>
+        ) : (
+          <Alert severity="success">
+            Connected node: <code>{baseUrl}</code>
+          </Alert>
+        )}
 
-      {error && <div className="op-alert op-alert--error">{error}</div>}
+        {error && <Alert severity="error">{error}</Alert>}
 
-      <div className="op-section">
         {items === null ? (
-          <p className="op-subtle">Loading…</p>
+          <Typography color="text.secondary">Loading…</Typography>
         ) : items.length === 0 ? (
-          <p className="op-subtle">No posters found.</p>
+          <Typography color="text.secondary">No posters found.</Typography>
         ) : (
           <>
-            <div className="op-row op-mt-10">
-              <button
-                className="op-btn op-btn--sm"
-                onClick={() => void checkAllIndexed(items).catch((e) => setError(e?.message || String(e)))}
-                title="Checks indexer status for all currently loaded posters"
-              >
-                Check all indexed
-              </button>
-              <div className="op-subtle op-text-sm">
-                Indexer: <code className="op-code">{INDEXER_BASE_URL}</code>
-              </div>
-            </div>
+            <Paper sx={{ p: 2 }}>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" alignItems={{ sm: "center" }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => void checkAllIndexed(items).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
+                >
+                  Check all indexed
+                </Button>
+                <Typography variant="body2" color="text.secondary">
+                  Indexer: <code>{INDEXER_BASE_URL}</code>
+                </Typography>
+              </Stack>
+            </Paper>
 
-            <div className="op-grid op-grid--posters">
+            <Grid container spacing={2}>
               {items.map((p) => (
-                <div key={p.poster_id} className="op-card">
-                  <a className="op-link" href={`/p/${encodeURIComponent(p.poster_id)}`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img className="op-img" src={p.assets.preview.url} alt={p.media.title || p.poster_id} />
-                  </a>
-                  <div className="op-poster-meta">
-                    <div className="op-poster-title">{p.media.title || "(untitled)"}</div>
-                    <div className="op-subtle op-text-sm">
-                      {p.media.type} · TMDB {p.media.tmdb_id}
-                    </div>
-
-                    <div className="op-row op-row--between op-mt-8">
-                      <a className="op-link op-text-sm" href={p.assets.full.url} target="_blank" rel="noreferrer">
+                <Grid key={p.poster_id} item xs={12} sm={6} md={4} lg={3}>
+                  <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <Link href={`/p/${encodeURIComponent(p.poster_id)}`} style={{ textDecoration: "none" }}>
+                      <CardMedia
+                        component="img"
+                        height={360}
+                        image={p.assets.preview.url}
+                        alt={p.media.title || p.poster_id}
+                        sx={{ objectFit: "cover" }}
+                      />
+                    </Link>
+                    <CardContent sx={{ flex: 1 }}>
+                      <Typography sx={{ fontWeight: 800 }} noWrap>
+                        {p.media.title || "(untitled)"}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {p.media.type} · TMDB {p.media.tmdb_id}
+                      </Typography>
+                    </CardContent>
+                    <CardActions sx={{ display: "flex", justifyContent: "space-between" }}>
+                      <Button size="small" variant="text" href={p.assets.full.url} target="_blank" rel="noreferrer">
                         Download
-                      </a>
+                      </Button>
 
-                      <button
-                        className="op-btn op-btn--sm"
-                        onClick={() => void checkIndexed(p).catch((e) => setError(e?.message || String(e)))}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => void checkIndexed(p).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
                         disabled={indexed[p.poster_id] === "checking"}
-                        title={`Checks ${INDEXER_BASE_URL}/v1/search for this TMDB id/type`}
                       >
                         {indexed[p.poster_id] === "checking"
                           ? "Checking…"
                           : indexed[p.poster_id]
-                            ? `Indexed: ${indexed[p.poster_id]}`
-                            : "Check indexed"}
-                      </button>
+                          ? `Indexed: ${indexed[p.poster_id]}`
+                          : "Check indexed"}
+                      </Button>
 
                       {conn && (
-                        <button className="op-btn op-btn--sm" onClick={() => void del(p.poster_id)}>
+                        <Button color="error" size="small" variant="outlined" onClick={() => void del(p.poster_id)}>
                           Delete
-                        </button>
+                        </Button>
                       )}
-                    </div>
-                  </div>
-                </div>
+                    </CardActions>
+                  </Card>
+                </Grid>
               ))}
-            </div>
+            </Grid>
 
-            <div className="op-mt-16">
+            <Box sx={{ pt: 1 }}>
               {nextCursor ? (
-                <button
-                  className="op-btn"
-                  onClick={() => void loadMore().catch((e) => setError(e?.message || String(e)))}
-                  disabled={loadingMore}
-                >
+                <Button variant="outlined" onClick={() => void loadMore().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))} disabled={loadingMore}>
                   {loadingMore ? "Loading…" : "Load more"}
-                </button>
+                </Button>
               ) : (
-                <div className="op-faint op-text-sm">End of list.</div>
+                <Typography variant="body2" color="text.secondary">
+                  End of list.
+                </Typography>
               )}
-            </div>
+            </Box>
           </>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Container>
   );
 }
