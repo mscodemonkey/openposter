@@ -4,11 +4,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
+import CardActions from "@mui/material/CardActions";
 import CardContent from "@mui/material/CardContent";
 import CardMedia from "@mui/material/CardMedia";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
-import Grid from "@mui/material/GridLegacy";
+
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 
 import type { PosterEntry } from "@/lib/types";
 
@@ -20,16 +27,10 @@ export type RelatedArtworkSectionProps = {
   title?: string;
 };
 
-function typeLabel(p: PosterEntry): string {
-  if (p.media.type === "show") return "TV Show Box Set";
-  if (p.media.type === "collection") return "Movie Box Set";
-  return "Poster";
-}
-
-function targetHref(p: PosterEntry): string {
+function boxSetHref(p: PosterEntry): string | null {
   if (p.media.type === "show" && p.media.tmdb_id) return `/tv/${encodeURIComponent(String(p.media.tmdb_id))}/boxset`;
   if (p.media.type === "collection" && p.media.tmdb_id) return `/movie/${encodeURIComponent(String(p.media.tmdb_id))}/boxset`;
-  return `/p/${encodeURIComponent(p.poster_id)}`;
+  return null;
 }
 
 export default function RelatedArtworkSection({
@@ -39,6 +40,9 @@ export default function RelatedArtworkSection({
   title = "Related artwork",
 }: RelatedArtworkSectionProps) {
   const [items, setItems] = useState<PosterEntry[] | null>(null);
+
+  const [nodeMenuAnchor, setNodeMenuAnchor] = useState<null | HTMLElement>(null);
+  const [nodeMenuUrl, setNodeMenuUrl] = useState<string | null>(null);
 
   const filteredLinks = useMemo(() => {
     if (!links || links.length === 0) return [];
@@ -80,33 +84,108 @@ export default function RelatedArtworkSection({
       <Box sx={{ mt: 1.5 }}>
         <Grid container spacing={2}>
           {items.map((p) => {
-            const href = targetHref(p);
+            const bsHref = boxSetHref(p);
+            const isBoxset = !!bsHref;
+
             return (
-              <Grid key={p.poster_id} item xs={12} sm={6} md={4} lg={3}>
-                <Card variant="outlined" sx={{ border: 0, bgcolor: "transparent" }}>
-                  <Link href={href} style={{ textDecoration: "none" }}>
-                    <CardMedia
-                      component="img"
-                      height={320}
-                      image={p.assets.preview.url}
-                      alt={p.media.title || p.poster_id}
-                      sx={{ objectFit: "cover", borderRadius: 1 }}
-                    />
-                  </Link>
-                  <CardContent sx={{ px: 0 }}>
+              <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+                <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                  <CardMedia
+                    component="img"
+                    image={p.assets.preview.url}
+                    alt={p.media.title || p.poster_id}
+                    sx={{ aspectRatio: "2 / 3", objectFit: "contain" }}
+                  />
+
+                  <CardContent sx={{ flexGrow: 1 }}>
                     <Typography sx={{ fontWeight: 800 }} noWrap>
                       {p.media.title || "(untitled)"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" noWrap>
-                      {typeLabel(p)}
+                      <Link href={`/creator/${encodeURIComponent(p.creator.creator_id)}`} style={{ color: "inherit" }}>
+                        {p.creator.display_name}
+                      </Link>
                     </Typography>
                   </CardContent>
+
+                  <CardActions sx={{ px: 2, justifyContent: "space-between" }}>
+                    <Box>
+                      {isBoxset ? (
+                        <Button
+                          component={Link}
+                          variant="text"
+                          size="small"
+                          href={`/p/${encodeURIComponent(p.poster_id)}`}
+                          sx={{ pl: 0, minWidth: 0 }}
+                        >
+                          POSTER
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="text"
+                          size="small"
+                          href={p.assets.full.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          sx={{ pl: 0, minWidth: 0 }}
+                        >
+                          VIEW
+                        </Button>
+                      )}
+
+                      {isBoxset && (
+                        <Button
+                          component={Link}
+                          variant="text"
+                          size="small"
+                          href={bsHref}
+                          sx={{ minWidth: 0 }}
+                        >
+                          BOX SET
+                        </Button>
+                      )}
+                    </Box>
+
+                    <IconButton
+                      aria-label="More"
+                      size="small"
+                      onClick={(e) => {
+                        setNodeMenuAnchor(e.currentTarget);
+                        setNodeMenuUrl(p.creator.home_node);
+                      }}
+                    >
+                      <MoreVertIcon fontSize="small" />
+                    </IconButton>
+                  </CardActions>
                 </Card>
               </Grid>
             );
           })}
         </Grid>
       </Box>
+
+      <Menu
+        open={Boolean(nodeMenuAnchor)}
+        anchorEl={nodeMenuAnchor}
+        onClose={() => {
+          setNodeMenuAnchor(null);
+          setNodeMenuUrl(null);
+        }}
+      >
+        <MenuItem
+          component="a"
+          href={nodeMenuUrl || undefined}
+          target="_blank"
+          rel="noreferrer"
+          disabled={!nodeMenuUrl}
+          onClick={() => {
+            setNodeMenuAnchor(null);
+            setNodeMenuUrl(null);
+          }}
+        >
+          Node
+        </MenuItem>
+      </Menu>
     </Box>
   );
 }
