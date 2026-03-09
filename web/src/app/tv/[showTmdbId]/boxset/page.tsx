@@ -2,6 +2,24 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 
+import Link from "next/link";
+
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardActions from "@mui/material/CardActions";
+import CardContent from "@mui/material/CardContent";
+import CardMedia from "@mui/material/CardMedia";
+import Container from "@mui/material/Container";
+import Grid from "@mui/material/Grid";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+
 import { INDEXER_BASE_URL } from "@/lib/config";
 import RelatedArtworkSection from "@/components/RelatedArtworkSection";
 import type { PosterEntry } from "@/lib/types";
@@ -17,67 +35,90 @@ type TvBoxsetResponse = {
   episodes_by_season: Record<string, PosterEntry[]>;
 };
 
-function PosterGridStatic({ items }: { items: PosterImg[] }) {
+function PosterCard({
+  image,
+  title,
+  subtitle,
+  actions,
+}: {
+  image: { url: string; alt: string };
+  title: string;
+  subtitle?: React.ReactNode;
+  actions?: React.ReactNode;
+}) {
   return (
-    <div className="op-grid op-grid--posters op-mt-10">
-      {items.map((p) => (
-        <div key={p.src} className="op-card">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="op-img" src={p.src} alt={p.title} />
-        </div>
-      ))}
-    </div>
+    <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <CardMedia
+        component="img"
+        image={image.url}
+        alt={image.alt}
+        sx={{ aspectRatio: "2 / 3", objectFit: "contain" }}
+      />
+      <CardContent sx={{ flexGrow: 1 }}>
+        <Typography sx={{ fontWeight: 800 }} noWrap>
+          {title}
+        </Typography>
+        {subtitle ? (
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {subtitle}
+          </Typography>
+        ) : null}
+      </CardContent>
+      {actions ? <CardActions sx={{ px: 2, justifyContent: "space-between" }}>{actions}</CardActions> : null}
+    </Card>
   );
 }
 
-function PosterGridIndexed({ items }: { items: PosterEntry[] }) {
+function PosterGrid({ items }: { items: PosterEntry[] }) {
   return (
-    <div className="op-grid op-grid--posters op-mt-10">
+    <Grid container spacing={2}>
       {items.map((p) => (
-        <div key={p.poster_id} className="op-card">
-          <a className="op-link" href={`/p/${encodeURIComponent(p.poster_id)}`}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="op-img" src={p.assets.preview.url} alt={p.media.title || p.poster_id} />
-          </a>
-        </div>
+        <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+          <PosterCard
+            image={{ url: p.assets.preview.url, alt: p.media.title || p.poster_id }}
+            title={p.media.title || "(untitled)"}
+            subtitle={p.creator.display_name}
+            actions={
+              <Box>
+                <Button
+                  component={Link}
+                  variant="text"
+                  size="small"
+                  href={`/p/${encodeURIComponent(p.poster_id)}`}
+                  sx={{ pl: 0, minWidth: 0 }}
+                >
+                  DETAILS
+                </Button>
+              </Box>
+            }
+          />
+        </Grid>
       ))}
-    </div>
+    </Grid>
   );
 }
 
-function relatedTypeLabel(p: PosterEntry): string {
-  if (p.media.type === "show") return "TV Show Box Set";
-  if (p.media.type === "collection") return "Movie Box Set";
-  return "Poster";
-}
-
-function relatedTargetHref(p: PosterEntry): string {
-  if (p.media.type === "show" && p.media.tmdb_id) return `/tv/${encodeURIComponent(String(p.media.tmdb_id))}/boxset`;
-  if (p.media.type === "collection" && p.media.tmdb_id) return `/movie/${encodeURIComponent(String(p.media.tmdb_id))}/boxset`;
-  return `/p/${encodeURIComponent(p.poster_id)}`;
-}
-
-function RelatedArtworkGrid({ items }: { items: PosterEntry[] }) {
+function EpisodeGrid({ items }: { items: PosterEntry[] }) {
   return (
-    <div className="op-grid op-grid--posters op-mt-10">
-      {items.map((p) => {
-        const href = relatedTargetHref(p);
-        return (
-          <div key={p.poster_id} className="op-card">
-            <a className="op-link" href={href}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="op-img" src={p.assets.preview.url} alt={p.media.title || p.poster_id} />
-            </a>
-            <div className="op-poster-meta">
-              <a className="op-link" href={href}>
-                <div className="op-poster-title">{p.media.title || "(untitled)"}</div>
-                <div className="op-subtle op-text-sm">{relatedTypeLabel(p)}</div>
-              </a>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <Grid container spacing={2}>
+      {items.map((p) => (
+        <Grid key={p.poster_id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+          <Card>
+            <CardMedia
+              component="img"
+              image={p.assets.preview.url}
+              alt={p.media.title || p.poster_id}
+              sx={{ height: 120, width: "100%", objectFit: "contain" }}
+            />
+            <CardContent sx={{ py: 1.5 }}>
+              <Typography sx={{ fontWeight: 800 }} noWrap>
+                {p.media.title || "(untitled)"}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      ))}
+    </Grid>
   );
 }
 
@@ -118,7 +159,6 @@ function TedBoxSetDemo() {
   ];
 
   const latestSeason = Math.max(...seasonGroups.map((s) => s.season));
-  // Latest season expanded by default
   const [expandedSeasons, setExpandedSeasons] = useState<Record<number, boolean>>(() => {
     const m: Record<number, boolean> = {};
     for (const s of seasonGroups) m[s.season] = s.season === latestSeason;
@@ -128,150 +168,125 @@ function TedBoxSetDemo() {
   const sortedSeasonGroups = [...seasonGroups].sort((a, b) => b.season - a.season);
 
   return (
-    <div className="op-page">
-      <div className="op-page-bg" style={{ backgroundImage: `url(${main[0]?.src})` }} />
-      <div className="op-page-content">
-        <div className="op-row op-row--between">
-        <div>
-          <h1 className="op-title-lg">ted</h1>
-          <div className="op-subtle op-mt-6 op-title-meta">
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>
+            ted
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             TV SHOW | 2024 | willtong93
-          </div>
-        </div>
-      </div>
+          </Typography>
+        </Box>
 
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Main show poster
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            <Grid container spacing={2}>
+              {main.map((p) => (
+                <Grid key={p.src} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+                  <Card>
+                    <CardMedia component="img" image={p.src} alt={p.title} sx={{ aspectRatio: "2 / 3", objectFit: "contain" }} />
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+        </Box>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Main show poster</h2>
-        <PosterGridStatic items={main} />
-      </section>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Season posters
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            <Grid container spacing={2}>
+              {seasons.map((p) => (
+                <Grid key={p.src} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+                  <Card>
+                    <CardMedia component="img" image={p.src} alt={p.title} sx={{ aspectRatio: "2 / 3", objectFit: "contain" }} />
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+        </Box>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Season posters</h2>
-        <PosterGridStatic items={seasons} />
-      </section>
-
-      <section className="op-section">
-        <h2 className="op-section-title">Episode cards</h2>
-
-        {sortedSeasonGroups.map((sg) => {
-          const expanded = !!expandedSeasons[sg.season];
-          return (
-            <div key={sg.season} className="op-section">
-              <button
-                type="button"
-                className="op-row"
-                style={{
-                  gap: 10,
-                  width: "100%",
-                  padding: 0,
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
-                onClick={() =>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Episode cards
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            {sortedSeasonGroups.map((sg) => (
+              <Accordion
+                key={sg.season}
+                expanded={!!expandedSeasons[sg.season]}
+                onChange={(_, expanded) =>
                   setExpandedSeasons((prev) => ({
                     ...prev,
-                    [sg.season]: !prev[sg.season],
+                    [sg.season]: expanded,
                   }))
                 }
               >
-                <span style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
-                  {expanded ? "▼" : "▶︎"}
-                </span>
-                <h3 className="op-section-title" style={{ margin: 0 }}>
-                  Season {sg.season}
-                </h3>
-              </button>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography sx={{ fontWeight: 800 }}>Season {sg.season}</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Grid container spacing={2}>
+                    {sg.episodes.map((e) => (
+                      <Grid key={e.src} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                        <Card>
+                          <CardMedia
+                            component="img"
+                            image={e.src}
+                            alt={e.title}
+                            sx={{ height: 120, width: "100%", objectFit: "contain" }}
+                          />
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </AccordionDetails>
+              </Accordion>
+            ))}
+          </Box>
+        </Box>
 
-              {expanded && (
-                <div className="op-grid op-grid--episode-cards op-mt-10">
-                  {sg.episodes.map((e) => (
-                    <div key={e.src} className="op-card" style={{ justifySelf: "start" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        className="op-img"
-                        src={e.src}
-                        alt={e.title}
-                        style={{ height: 100, width: "auto", objectFit: "contain" }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      <section className="op-section">
-        <h2 className="op-section-title">Related artwork</h2>
-        <div className="op-grid op-grid--posters op-mt-10">
-          <div className="op-card">
-            <a className="op-link" href="/movie/1703/boxset">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                className="op-img"
-                src="/demo/ted-movie-boxset/d7ee7c6c-89cc-46b7-95ba-0c276fd78a7d.jpg"
-                alt="ted collection"
-              />
-            </a>
-            <div className="op-poster-meta">
-              <a className="op-link" href="/movie/1703/boxset">
-                <div className="op-poster-title">ted collection</div>
-                <div className="op-subtle op-text-sm">Movie Box Set</div>
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
-      </section>
-      </div>
-    </div>
-  );
-}
-
-function RelatedArtworkFromLinks({
-  base,
-  links,
-}: {
-  base: string;
-  links: PosterEntry["links"];
-}) {
-  const [items, setItems] = useState<PosterEntry[] | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      if (!links || links.length === 0) {
-        setItems([]);
-        return;
-      }
-
-      const posterLinks = links.filter(
-        (l) => l.rel === "related" && typeof l.href === "string" && l.href.startsWith("/p/"),
-      );
-      const posterIds = posterLinks.map((l) => decodeURIComponent(l.href.slice(3))).filter(Boolean);
-
-      const fetched: PosterEntry[] = [];
-      for (const pid of posterIds) {
-        // eslint-disable-next-line no-await-in-loop
-        const r = await fetch(`${base}/v1/posters/${encodeURIComponent(pid)}`);
-        if (!r.ok) continue;
-        // eslint-disable-next-line no-await-in-loop
-        fetched.push((await r.json()) as PosterEntry);
-      }
-      setItems(fetched);
-    })();
-  }, [base, links]);
-
-  if (!links || links.length === 0) return null;
-  if (items === null) return <p className="op-subtle op-mt-12">Loading related…</p>;
-  if (items.length === 0) return null;
-
-  return (
-    <section className="op-section">
-      <h2 className="op-section-title">Related artwork</h2>
-      <RelatedArtworkGrid items={items} />
-    </section>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Related artwork
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+                <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                  <CardMedia
+                    component="img"
+                    image="/demo/ted-movie-boxset/d7ee7c6c-89cc-46b7-95ba-0c276fd78a7d.jpg"
+                    alt="ted collection"
+                    sx={{ aspectRatio: "2 / 3", objectFit: "contain" }}
+                  />
+                  <CardContent sx={{ flexGrow: 1 }}>
+                    <Typography sx={{ fontWeight: 800 }} noWrap>
+                      ted collection
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" noWrap>
+                      Movie Box Set
+                    </Typography>
+                  </CardContent>
+                  <CardActions sx={{ px: 2 }}>
+                    <Button component={Link} variant="text" size="small" href="/movie/1703/boxset" sx={{ pl: 0, minWidth: 0 }}>
+                      BOX SET
+                    </Button>
+                  </CardActions>
+                </Card>
+              </Grid>
+            </Grid>
+          </Box>
+        </Box>
+      </Stack>
+    </Container>
   );
 }
 
@@ -308,11 +323,19 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
   }, [base, showTmdbId]);
 
   if (error) {
-    return <div className="op-alert op-alert--error">{error}</div>;
+    return (
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        <Typography color="error">{error}</Typography>
+      </Container>
+    );
   }
 
   if (!data) {
-    return <p className="op-subtle op-mt-12">Loading…</p>;
+    return (
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        <Typography color="text.secondary">Loading…</Typography>
+      </Container>
+    );
   }
 
   const hasSeasonsOrEpisodes = data.seasons.length > 0 || Object.keys(data.episodes_by_season).length > 0;
@@ -322,90 +345,74 @@ function TvBoxsetReal({ showTmdbId }: { showTmdbId: string }) {
     return <TedBoxSetDemo />;
   }
 
+  const showPoster = data.show[0] || null;
+
   return (
-    <div className="op-page">
-      <div className="op-page-bg" style={{ backgroundImage: `url(${data.show[0]?.assets.preview.url})` }} />
-      <div className="op-page-content">
-        <div className="op-row op-row--between">
-        <div>
-          <h1 className="op-title-lg">{data.show[0]?.media.title || "TV Box Set"}</h1>
-          <div className="op-subtle op-mt-6 op-title-meta">
-            TV SHOW{data.show[0]?.media.year ? ` | ${data.show[0].media.year}` : ""}{data.show[0]?.creator.display_name ? ` | ${data.show[0].creator.display_name}` : ""}
-          </div>
-        </div>
-      </div>
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>
+            {showPoster?.media.title || "TV Box Set"}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            TV SHOW
+            {showPoster?.media.year ? ` | ${showPoster.media.year}` : ""}
+            {showPoster?.creator.display_name ? ` | ${showPoster.creator.display_name}` : ""}
+          </Typography>
+        </Box>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Main show posters</h2>
-        <PosterGridIndexed items={data.show} />
-      </section>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Main show posters
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            <PosterGrid items={data.show} />
+          </Box>
+        </Box>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Season posters</h2>
-        <PosterGridIndexed items={data.seasons} />
-      </section>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Season posters
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            <PosterGrid items={data.seasons} />
+          </Box>
+        </Box>
 
-      <section className="op-section">
-        <h2 className="op-section-title">Episode cards</h2>
-
-        {Object.entries(data.episodes_by_season)
-          .map(([season, eps]) => ({ season: Number(season), eps }))
-          .filter((x) => Number.isFinite(x.season))
-          .sort((a, b) => b.season - a.season)
-          .map(({ season, eps }) => {
-            const expanded = !!expandedSeasons[season];
-            return (
-              <div key={season} className="op-section">
-                <button
-                  type="button"
-                  className="op-row"
-                  style={{
-                    gap: 10,
-                    width: "100%",
-                    padding: 0,
-                    border: "none",
-                    background: "transparent",
-                    cursor: "pointer",
-                    textAlign: "left",
-                  }}
-                  onClick={() =>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Episode cards
+          </Typography>
+          <Box sx={{ mt: 1.5 }}>
+            {Object.entries(data.episodes_by_season)
+              .map(([season, eps]) => ({ season: Number(season), eps }))
+              .filter((x) => Number.isFinite(x.season))
+              .sort((a, b) => b.season - a.season)
+              .map(({ season, eps }) => (
+                <Accordion
+                  key={season}
+                  expanded={!!expandedSeasons[season]}
+                  onChange={(_, expanded) =>
                     setExpandedSeasons((prev) => ({
                       ...prev,
-                      [season]: !prev[season],
+                      [season]: expanded,
                     }))
                   }
                 >
-                  <span style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
-                    {expanded ? "▼" : "▶︎"}
-                  </span>
-                  <h3 className="op-section-title" style={{ margin: 0 }}>
-                    Season {season}
-                  </h3>
-                </button>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Typography sx={{ fontWeight: 800 }}>Season {season}</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <EpisodeGrid items={eps} />
+                  </AccordionDetails>
+                </Accordion>
+              ))}
+          </Box>
+        </Box>
 
-                {expanded && (
-                  <div className="op-grid op-grid--episode-cards op-mt-10">
-                    {eps.map((p) => (
-                      <div key={p.poster_id} className="op-card" style={{ justifySelf: "start" }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          className="op-img"
-                          src={p.assets.preview.url}
-                          alt={p.media.title || p.poster_id}
-                          style={{ height: 100, width: "auto", objectFit: "contain" }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-      </section>
-
-      <RelatedArtworkSection base={base} links={data.show[0]?.links || null} />
-      </div>
-    </div>
+        {showPoster ? <RelatedArtworkSection base={base} links={showPoster.links || null} /> : null}
+      </Stack>
+    </Container>
   );
 }
 
@@ -415,10 +422,5 @@ export default function TvBoxsetPage({
   params: Promise<{ showTmdbId: string }>;
 }) {
   const { showTmdbId } = use(params);
-
-  return (
-    <div className="op-container">
-      <TvBoxsetReal showTmdbId={showTmdbId} />
-    </div>
-  );
+  return <TvBoxsetReal showTmdbId={showTmdbId} />;
 }
