@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import String, Text
+from sqlalchemy import PrimaryKeyConstraint, String, Text
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -53,6 +53,20 @@ class NodeHealth(Base):
     last_seen_up: Mapped[str | None] = mapped_column(String, nullable=True)
     down_since: Mapped[str | None] = mapped_column(String, nullable=True)
     consecutive_failures: Mapped[str] = mapped_column(String)  # store as string int for sqlite simplicity
+
+
+class BlobMirror(Base):
+    """Maps blob hashes to the mirror URLs that host them.
+
+    Built as a byproduct of crawling sources[] in signed poster records.
+    Query via GET /v1/blobs/{hash}/sources on the indexer.
+    """
+
+    __tablename__ = "blob_mirrors"
+    __table_args__ = (PrimaryKeyConstraint("blob_hash", "mirror_url"),)
+
+    blob_hash: Mapped[str] = mapped_column(String)   # sha256:<hex>
+    mirror_url: Mapped[str] = mapped_column(String)  # full URL to the blob on the mirror
 
 
 def make_engine(data_dir: Path):

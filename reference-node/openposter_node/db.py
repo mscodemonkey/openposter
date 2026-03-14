@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import Integer, String, Text, DateTime
+from sqlalchemy import Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -65,6 +65,24 @@ class Poster(Base):
     enc_alg: Mapped[str | None] = mapped_column(String, nullable=True)
     enc_key_id: Mapped[str | None] = mapped_column(String, nullable=True)
     enc_nonce: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class Peer(Base):
+    """Known network peers. Trust score is internal bookkeeping, never exposed via API."""
+
+    __tablename__ = "peers"
+
+    url: Mapped[str] = mapped_column(String, primary_key=True)
+    node_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # active | unreachable
+    status: Mapped[str] = mapped_column(String)
+    # internal only: number of distinct validated peers that vouch for this node
+    trust_score: Mapped[int] = mapped_column(Integer)
+    first_seen: Mapped[str] = mapped_column(String)   # RFC3339
+    last_seen: Mapped[str] = mapped_column(String)    # RFC3339
+    last_validated: Mapped[str | None] = mapped_column(String, nullable=True)  # RFC3339
+    consecutive_failures: Mapped[int] = mapped_column(Integer)
 
 
 def make_engine(data_dir: Path):

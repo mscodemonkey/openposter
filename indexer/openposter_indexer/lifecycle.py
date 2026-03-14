@@ -6,10 +6,10 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from .config import load_config
-from .db import Base, IndexedPoster, NodeCursor, NodeHealth, make_engine, make_sessionmaker
+from .db import Base, BlobMirror, IndexedPoster, NodeCursor, NodeHealth, make_engine, make_sessionmaker
 
 
 def _now_rfc3339() -> str:
@@ -129,6 +129,21 @@ async def crawl_once(app: FastAPI) -> None:
                         # Remove from index
                         existing = (await session.execute(select(IndexedPoster).where(IndexedPoster.poster_id == poster_id))).scalar_one_or_none()
                         if existing is not None:
+                            # Clean up mirror registry entries for this poster's blobs.
+                            # We check via poster_json so we know which hashes to clean.
+                            try:
+                                pj = json.loads(existing.poster_json)
+                                assets = pj.get("assets") or {}
+                                hashes = {
+                                    (assets.get("preview") or {}).get("hash"),
+                                    (assets.get("full") or {}).get("hash"),
+                                } - {None}
+                                for h in hashes:
+                                    await session.execute(
+                                        delete(BlobMirror).where(BlobMirror.blob_hash == h)
+                                    )
+                            except Exception:
+                                pass
                             await session.delete(existing)
                         continue
 
@@ -184,6 +199,19 @@ async def crawl_once(app: FastAPI) -> None:
                         poster_json=json.dumps(poster, separators=(",", ":")),
                     )
                     await session.merge(row)
+
+                    # Update mirror registry from sources[] in this poster's assets.
+                    assets = poster.get("assets") or {}
+                    for asset_key in ("preview", "full"):
+                        asset = assets.get(asset_key) or {}
+                        blob_hash = asset.get("hash")
+                        if not blob_hash:
+                            continue
+                        for src in (asset.get("sources") or []):
+                            src_url = (src.get("url") or "").strip()
+                            src_role = src.get("role")
+                            if src_url and src_role == "mirror":
+                                await session.merge(BlobMirror(blob_hash=blob_hash, mirror_url=src_url))
 
                 # update cursor
                 if cur is None:
@@ -260,6 +288,11 @@ async def init_app_state(app: FastAPI) -> None:
         )
         await conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_indexed_posters_episode_number ON indexed_posters(episode_number)"
+        )
+
+        # blob_mirrors index
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_blob_mirrors_hash ON blob_mirrors(blob_hash)"
         )
 
     # backfill denormalized columns for existing rows

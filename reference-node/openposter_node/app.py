@@ -28,6 +28,14 @@ async def health():
 attach_lifecycle(app)
 
 
+@app.on_event("shutdown")
+async def _shutdown():
+    for attr in ("gossip_health_task", "gossip_revalidation_task", "gossip_discovery_task", "mirror_task"):
+        task = getattr(app.state, attr, None)
+        if task:
+            task.cancel()
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     # If our code raised an HTTPException with detail already matching {"error": ...},

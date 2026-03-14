@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from .config import load_config
 from .crypto.signing import ensure_ed25519_keypair
-from .db import Base, Poster, make_engine, make_sessionmaker
+from .db import Base, Peer, Poster, make_engine, make_sessionmaker
 
 
 async def init_app_state(app: FastAPI) -> None:
@@ -62,9 +62,9 @@ async def init_app_state(app: FastAPI) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-        # Lightweight SQLite migration for early development: add new columns if missing.
-        # (Once we stabilise, we'll introduce proper migrations.)
         await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+
+        # Posters table migrations
         cols = (await conn.exec_driver_sql("PRAGMA table_info(posters)")).all()
         col_names = {c[1] for c in cols}
         for name, ddl in [
@@ -85,6 +85,53 @@ async def init_app_state(app: FastAPI) -> None:
         now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         await conn.exec_driver_sql("UPDATE posters SET created_at = COALESCE(created_at, ?)", (now,))
         await conn.exec_driver_sql("UPDATE posters SET updated_at = COALESCE(updated_at, ?)", (now,))
+
+        # Peers table migrations (table is created by create_all above; add any new columns here)
+        peer_cols = (await conn.exec_driver_sql("PRAGMA table_info(peers)")).all()
+        peer_col_names = {c[1] for c in peer_cols}
+        for name, ddl in [
+            ("node_id", "ALTER TABLE peers ADD COLUMN node_id TEXT"),
+            ("name", "ALTER TABLE peers ADD COLUMN name TEXT"),
+            ("trust_score", "ALTER TABLE peers ADD COLUMN trust_score INTEGER NOT NULL DEFAULT 1"),
+            ("consecutive_failures", "ALTER TABLE peers ADD COLUMN consecutive_failures INTEGER NOT NULL DEFAULT 0"),
+            ("last_validated", "ALTER TABLE peers ADD COLUMN last_validated TEXT"),
+            ("first_seen", "ALTER TABLE peers ADD COLUMN first_seen TEXT"),
+            ("last_seen", "ALTER TABLE peers ADD COLUMN last_seen TEXT"),
+            ("status", "ALTER TABLE peers ADD COLUMN status TEXT"),
+        ]:
+            if name not in peer_col_names:
+                await conn.exec_driver_sql(ddl)
+
+    # Seed peers table from legacy nodes.json if it exists and peers table is empty.
+    nodes_json_path = cfg.data_dir / "nodes.json"
+    if nodes_json_path.exists():
+        async with app.state.Session() as session:
+            existing_count = (await session.execute(select(Peer))).scalars().first()
+            if existing_count is None:
+                try:
+                    legacy_nodes = json.loads(nodes_json_path.read_text())
+                except Exception:
+                    legacy_nodes = []
+
+                from datetime import datetime, timezone
+                now_str = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+                for n in legacy_nodes:
+                    url = (n.get("url") or "").strip().rstrip("/")
+                    if not url:
+                        continue
+                    last_seen = n.get("last_seen") or now_str
+                    session.add(Peer(
+                        url=url,
+                        node_id=None,
+                        name=None,
+                        status="active",
+                        trust_score=1,
+                        first_seen=last_seen,
+                        last_seen=last_seen,
+                        last_validated=None,
+                        consecutive_failures=0,
+                    ))
+                await session.commit()
 
     # Optional mirror mode (pull blobs from an origin)
     mirror_origin = os.environ.get("OPENPOSTER_MIRROR_ORIGIN")
@@ -114,6 +161,11 @@ async def init_app_state(app: FastAPI) -> None:
                         row.setdefault("deleted_at", None)
                         session.add(Poster(**row))
                     await session.commit()
+
+    # Start gossip background tasks (not in mirror-only mode)
+    if not mirror_origin:
+        from .gossip import attach_gossip
+        attach_gossip(app)
 
 
 def attach_lifecycle(app: FastAPI) -> None:
