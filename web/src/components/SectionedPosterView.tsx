@@ -65,6 +65,7 @@ type TVShowGroup = {
 type EpisodeSeasonGroup = {
   key: string;
   showTitle: string;
+  seasonTitle?: string;
   showTmdbId: number;
   seasonNumber: number;
   episodePreviews: string[];
@@ -273,9 +274,15 @@ function groupContent(items: PosterEntry[]) {
       const sorted = [...e.episodes].sort(
         (a, b) => (b.media.episode_number ?? 0) - (a.media.episode_number ?? 0),
       );
+      const seasonPoster = tvMap.get(`${e.creatorId}:tv:${e.showTmdbId}`)?.seasons
+        .find(s => s.media.season_number === e.seasonNumber);
+      const seasonTitle = seasonPoster?.media.title && seasonPoster.media.title !== e.showTitle
+        ? seasonPoster.media.title
+        : undefined;
       return {
         key: `${e.creatorId}:tv:${e.showTmdbId}:s${e.seasonNumber}`,
         showTitle: e.showTitle,
+        seasonTitle,
         showTmdbId: e.showTmdbId,
         seasonNumber: e.seasonNumber,
         episodePreviews: sorted.length >= 4
@@ -381,7 +388,7 @@ function CollectionCard({
         label={t("movieBoxSet")}
         size="small"
         color="primary"
-        sx={{ position: "absolute", top: 6, right: 6, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "6px", pointerEvents: "none" }}
+        sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none" }}
       />
       {group.movieCount > 0 && (
         <Box sx={{ position: "absolute", bottom: 8, right: 8, pointerEvents: "none" }}>
@@ -475,7 +482,7 @@ function TVShowCard({
         label={t("tvBoxSetChip")}
         size="small"
         color="error"
-        sx={{ position: "absolute", top: 6, right: 6, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "6px", pointerEvents: "none" }}
+        sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none" }}
       />
       {(group.seasonCount > 0 || group.episodeCount > 0) && (
         <Box sx={{ position: "absolute", bottom: 8, right: 8, display: "flex", flexDirection: "row", alignItems: "center", gap: 0.5, pointerEvents: "none" }}>
@@ -550,12 +557,14 @@ function EpisodeSeasonCard({
   const mosaic = (
     <Box sx={{ position: "relative" }}>
       <MosaicBox previews={group.episodePreviews} aspectRatio="16 / 9" alt={`${group.showTitle || t("unknownShow")} S${String(group.seasonNumber).padStart(2, "0")}`} />
-      <Chip
-        label={group.episodeCount !== 1 ? t("episodesLabel") : t("episodeLabel")}
-        size="small"
-        color="secondary"
-        sx={{ position: "absolute", top: 6, right: 6, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "6px", pointerEvents: "none" }}
-      />
+      <Tooltip title={group.seasonTitle ?? ""} placement="right" disableHoverListener={!group.seasonTitle}>
+        <Chip
+          label={t("seasonLabel", { number: String(group.seasonNumber).padStart(2, "0") })}
+          size="small"
+          color="secondary"
+          sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: group.seasonTitle ? "auto" : "none" }}
+        />
+      </Tooltip>
       <Box sx={{ position: "absolute", bottom: 8, right: 8, pointerEvents: "none" }}>
         <CountBadge icon={<DvrOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.episodeCount} tooltip={t("episodeCardsIncluded", { count: group.episodeCount })} />
       </Box>
@@ -565,7 +574,7 @@ function EpisodeSeasonCard({
   const seasonStrip = (
     <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
       <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
-        {group.showTitle || t("unknownShow")} · {t("seasonLabel", { number: String(group.seasonNumber).padStart(2, "0") })}
+        {group.showTitle || t("unknownShow")}
       </Typography>
     </Box>
   );
@@ -697,7 +706,7 @@ export default function SectionedPosterView({
         <Section title={t("boxSets")}>
           <Grid container spacing={2}>
             {collectionGroups.map((g) => (
-              <Grid key={g.key} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+              <Grid key={g.key} size={{ xs: 6, sm: 4, md: 2 }}>
                 <CollectionCard group={g} showCreator={showCreator} showDetails={showDetails} />
               </Grid>
             ))}
@@ -709,7 +718,7 @@ export default function SectionedPosterView({
         <Section title={t("moviePosters")}>
           <Grid container spacing={2}>
             {allMovies.map((p) => (
-              <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+              <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 2 }}>
                 <PosterCard
                   poster={p}
                   showCreator={showCreator}
@@ -730,7 +739,7 @@ export default function SectionedPosterView({
         <Section title={t("tvShows")}>
           <Grid container spacing={2}>
             {tvShowGroups.map((g) => (
-              <Grid key={g.key} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+              <Grid key={g.key} size={{ xs: 6, sm: 4, md: 2 }}>
                 <TVShowCard group={g} showCreator={showCreator} showDetails={showDetails} />
               </Grid>
             ))}
@@ -742,7 +751,7 @@ export default function SectionedPosterView({
         <Section title={t("episodeCards")}>
           <Grid container spacing={2}>
             {episodeSeasonGroups.map((g) => (
-              <Grid key={g.key} size={{ xs: 12, sm: 6, md: 4 }}>
+              <Grid key={g.key} size={{ xs: 12, sm: 6, md: 3 }}>
                 <EpisodeSeasonCard group={g} showDetails={showDetails} />
               </Grid>
             ))}

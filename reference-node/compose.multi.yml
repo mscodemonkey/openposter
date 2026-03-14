@@ -130,6 +130,9 @@ services:
       # Browser hits indexer via host port mapping.
       - NEXT_PUBLIC_INDEXER_BASE_URL=http://localhost:8090
       - NEXT_PUBLIC_ISSUER_BASE_URL=http://localhost:8085
+      # Server components hit services via Docker internal network.
+      - INDEXER_BASE_URL=http://indexer:8090
+      - ISSUER_BASE_URL=http://issuer:8085
     restart: unless-stopped
     volumes:
       - ../web:/app

@@ -56,11 +56,6 @@ interface PosterCardProps {
   aspectRatio?: string;
   /** Called when the preview image fails to load (e.g. to remove broken cards). */
   onImageError?: () => void;
-  /**
-   * TV show title — for episode cards, shown above the S/E line.
-   * Episode PosterEntry doesn't carry the show title, so callers must supply it when available.
-   */
-  showTitle?: string;
   /** Suppress the auto-generated TV BOX SET link on episode cards. Default: false. */
   hideBoxSetLink?: boolean;
 }
@@ -73,7 +68,6 @@ export default function PosterCard({
   nodeUrl,
   aspectRatio = "2 / 3",
   onImageError,
-  showTitle,
   hideBoxSetLink = false,
 }: PosterCardProps) {
   const t = useTranslations("posterCard");
@@ -90,15 +84,20 @@ export default function PosterCard({
   const showFooter = hasButtons || hasMenu;
 
   const isEpisode = poster.media.type === "episode";
+  const isSeason = poster.media.type === "season";
+  const seasonDisplayTitle = isSeason
+    ? poster.media.season_number != null
+      ? `Season ${String(poster.media.season_number).padStart(2, "0")}`
+      : poster.media.title || tc("untitled")
+    : null;
   const boxSetHref =
     isEpisode && poster.media.show_tmdb_id != null
       ? `/tv/${poster.media.show_tmdb_id}/boxset`
       : null;
   const episodeMetaLine = isEpisode
     ? [
-        showTitle ?? null,
-        poster.media.season_number != null ? `S${String(poster.media.season_number).padStart(2, "0")}` : null,
-        poster.media.episode_number != null ? `E${String(poster.media.episode_number).padStart(2, "0")}` : null,
+        poster.media.season_number != null ? `Season ${String(poster.media.season_number).padStart(2, "0")}` : null,
+        poster.media.episode_number != null ? `Episode ${String(poster.media.episode_number).padStart(2, "0")}` : null,
       ]
         .filter(Boolean)
         .join(" · ")
@@ -125,7 +124,8 @@ export default function PosterCard({
     poster.media.type === "collection" ? { label: t("boxSet"), color: "primary" }
     : poster.media.type === "movie" ? { label: t("movie"), color: "success" }
     : poster.media.type === "show" ? { label: t("tvShow"), color: "error" }
-    : poster.media.type === "season" || poster.media.type === "episode" ? { label: poster.media.type === "season" ? t("season") : t("episode"), color: "secondary" }
+    : poster.media.type === "season" ? { label: t("season"), color: "secondary" }
+    : poster.media.type === "episode" ? { label: t("episode"), color: "warning" }
     : poster.media.type === "backdrop" ? { label: t("backdrop"), color: "warning" }
     : null;
 
@@ -143,7 +143,7 @@ export default function PosterCard({
           label={typeChipProps.label}
           size="small"
           color={typeChipProps.color}
-          sx={{ position: "absolute", top: 6, right: 6, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "6px", pointerEvents: "none" }}
+          sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none" }}
         />
       )}
     </Box>
@@ -152,7 +152,7 @@ export default function PosterCard({
   const titleStrip = !isEpisode ? (
     <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
       <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
-        {poster.media.title || tc("untitled")}{poster.media.year ? ` (${poster.media.year})` : ""}
+        {seasonDisplayTitle ?? (poster.media.title || tc("untitled"))}{!isSeason && poster.media.type !== "collection" && poster.media.year ? ` (${poster.media.year})` : ""}
       </Typography>
     </Box>
   ) : null;
@@ -186,7 +186,7 @@ export default function PosterCard({
 
       <CardContent sx={{ flexGrow: 1 }}>
         <Typography sx={{ fontWeight: 800 }} noWrap>
-          {poster.media.title || tc("untitled")}
+          {seasonDisplayTitle ?? (poster.media.title || tc("untitled"))}
         </Typography>
 
         {/* Subtitle line: explicit subtitle > linked creator name > nothing */}

@@ -263,6 +263,7 @@
     "tvSeason": "TV Season",
     "tvEpisode": "TV Episode",
     "movieCollection": "Movie Collection",
+    "movieBoxSet": "Movie Box Set",
     "movie": "Movie",
     "posterLabel": "Poster",
     "backdropForSeason": "BACKDROP FOR SEASON {season}",
@@ -282,7 +283,7 @@
     "otherPostersShow": "Other posters for this show",
     "otherPostersSeason": "Other posters for this season",
     "creatorTools": "Creator tools",
-    "creatorToolsDesc": "Add/remove related links. (MVP rules: links must be /p/<poster_id> and point to posters by the same creator.)",
+    "creatorToolsDesc": "Add/remove related links. (MVP rules: links must be /p/[poster_id] and point to posters by the same creator.)",
     "connectNodeHint": "To edit links, connect your node in Settings.",
     "wrongNode": "You're connected to {connectedNode}, but this poster's home node is {homeNode}. Connect to the correct node to edit links.",
     "searchYourPosters": "Search your posters",
@@ -315,7 +316,8 @@
   },
   "relatedArtwork": {
     "title": "Related artwork",
-    "loadingRelated": "Loading related\u2026"
+    "loadingRelated": "Loading related\u2026",
+    "otherPostersFor": "Other posters for {title}"
   },
   "creator": {
     "posterCount": "{id} \u00b7 {count, plural, one {# poster} other {# posters}}"

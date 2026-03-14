@@ -83,7 +83,7 @@ export default function RelatedArtworkSection({
               ...(isBoxset && bsHref ? [{ label: "BOX SET", href: bsHref }] : []),
             ];
             return (
-              <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+              <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 2 }}>
                 <PosterCard
                   poster={p}
                   actions={actions}
