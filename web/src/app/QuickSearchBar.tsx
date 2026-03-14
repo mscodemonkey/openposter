@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import Box from "@mui/material/Box";
@@ -9,6 +10,7 @@ import Container from "@mui/material/Container";
 import TextField from "@mui/material/TextField";
 
 export default function QuickSearchBar() {
+  const t = useTranslations("quickSearch");
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -46,12 +48,12 @@ export default function QuickSearchBar() {
           <TextField
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Quick search posters…"
+            placeholder={t("placeholder")}
             size="small"
             fullWidth
-            inputProps={{ "aria-label": "Quick search posters" }}
+            inputProps={{ "aria-label": t("ariaLabel") }}
           />
-          <Button type="submit">Search</Button>
+          <Button type="submit">{t("search")}</Button>
           {onBrowse && q.trim() !== "" && (
             <Button
               type="button"
@@ -61,7 +63,7 @@ export default function QuickSearchBar() {
                 router.push("/browse");
               }}
             >
-              Clear
+              {t("clear")}
             </Button>
           )}
         </Box>

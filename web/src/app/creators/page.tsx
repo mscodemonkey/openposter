@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -25,6 +26,8 @@ type CreatorsResponse = {
 };
 
 export default function CreatorsPage() {
+  const t = useTranslations("creators");
+  const tc = useTranslations("common");
   const [q, setQ] = useState("");
   const [data, setData] = useState<CreatorsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,24 +58,24 @@ export default function CreatorsPage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            Creators
+            {t("title")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Indexer: <code>{INDEXER_BASE_URL}</code>
+            {tc("indexerLabel", { url: INDEXER_BASE_URL })}
           </Typography>
         </Box>
 
         <TextField
-          label="Find a creator"
+          label={t("findCreator")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search creator names…"
+          placeholder={t("searchPlaceholder")}
         />
 
         {error && <Alert severity="error">{error}</Alert>}
 
         {!data ? (
-          <Typography color="text.secondary">Loading…</Typography>
+          <Typography color="text.secondary">{tc("loading")}</Typography>
         ) : (
           <Stack spacing={1.5}>
             {data.results.map((c) => (
@@ -90,7 +93,7 @@ export default function CreatorsPage() {
 
                     <Box sx={{ textAlign: "right" }}>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {c.count} poster(s)
+                        {t("posterCount", { count: c.count })}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {c.last_changed_at || "-"}
@@ -101,7 +104,7 @@ export default function CreatorsPage() {
                 <CardActions>
                   <Link href={`/creator/${encodeURIComponent(c.creator_id)}`} style={{ textDecoration: "none" }}>
                     <Typography variant="body2" sx={{ px: 1 }}>
-                      View creator →
+                      {t("viewCreator")}
                     </Typography>
                   </Link>
                   <Link
@@ -109,7 +112,7 @@ export default function CreatorsPage() {
                     style={{ textDecoration: "none" }}
                   >
                     <Typography variant="body2" sx={{ px: 1 }}>
-                      Browse posters →
+                      {t("browsePosters")}
                     </Typography>
                   </Link>
                 </CardActions>

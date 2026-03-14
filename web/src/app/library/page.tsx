@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -21,6 +22,9 @@ import { loadCreatorConnection } from "@/lib/storage";
 import type { PosterEntry, SearchResponse } from "@/lib/types";
 
 export default function LibraryPage() {
+  const t = useTranslations("library");
+  const tc = useTranslations("common");
+  const tn = useTranslations("nav");
   const conn = loadCreatorConnection();
   const baseUrl = useMemo(() => conn?.nodeUrl?.replace(/\/+$/, "") || "", [conn]);
 
@@ -143,29 +147,29 @@ export default function LibraryPage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            My library
+            {t("title")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Lists posters from your connected node via <code>/v1/posters</code>.
+            {t("description")}
           </Typography>
         </Box>
 
         {!conn ? (
           <Alert severity="warning">
-            Not connected. Go to <Link href="/settings">Settings</Link> first.
+            {t("notConnected")} <Link href="/settings">{tn("settings")}</Link>.
           </Alert>
         ) : (
           <Alert severity="success">
-            Connected node: <code>{baseUrl}</code>
+            {t("connectedNode", { url: baseUrl })}
           </Alert>
         )}
 
         {error && <Alert severity="error">{error}</Alert>}
 
         {items === null ? (
-          <Typography color="text.secondary">Loading…</Typography>
+          <Typography color="text.secondary">{tc("loading")}</Typography>
         ) : items.length === 0 ? (
-          <Typography color="text.secondary">No posters found.</Typography>
+          <Typography color="text.secondary">{tc("noPostersFound")}</Typography>
         ) : (
           <>
             <Paper sx={{ p: 2 }}>
@@ -174,10 +178,10 @@ export default function LibraryPage() {
                   variant="outlined"
                   onClick={() => void checkAllIndexed(items).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
                 >
-                  Check all indexed
+                  {t("checkAllIndexed")}
                 </Button>
                 <Typography variant="body2" color="text.secondary">
-                  Indexer: <code>{INDEXER_BASE_URL}</code>
+                  {tc("indexerLabel", { url: INDEXER_BASE_URL })}
                 </Typography>
               </Stack>
             </Paper>
@@ -197,7 +201,7 @@ export default function LibraryPage() {
                     </Link>
                     <CardContent sx={{ flex: 1 }}>
                       <Typography sx={{ fontWeight: 800 }} noWrap>
-                        {p.media.title || "(untitled)"}
+                        {p.media.title || tc("untitled")}
                       </Typography>
                       <Typography variant="body2" color="text.secondary" noWrap>
                         {p.media.type} · TMDB {p.media.tmdb_id}
@@ -205,7 +209,7 @@ export default function LibraryPage() {
                     </CardContent>
                     <CardActions sx={{ display: "flex", justifyContent: "space-between" }}>
                       <Button size="small" variant="text" href={p.assets.full.url} target="_blank" rel="noreferrer">
-                        Download
+                        {tc("download")}
                       </Button>
 
                       <Button
@@ -215,15 +219,15 @@ export default function LibraryPage() {
                         disabled={indexed[p.poster_id] === "checking"}
                       >
                         {indexed[p.poster_id] === "checking"
-                          ? "Checking…"
+                          ? t("checking")
                           : indexed[p.poster_id]
-                          ? `Indexed: ${indexed[p.poster_id]}`
-                          : "Check indexed"}
+                          ? t("indexed", { status: indexed[p.poster_id] })
+                          : t("checkIndexed")}
                       </Button>
 
                       {conn && (
                         <Button color="error" size="small" variant="outlined" onClick={() => void del(p.poster_id)}>
-                          Delete
+                          {tc("delete")}
                         </Button>
                       )}
                     </CardActions>
@@ -235,11 +239,11 @@ export default function LibraryPage() {
             <Box sx={{ pt: 1 }}>
               {nextCursor ? (
                 <Button variant="outlined" onClick={() => void loadMore().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))} disabled={loadingMore}>
-                  {loadingMore ? "Loading…" : "Load more"}
+                  {loadingMore ? tc("loadingMore") : tc("loadMore")}
                 </Button>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  End of list.
+                  {tc("endOfList")}
                 </Typography>
               )}
             </Box>

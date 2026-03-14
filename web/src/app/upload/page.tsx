@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -15,6 +16,9 @@ import Typography from "@mui/material/Typography";
 import { loadCreatorConnection } from "@/lib/storage";
 
 export default function UploadPage() {
+  const t = useTranslations("upload");
+  const tc = useTranslations("common");
+  const tn = useTranslations("nav");
   const conn = loadCreatorConnection();
   const baseUrl = useMemo(() => conn?.nodeUrl?.replace(/\/+$/, "") || "", [conn]);
 
@@ -38,15 +42,15 @@ export default function UploadPage() {
 
   async function upload() {
     if (!conn) {
-      setStatus("Not connected. Go to Settings first.");
+      setStatus(t("notConnected"));
       return;
     }
     if (!previewFile || !fullFile) {
-      setStatus("Select preview and full files.");
+      setStatus(t("selectFiles"));
       return;
     }
 
-    setStatus("Uploading...");
+    setStatus(t("uploading"));
 
     const fd = new FormData();
     fd.set("tmdb_id", tmdbId);
@@ -72,11 +76,11 @@ export default function UploadPage() {
 
     const json = await r.json().catch(() => null);
     if (!r.ok) {
-      setStatus(`Upload failed: ${r.status} ${JSON.stringify(json)}`);
+      setStatus(t("uploadFailed", { status: String(r.status), details: JSON.stringify(json) }));
       return;
     }
 
-    setStatus("Uploaded. Redirecting to My library...");
+    setStatus(t("uploadedRedirecting"));
     setTimeout(() => {
       window.location.href = "/library?check=1";
     }, 500);
@@ -87,98 +91,98 @@ export default function UploadPage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            Upload poster
+            {t("title")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Uploads to your connected node’s <code>/v1/admin/posters</code> endpoint.
+            {t("description")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            After upload you’ll be redirected to <Link href="/library">My library</Link>.
+            {t("afterUploadRedirect")} <Link href="/library">{tn("myLibrary")}</Link>.
           </Typography>
         </Box>
 
         {!conn ? (
           <Alert severity="warning">
-            Not connected. Go to <Link href="/settings">Settings</Link> first.
+            {t("notConnected")} <Link href="/settings">{tn("settings")}</Link>.
           </Alert>
         ) : (
           <Alert severity="success">
-            Connected node: <code>{baseUrl}</code>
+            {t("connectedNode", { url: baseUrl })}
           </Alert>
         )}
 
         <Paper sx={{ p: 3 }}>
           <Stack spacing={2}>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField label="TMDB id" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} fullWidth />
+              <TextField label={t("tmdbId")} value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} fullWidth />
               <TextField
                 select
-                label="Media type"
+                label={t("mediaType")}
                 value={mediaType}
                 onChange={(e) => setMediaType(e.target.value)}
                 SelectProps={{ native: true }}
                 sx={{ minWidth: 200 }}
               >
-                {(["movie", "show", "season", "episode", "collection"] as const).map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+                {(["movie", "show", "season", "episode", "collection"] as const).map((mt) => (
+                  <option key={mt} value={mt}>
+                    {mt}
                   </option>
                 ))}
               </TextField>
             </Stack>
 
             <TextField
-              label="Show TMDB id (for season/episode)"
+              label={t("showTmdbId")}
               value={showTmdbId}
               onChange={(e) => setShowTmdbId(e.target.value)}
-              placeholder="required for season/episode"
+              placeholder={t("showTmdbIdPlaceholder")}
             />
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField label="Season #" value={seasonNumber} onChange={(e) => setSeasonNumber(e.target.value)} fullWidth />
-              <TextField label="Episode #" value={episodeNumber} onChange={(e) => setEpisodeNumber(e.target.value)} fullWidth />
+              <TextField label={t("seasonNumber")} value={seasonNumber} onChange={(e) => setSeasonNumber(e.target.value)} fullWidth />
+              <TextField label={t("episodeNumber")} value={episodeNumber} onChange={(e) => setEpisodeNumber(e.target.value)} fullWidth />
             </Stack>
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
-              <TextField label="Year" value={year} onChange={(e) => setYear(e.target.value)} sx={{ minWidth: 140 }} />
+              <TextField label={t("titleLabel")} value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
+              <TextField label={t("year")} value={year} onChange={(e) => setYear(e.target.value)} sx={{ minWidth: 140 }} />
             </Stack>
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField label="Creator id" value={creatorId} onChange={(e) => setCreatorId(e.target.value)} fullWidth />
-              <TextField label="Creator name" value={creatorName} onChange={(e) => setCreatorName(e.target.value)} fullWidth />
+              <TextField label={t("creatorId")} value={creatorId} onChange={(e) => setCreatorId(e.target.value)} fullWidth />
+              <TextField label={t("creatorName")} value={creatorName} onChange={(e) => setCreatorName(e.target.value)} fullWidth />
             </Stack>
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
                 select
-                label="Redistribution"
+                label={t("redistribution")}
                 value={redistribution}
                 onChange={(e) => setRedistribution(e.target.value)}
                 SelectProps={{ native: true }}
                 sx={{ minWidth: 220 }}
               >
-                {(["public-cache-ok", "mirrors-approved", "none"] as const).map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+                {(["public-cache-ok", "mirrors-approved", "none"] as const).map((mt) => (
+                  <option key={mt} value={mt}>
+                    {mt}
                   </option>
                 ))}
               </TextField>
-              <TextField label="License" value={license} onChange={(e) => setLicense(e.target.value)} fullWidth />
+              <TextField label={t("license")} value={license} onChange={(e) => setLicense(e.target.value)} fullWidth />
             </Stack>
 
             <TextField
-              label="Related links (JSON array, optional)"
+              label={t("relatedLinks")}
               value={linksJson}
               onChange={(e) => setLinksJson(e.target.value)}
-              placeholder='e.g. [{"rel":"related","href":"/p/<other_poster_id>","title":"Related artwork"}]'
+              placeholder={t("relatedLinksPlaceholder")}
               multiline
               minRows={3}
             />
 
             <Stack spacing={1}>
               <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 700 }}>
-                Preview file (jpg/png)
+                {t("previewFile")}
               </Typography>
               <input
                 type="file"
@@ -189,7 +193,7 @@ export default function UploadPage() {
 
             <Stack spacing={1}>
               <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 700 }}>
-                Full file (jpg/png)
+                {t("fullFile")}
               </Typography>
               <input
                 type="file"
@@ -199,10 +203,10 @@ export default function UploadPage() {
             </Stack>
 
             <Button disabled={!conn} onClick={() => void upload()}>
-              Upload
+              {tc("upload")}
             </Button>
 
-            {status && <Alert severity={status.startsWith("Upload failed") ? "error" : "info"}>{status}</Alert>}
+            {status && <Alert severity={status.includes("failed") ? "error" : "info"}>{status}</Alert>}
           </Stack>
         </Paper>
       </Stack>

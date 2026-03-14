@@ -229,7 +229,7 @@ async def admin_upload_poster(
 
     await _require_admin(request)
 
-    if media_type not in {"movie", "show", "season", "episode", "collection"}:
+    if media_type not in {"movie", "show", "season", "episode", "collection", "backdrop"}:
         raise http_error(400, "invalid_request", "invalid media_type")
 
     if media_type in {"season", "episode"} and show_tmdb_id is None:

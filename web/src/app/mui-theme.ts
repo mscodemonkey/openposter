@@ -20,6 +20,15 @@ export function makeTheme(mode: "light" | "dark") {
         "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     },
     components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          "*:focus-visible": {
+            outline: "2px solid",
+            outlineColor: mode === "light" ? "#1976d2" : "#90caf9",
+            outlineOffset: "2px",
+          },
+        },
+      },
       MuiPaper: {
         styleOverrides: {
           root: {

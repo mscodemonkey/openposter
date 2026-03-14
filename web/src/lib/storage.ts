@@ -47,3 +47,17 @@ export function clearCreatorConnection(): void {
   window.sessionStorage.removeItem(KEY_TOKEN);
   window.localStorage.removeItem(LEGACY_KEY);
 }
+
+// ─── Poster display preference ───────────────────────────────────────────────
+
+const KEY_SHOW_DETAILS = "openposter.showPosterDetails.v1";
+
+export function loadShowPosterDetails(): boolean {
+  if (typeof window === "undefined") return true;
+  const v = window.localStorage.getItem(KEY_SHOW_DETAILS);
+  return v === null ? true : v !== "false";
+}
+
+export function saveShowPosterDetails(show: boolean): void {
+  window.localStorage.setItem(KEY_SHOW_DETAILS, show ? "true" : "false");
+}

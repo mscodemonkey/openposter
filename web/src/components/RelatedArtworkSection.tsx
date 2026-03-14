@@ -1,23 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Card from "@mui/material/Card";
-import CardActions from "@mui/material/CardActions";
-import CardContent from "@mui/material/CardContent";
-import CardMedia from "@mui/material/CardMedia";
 import Grid from "@mui/material/Grid";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-
 import type { PosterEntry } from "@/lib/types";
+import PosterCard, { type CardAction } from "@/components/PosterCard";
 
 export type RelatedArtworkSectionProps = {
   base: string;
@@ -37,12 +28,11 @@ export default function RelatedArtworkSection({
   base,
   links,
   relFilter,
-  title = "Related artwork",
+  title,
 }: RelatedArtworkSectionProps) {
+  const t = useTranslations("relatedArtwork");
+  const displayTitle = title ?? t("title");
   const [items, setItems] = useState<PosterEntry[] | null>(null);
-
-  const [nodeMenuAnchor, setNodeMenuAnchor] = useState<null | HTMLElement>(null);
-  const [nodeMenuUrl, setNodeMenuUrl] = useState<string | null>(null);
 
   const filteredLinks = useMemo(() => {
     if (!links || links.length === 0) return [];
@@ -72,13 +62,13 @@ export default function RelatedArtworkSection({
   }, [base, filteredLinks]);
 
   if (filteredLinks.length === 0) return null;
-  if (items === null) return <Typography color="text.secondary">Loading related…</Typography>;
+  if (items === null) return <Typography color="text.secondary">{t("loadingRelated")}</Typography>;
   if (items.length === 0) return null;
 
   return (
     <Box>
       <Typography variant="h6" sx={{ fontWeight: 800 }}>
-        {title}
+        {displayTitle}
       </Typography>
 
       <Box sx={{ mt: 1.5 }}>
@@ -86,106 +76,24 @@ export default function RelatedArtworkSection({
           {items.map((p) => {
             const bsHref = boxSetHref(p);
             const isBoxset = !!bsHref;
-
+            const actions: CardAction[] = [
+              isBoxset
+                ? { label: "POSTER", href: `/p/${encodeURIComponent(p.poster_id)}` }
+                : { label: "VIEW", href: p.assets.full.url, external: true },
+              ...(isBoxset && bsHref ? [{ label: "BOX SET", href: bsHref }] : []),
+            ];
             return (
               <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
-                <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                  <CardMedia
-                    component="img"
-                    image={p.assets.preview.url}
-                    alt={p.media.title || p.poster_id}
-                    sx={{ aspectRatio: "2 / 3", objectFit: "contain" }}
-                  />
-
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography sx={{ fontWeight: 800 }} noWrap>
-                      {p.media.title || "(untitled)"}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" noWrap>
-                      <Link href={`/creator/${encodeURIComponent(p.creator.creator_id)}`} style={{ color: "inherit" }}>
-                        {p.creator.display_name}
-                      </Link>
-                    </Typography>
-                  </CardContent>
-
-                  <CardActions sx={{ px: 2, justifyContent: "space-between" }}>
-                    <Box>
-                      {isBoxset ? (
-                        <Button
-                          component={Link}
-                          variant="text"
-                          size="small"
-                          href={`/p/${encodeURIComponent(p.poster_id)}`}
-                          sx={{ pl: 0, minWidth: 0 }}
-                        >
-                          POSTER
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="text"
-                          size="small"
-                          href={p.assets.full.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          sx={{ pl: 0, minWidth: 0 }}
-                        >
-                          VIEW
-                        </Button>
-                      )}
-
-                      {isBoxset && (
-                        <Button
-                          component={Link}
-                          variant="text"
-                          size="small"
-                          href={bsHref}
-                          sx={{ minWidth: 0 }}
-                        >
-                          BOX SET
-                        </Button>
-                      )}
-                    </Box>
-
-                    <IconButton
-                      aria-label="More"
-                      size="small"
-                      onClick={(e) => {
-                        setNodeMenuAnchor(e.currentTarget);
-                        setNodeMenuUrl(p.creator.home_node);
-                      }}
-                    >
-                      <MoreVertIcon fontSize="small" />
-                    </IconButton>
-                  </CardActions>
-                </Card>
+                <PosterCard
+                  poster={p}
+                  actions={actions}
+                  nodeUrl={p.creator.home_node}
+                />
               </Grid>
             );
           })}
         </Grid>
       </Box>
-
-      <Menu
-        open={Boolean(nodeMenuAnchor)}
-        anchorEl={nodeMenuAnchor}
-        onClose={() => {
-          setNodeMenuAnchor(null);
-          setNodeMenuUrl(null);
-        }}
-      >
-        <MenuItem
-          component="a"
-          href={nodeMenuUrl || undefined}
-          target="_blank"
-          rel="noreferrer"
-          disabled={!nodeMenuUrl}
-          onClick={() => {
-            setNodeMenuAnchor(null);
-            setNodeMenuUrl(null);
-          }}
-        >
-          Node
-        </MenuItem>
-      </Menu>
     </Box>
   );
 }

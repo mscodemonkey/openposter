@@ -56,8 +56,17 @@ async def tv_boxset(request: Request, show_tmdb_id: str):
             )
         ).scalars().all()
 
+        backdrop_rows = (
+            await session.execute(
+                select(IndexedPoster)
+                .where(IndexedPoster.media_type == "backdrop")
+                .where(IndexedPoster.show_tmdb_id == str(show_tmdb_id))
+            )
+        ).scalars().all()
+
     show = [json.loads(r.poster_json) for r in show_rows]
     seasons = [json.loads(r.poster_json) for r in season_rows]
+    backdrops = [json.loads(r.poster_json) for r in backdrop_rows]
 
     episodes_by_season: dict[str, list[dict]] = {}
     for r in episode_rows:
@@ -69,4 +78,5 @@ async def tv_boxset(request: Request, show_tmdb_id: str):
         "show": show,
         "seasons": seasons,
         "episodes_by_season": episodes_by_season,
+        "backdrops": backdrops,
     }

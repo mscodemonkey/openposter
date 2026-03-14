@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 export type CreatorOption = {
   creator_id: string;
@@ -33,6 +34,10 @@ export default function CreatorPicker({
   query?: string;
   onQueryChange?: (q: string) => void;
 }) {
+  const t = useTranslations("creatorPicker");
+  const id = useId();
+  const inputId = `${id}-input`;
+  const selectId = `${id}-select`;
   const base = useMemo(() => indexerBaseUrl.replace(/\/+$/, ""), [indexerBaseUrl]);
 
   const [q, setQ] = useState(query || "");
@@ -57,7 +62,7 @@ export default function CreatorPicker({
       return;
     }
 
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       void (async () => {
         setLoading(true);
         try {
@@ -76,13 +81,14 @@ export default function CreatorPicker({
       })();
     }, 250);
 
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [base, initialOptions, q]);
 
   return (
     <div>
-      <div className="op-label-hint">{label}</div>
+      <label htmlFor={inputId}>{label}</label>
       <input
+        id={inputId}
         className="op-input"
         value={q}
         onChange={(e) => {
@@ -90,14 +96,17 @@ export default function CreatorPicker({
           setQ(next);
           onQueryChange?.(next);
         }}
-        placeholder="Search creators…"
+        placeholder={t("searchPlaceholder")}
+        aria-label={t("searchAriaLabel")}
       />
       <select
+        id={selectId}
         className="op-select op-mt-8"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        aria-label={t("selectAriaLabel")}
       >
-        <option value="">(any)</option>
+        <option value="">{t("anyOption")}</option>
         {options.map((c) => (
           <option key={c.creator_id} value={c.creator_id}>
             {c.display_name || c.creator_id}
@@ -105,8 +114,8 @@ export default function CreatorPicker({
           </option>
         ))}
       </select>
-      <div className="op-subtle op-text-sm op-mt-6">
-        {loading ? "Searching…" : "Tip: leave blank to show top creators."}
+      <div className="op-subtle op-text-sm op-mt-6" aria-live="polite">
+        {loading ? t("searching") : t("hint")}
       </div>
     </div>
   );

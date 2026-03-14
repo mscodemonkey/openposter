@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import {
   ISSUER_BASE_URL,
@@ -33,6 +34,9 @@ import Typography from "@mui/material/Typography";
 type StepKey = "welcome" | "account" | "creator" | "claim" | "public_url" | "done";
 
 export default function OnboardingPage() {
+  const t = useTranslations("onboarding");
+  const tc = useTranslations("common");
+  const tn = useTranslations("nav");
   const issuer = useMemo(() => ISSUER_BASE_URL, []);
 
   // issuer session (load from localStorage once)
@@ -81,12 +85,12 @@ export default function OnboardingPage() {
   const [verifyMethod, setVerifyMethod] = useState<"dns" | "http">("dns");
 
   const steps: Array<{ key: StepKey; label: string }> = [
-    { key: "welcome", label: "Welcome" },
-    { key: "account", label: "Account" },
-    { key: "creator", label: "Creator name" },
-    { key: "claim", label: "Connect node" },
-    { key: "public_url", label: "Public URL" },
-    { key: "done", label: "Done" },
+    { key: "welcome", label: t("stepWelcome") },
+    { key: "account", label: t("stepAccount") },
+    { key: "creator", label: t("stepCreator") },
+    { key: "claim", label: t("stepClaim") },
+    { key: "public_url", label: t("stepPublicUrl") },
+    { key: "done", label: t("stepDone") },
   ];
 
   const activeStep = Math.max(
@@ -95,7 +99,7 @@ export default function OnboardingPage() {
   );
 
   async function doLogin() {
-    setStatus("Logging in...");
+    setStatus(t("loggingIn"));
     const res = await issuerLogin({ email, password });
     saveIssuerSession(res.token, res.user);
     setToken(res.token);
@@ -105,7 +109,7 @@ export default function OnboardingPage() {
   }
 
   async function doSignup() {
-    setStatus("Creating account...");
+    setStatus(t("creatingAccount"));
     const res = await issuerSignup({ email, password, display_name: displayName || undefined });
     saveIssuerSession(res.token, res.user);
     setToken(res.token);
@@ -122,14 +126,14 @@ export default function OnboardingPage() {
 
   async function claimCreatorHandle() {
     if (!token) throw new Error("Not logged in");
-    setStatus("Saving creator handle...");
+    setStatus(t("savingHandle"));
     await issuerClaimHandle(token, handle.trim().toLowerCase());
     setStatus(null);
     setStep("claim");
   }
 
   async function claimNodeAdmin() {
-    setStatus("Connecting to node...");
+    setStatus(t("connectingToNode"));
     const base = localUrl.replace(/\/+$/, "");
     const r = await fetch(`${base}/v1/admin/pair`, {
       method: "POST",
@@ -152,7 +156,7 @@ export default function OnboardingPage() {
   }
 
   async function startUrlClaim() {
-    setStatus("Generating verification instructions...");
+    setStatus(t("generatingVerification"));
     const info = (await issuerStartUrlClaim(token, publicUrl)) as {
       already_owned?: boolean;
       dns?: { name?: string; value?: string };
@@ -163,19 +167,19 @@ export default function OnboardingPage() {
   }
 
   async function verifyUrlClaim() {
-    setStatus("Checking verification...");
+    setStatus(t("checkingVerification"));
     const res = (await issuerVerifyUrlClaim(token, { public_url: publicUrl, method: verifyMethod })) as {
       verified?: boolean;
     };
     if (!res.verified) {
-      setStatus("Not verified yet. Try again in a minute.");
+      setStatus(t("notVerified"));
       return;
     }
-    setStatus("Verified!");
+    setStatus(t("verified"));
   }
 
   async function attachUrl() {
-    setStatus("Saving public URL...");
+    setStatus(t("savingPublicUrl"));
     await issuerAttachUrl(token, { node_id: claimedNodeId, public_url: publicUrl });
     setStatus(null);
     setStep("done");
@@ -186,10 +190,10 @@ export default function OnboardingPage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            Onboarding
+            {t("title")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Issuer: <code>{issuer}</code>
+            {tc("issuerLabel", { url: issuer })}
           </Typography>
         </Box>
 
@@ -207,7 +211,7 @@ export default function OnboardingPage() {
           <Paper sx={{ p: 2 }}>
             <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
               <Typography variant="body2" color="text.secondary">
-                Logged in as <strong>{userEmail}</strong>
+                {t("loggedInAs", { email: userEmail })}
               </Typography>
               <Button
                 size="small"
@@ -219,7 +223,7 @@ export default function OnboardingPage() {
                   setStep("account");
                 }}
               >
-                Log out
+                {t("logOut")}
               </Button>
             </Stack>
           </Paper>
@@ -229,19 +233,18 @@ export default function OnboardingPage() {
           <Paper sx={{ p: 3 }}>
             <Stack spacing={2}>
               <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                Welcome to the OpenPoster network!
+                {t("welcomeTitle")}
               </Typography>
               <Typography color="text.secondary">
-                OpenPoster is a community-run poster network where creators can publish artwork from their own nodes, and
-                everyone can browse, search, and share — without relying on one central site forever.
+                {t("welcomeDescription")}
               </Typography>
 
               <Divider />
 
               <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                Let’s get started
+                {t("letsGetStarted")}
               </Typography>
-              <Typography color="text.secondary">Firstly are you just browsing posters or are you a creator?</Typography>
+              <Typography color="text.secondary">{t("browsingOrCreator")}</Typography>
 
               <Stack spacing={1.25} sx={{ mt: 1 }}>
                 <Button
@@ -255,9 +258,9 @@ export default function OnboardingPage() {
                     window.location.href = "/browse";
                   }}
                 >
-                  I’m just browsing
+                  {t("justBrowsing")}
                 </Button>
-                <Button onClick={() => setStep("account")}>I’m a creator</Button>
+                <Button onClick={() => setStep("account")}>{t("imACreator")}</Button>
               </Stack>
             </Stack>
           </Paper>
@@ -267,42 +270,41 @@ export default function OnboardingPage() {
           <Paper sx={{ p: 3 }}>
             <Stack spacing={2}>
               <Typography variant="h4" sx={{ fontWeight: 900 }}>
-                Welcome, creator!
+                {t("welcomeCreator")}
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                Let’s get you logged in…
+                {t("letsLogin")}
               </Typography>
               <Typography color="text.secondary">
-                Creators are the reason OpenPoster exists. Thanks for being here — your work is what makes libraries feel
-                personal.
+                {t("creatorsThankYou")}
               </Typography>
 
               <Typography sx={{ fontWeight: 800, mt: 1 }}>
-                Do you have an OpenPoster account already, or would you like to create one now?
+                {t("haveAccountQuestion")}
               </Typography>
 
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                 <Button variant={accountMode === "login" ? "contained" : "outlined"} onClick={() => setAccountMode("login")}>
-                  I’ve got an account, log me in!
+                  {t("haveAccountLogin")}
                 </Button>
                 <Button variant={accountMode === "signup" ? "contained" : "outlined"} onClick={() => setAccountMode("signup")}>
-                  I’m new here, sign me up!
+                  {t("newSignup")}
                 </Button>
               </Stack>
 
               <Stack spacing={1.5} sx={{ mt: 1 }}>
                 {accountMode === "signup" && (
                   <TextField
-                    label="Display name"
+                    label={t("displayName")}
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    helperText="Doesn’t need to be unique"
+                    helperText={t("displayNameHint")}
                   />
                 )}
 
-                <TextField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+                <TextField label={t("email")} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
                 <TextField
-                  label="Password"
+                  label={t("password")}
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -310,16 +312,14 @@ export default function OnboardingPage() {
                 />
 
                 {accountMode === "login" ? (
-                  <Button onClick={() => void doLogin().catch((e) => setStatus(e?.message || String(e)))}>Log me in</Button>
+                  <Button onClick={() => void doLogin().catch((e) => setStatus(e?.message || String(e)))}>{t("logMeIn")}</Button>
                 ) : (
                   <Button
                     onClick={() =>
                       void doSignup().catch((e) => {
                         const msg = e?.message || String(e);
                         if (String(msg).toLowerCase().includes("already registered")) {
-                          setStatus(
-                            "That email is already registered. Click “I’ve got an account, log me in!” and sign in instead."
-                          );
+                          setStatus(t("alreadyRegistered"));
                         } else {
                           setStatus(msg);
                         }
@@ -327,7 +327,7 @@ export default function OnboardingPage() {
                       })
                     }
                   >
-                    Sign me up
+                    {t("signMeUp")}
                   </Button>
                 )}
               </Stack>
@@ -339,16 +339,15 @@ export default function OnboardingPage() {
           <Paper sx={{ p: 3 }}>
             <Stack spacing={2}>
               <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                Let’s pick your creator name
+                {t("pickCreatorName")}
               </Typography>
               <Typography color="text.secondary">
-                This is your <strong>unique</strong> creator handle across the network. It’s how people will find your
-                artwork.
+                {t("creatorHandleDesc")}
               </Typography>
-              <Typography color="text.secondary">Rules: 3–32 chars. Lowercase letters, numbers, underscores.</Typography>
+              <Typography color="text.secondary">{t("creatorHandleRules")}</Typography>
 
               <TextField
-                label="Creator handle"
+                label={t("creatorHandle")}
                 value={handle}
                 onChange={(e) => {
                   setHandle(e.target.value);
@@ -359,12 +358,12 @@ export default function OnboardingPage() {
 
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
                 <Button variant="outlined" onClick={() => void checkHandle().catch((e) => setStatus(e?.message || String(e)))}>
-                  Check name
+                  {t("checkName")}
                 </Button>
                 {handleAvailable === true ? (
-                  <Typography color="success.main">That one’s available</Typography>
+                  <Typography color="success.main">{t("nameAvailable")}</Typography>
                 ) : handleAvailable === false ? (
-                  <Typography color="error.main">That one’s taken</Typography>
+                  <Typography color="error.main">{t("nameTaken")}</Typography>
                 ) : (
                   <Typography color="text.secondary"> </Typography>
                 )}
@@ -374,7 +373,7 @@ export default function OnboardingPage() {
                 disabled={!handle || handleAvailable === false}
                 onClick={() => void claimCreatorHandle().catch((e) => setStatus(e?.message || String(e)))}
               >
-                Lock it in
+                {t("lockItIn")}
               </Button>
             </Stack>
           </Paper>
@@ -384,17 +383,17 @@ export default function OnboardingPage() {
           <Paper sx={{ p: 3 }}>
             <Stack spacing={2}>
               <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                Next up: your node
+                {t("nextUpNode")}
               </Typography>
               <Typography color="text.secondary">
-                This step should be done from the same Wi‑Fi/LAN as your server.
+                {t("sameWifiHint")}
               </Typography>
               <Alert severity="info">
-                We’ll connect you using a short <strong>pairing code</strong> shown by your node.
+                {t("pairingCodeInfo")}
               </Alert>
 
               <TextField
-                label="Local URL (your server on the LAN)"
+                label={t("localUrl")}
                 value={localUrl}
                 onChange={(e) => setLocalUrl(e.target.value)}
                 placeholder="http://192.168.1.10:8080"
@@ -408,27 +407,26 @@ export default function OnboardingPage() {
                     window.open(`${base}/admin/pair`, "_blank", "noopener,noreferrer");
                   }}
                 >
-                  Open pairing code page
+                  {t("openPairingPage")}
                 </Button>
               </Stack>
 
               <TextField
-                label="Pairing code"
+                label={t("pairingCode")}
                 value={pairCode}
                 onChange={(e) => setPairCode(e.target.value)}
                 placeholder="e.g. 123456"
               />
 
               <Button onClick={() => void claimNodeAdmin().catch((e) => setStatus(e?.message || String(e)))}>
-                Connect my node
+                {t("connectMyNode")}
               </Button>
 
               {claimedNodeId ? (
-                <Alert severity="success">Connected. Node ID: {claimedNodeId}</Alert>
+                <Alert severity="success">{t("connectedNodeId", { nodeId: claimedNodeId })}</Alert>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  Tip: if the pairing page doesn’t load, double-check the Local URL and make sure you’re on the same
-                  network.
+                  {t("pairingTip")}
                 </Typography>
               )}
             </Stack>
@@ -439,15 +437,15 @@ export default function OnboardingPage() {
           <Paper sx={{ p: 3 }}>
             <Stack spacing={2}>
               <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                Add your public URL
+                {t("addPublicUrl")}
               </Typography>
-              <Typography color="text.secondary">This is the URL other people will use to reach your node.</Typography>
+              <Typography color="text.secondary">{t("publicUrlDesc")}</Typography>
               <Typography color="text.secondary">
-                To stop URL hijacking, OpenPoster asks you to prove you control the domain (DNS or a simple text file).
+                {t("publicUrlVerifyDesc")}
               </Typography>
 
               <TextField
-                label="Public URL"
+                label={t("publicUrl")}
                 value={publicUrl}
                 onChange={(e) => {
                   setPublicUrl(e.target.value);
@@ -457,31 +455,31 @@ export default function OnboardingPage() {
               />
 
               <Button variant="outlined" onClick={() => void startUrlClaim().catch((e) => setStatus(e?.message || String(e)))}>
-                Get verification instructions
+                {t("getVerification")}
               </Button>
 
               {claimInfo && !claimInfo.already_owned && (
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Stack spacing={1}>
-                    <Typography sx={{ fontWeight: 800 }}>Option 1 (recommended): DNS TXT</Typography>
+                    <Typography sx={{ fontWeight: 800 }}>{t("dnsTxtOption")}</Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Add a TXT record:
+                      {t("addTxtRecord")}
                     </Typography>
                     <Typography variant="body2">
-                      Name: <code>{claimInfo.dns?.name}</code>
+                      {t("name", { value: claimInfo.dns?.name ?? "" })}
                     </Typography>
                     <Typography variant="body2">
-                      Value: <code>{claimInfo.dns?.value}</code>
+                      {t("value", { value: claimInfo.dns?.value ?? "" })}
                     </Typography>
 
                     <Divider sx={{ my: 1 }} />
 
-                    <Typography sx={{ fontWeight: 800 }}>Option 2: upload a file</Typography>
+                    <Typography sx={{ fontWeight: 800 }}>{t("fileOption")}</Typography>
                     <Typography variant="body2">
-                      URL: <code>{claimInfo.http?.url}</code>
+                      {t("fileUrl", { value: claimInfo.http?.url ?? "" })}
                     </Typography>
                     <Typography variant="body2">
-                      Body: <code>{claimInfo.http?.body}</code>
+                      {t("fileBody", { value: claimInfo.http?.body ?? "" })}
                     </Typography>
                   </Stack>
                 </Paper>
@@ -490,7 +488,7 @@ export default function OnboardingPage() {
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
                 <TextField
                   select
-                  label="Verify using"
+                  label={t("verifyUsing")}
                   value={verifyMethod}
                   onChange={(e) => {
                     const v = e.target.value;
@@ -499,16 +497,16 @@ export default function OnboardingPage() {
                   SelectProps={{ native: true }}
                   sx={{ minWidth: 220 }}
                 >
-                  <option value="dns">DNS</option>
-                  <option value="http">File</option>
+                  <option value="dns">{t("dns")}</option>
+                  <option value="http">{t("file")}</option>
                 </TextField>
                 <Button variant="outlined" onClick={() => void verifyUrlClaim().catch((e) => setStatus(e?.message || String(e)))}>
-                  Check now
+                  {t("checkNow")}
                 </Button>
               </Stack>
 
               <Button disabled={!claimedNodeId || !publicUrl} onClick={() => void attachUrl().catch((e) => setStatus(e?.message || String(e)))}>
-                Save my public URL
+                {t("savePublicUrl")}
               </Button>
             </Stack>
           </Paper>
@@ -518,15 +516,15 @@ export default function OnboardingPage() {
           <Paper sx={{ p: 3 }}>
             <Stack spacing={2}>
               <Typography variant="h4" sx={{ fontWeight: 900 }}>
-                You’re all set
+                {t("allSet")}
               </Typography>
-              <Typography color="text.secondary">Next: upload your first poster.</Typography>
+              <Typography color="text.secondary">{t("nextUpload")}</Typography>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                 <Button component={Link} href="/upload">
-                  Go to Upload
+                  {t("goToUpload")}
                 </Button>
                 <Button component={Link} href="/settings" variant="outlined">
-                  Settings
+                  {tn("settings")}
                 </Button>
               </Stack>
             </Stack>
@@ -535,7 +533,7 @@ export default function OnboardingPage() {
 
         <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
           <Typography variant="caption" color="text.secondary">
-            (Debug) step: <code>{step}</code>
+            {t("debugStep", { step })}
           </Typography>
         </Box>
       </Stack>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -35,6 +36,8 @@ type StatsResponse = {
 const MEDIA_TYPES = ["", "movie", "show", "season", "episode", "collection"];
 
 function PosterGrid({ items }: { items: PosterEntry[] }) {
+  const tc = useTranslations("common");
+  const t = useTranslations("home");
   return (
     <Grid container spacing={2} sx={{ mt: 0.5 }}>
       {items.map((r) => (
@@ -51,7 +54,7 @@ function PosterGrid({ items }: { items: PosterEntry[] }) {
             </Link>
             <CardContent sx={{ flex: 1 }}>
               <Typography sx={{ fontWeight: 800 }} noWrap>
-                {r.media.title || "(untitled)"}
+                {r.media.title || tc("untitled")}
               </Typography>
               <Typography variant="body2" color="text.secondary" noWrap>
                 {r.creator.display_name}
@@ -59,10 +62,10 @@ function PosterGrid({ items }: { items: PosterEntry[] }) {
             </CardContent>
             <CardActions>
               <Button size="small" variant="text" href={r.assets.full.url} target="_blank" rel="noreferrer">
-                Download
+                {tc("download")}
               </Button>
               <Button size="small" variant="text" component={Link} href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}>
-                Creator
+                {t("creator")}
               </Button>
             </CardActions>
           </Card>
@@ -73,6 +76,9 @@ function PosterGrid({ items }: { items: PosterEntry[] }) {
 }
 
 export default function Home() {
+  const t = useTranslations("home");
+  const tc = useTranslations("common");
+
   const [tmdbId, setTmdbId] = useState<string>("");
   const [q, setQ] = useState<string>("");
   const [type, setType] = useState<string>("");
@@ -161,23 +167,23 @@ export default function Home() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="h3" sx={{ fontWeight: 900, letterSpacing: -0.5 }}>
-            OpenPoster
+            {t("title")}
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Community-run poster artwork — published from creator-owned nodes.
+            {t("tagline")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Indexer: <code>{INDEXER_BASE_URL}</code>
+            {tc("indexerLabel", { url: INDEXER_BASE_URL })}
           </Typography>
         </Box>
 
-        {/* Summary/stats block (TODO from mediux-style section) */}
+        {/* Summary/stats block */}
         {stats && (
           <Paper sx={{ p: 2.5 }}>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between">
               <Box>
                 <Typography variant="overline" color="text.secondary">
-                  Total posters
+                  {t("totalPosters")}
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 900 }}>
                   {stats.posters}
@@ -185,7 +191,7 @@ export default function Home() {
               </Box>
               <Box>
                 <Typography variant="overline" color="text.secondary">
-                  Nodes online
+                  {t("nodesOnline")}
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 900 }}>
                   {stats.nodes.up}/{stats.nodes.total}
@@ -193,13 +199,13 @@ export default function Home() {
               </Box>
               <Box>
                 <Typography variant="overline" color="text.secondary">
-                  Quick links
+                  {t("quickLinks")}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  <Link href="/browse">Browse posters</Link>
+                  <Link href="/browse">{t("browsePosters")}</Link>
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  <Link href="/onboarding">Creator onboarding</Link>
+                  <Link href="/onboarding">{t("creatorOnboarding")}</Link>
                 </Typography>
               </Box>
             </Stack>
@@ -212,43 +218,43 @@ export default function Home() {
           <Stack spacing={1.5}>
             <Stack direction="row" spacing={1} alignItems="baseline" justifyContent="space-between">
               <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                Search posters
+                {t("searchPosters")}
               </Typography>
               <Button component={Link} href="/browse" variant="outlined" size="small">
-                Browse
+                {t("browse")}
               </Button>
             </Stack>
 
             <Typography variant="body2" color="text.secondary">
-              Search by TMDB id or title keyword (MVP substring match on indexed titles).
+              {t("searchHint")}
             </Typography>
 
             <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-              <TextField label="Title contains" value={q} onChange={(e) => setQ(e.target.value)} fullWidth />
+              <TextField label={t("titleContains")} value={q} onChange={(e) => setQ(e.target.value)} fullWidth />
               <TextField
                 select
-                label="Media type"
+                label={t("mediaType")}
                 value={type}
                 onChange={(e) => setType(e.target.value)}
                 SelectProps={{ native: true }}
                 sx={{ minWidth: 220 }}
               >
-                {MEDIA_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t === "" ? "Any" : t}
+                {MEDIA_TYPES.map((mt) => (
+                  <option key={mt} value={mt}>
+                    {mt === "" ? t("any") : mt}
                   </option>
                 ))}
               </TextField>
-              <TextField label="TMDB id" value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} sx={{ minWidth: 180 }} />
+              <TextField label={t("tmdbId")} value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} sx={{ minWidth: 180 }} />
               <Button onClick={() => void runSearch().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}>
-                Search
+                {tc("search")}
               </Button>
             </Stack>
 
             {search && (
               <Box>
                 <Typography variant="body2" color="text.secondary">
-                  {search.results.length} result(s)
+                  {t("resultCount", { count: search.results.length })}
                 </Typography>
                 <PosterGrid items={search.results} />
               </Box>
@@ -260,10 +266,10 @@ export default function Home() {
           <Stack spacing={1.5}>
             <Stack direction="row" spacing={1} alignItems="baseline" justifyContent="space-between">
               <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                Recent uploads
+                {t("recentUploads")}
               </Typography>
               <Button component={Link} href="/browse" variant="outlined" size="small">
-                Browse all
+                {t("browseAll")}
               </Button>
             </Stack>
 
@@ -278,20 +284,20 @@ export default function Home() {
                         onClick={() => void loadMoreRecent().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
                         disabled={loadingMoreRecent}
                       >
-                        {loadingMoreRecent ? "Loading…" : "Load more"}
+                        {loadingMoreRecent ? tc("loadingMore") : tc("loadMore")}
                       </Button>
                     ) : (
                       <Typography variant="body2" color="text.secondary">
-                        End of list.
+                        {tc("endOfList")}
                       </Typography>
                     )}
                   </Box>
                 </>
               ) : (
-                <Typography color="text.secondary">No recent posters.</Typography>
+                <Typography color="text.secondary">{t("noRecentPosters")}</Typography>
               )
             ) : (
-              <Typography color="text.secondary">Loading…</Typography>
+              <Typography color="text.secondary">{tc("loading")}</Typography>
             )}
           </Stack>
         </Paper>
@@ -299,17 +305,17 @@ export default function Home() {
         <Paper sx={{ p: 2.5 }}>
           <Stack spacing={1.5}>
             <Typography variant="h6" sx={{ fontWeight: 800 }}>
-              Indexer node status
+              {t("indexerNodeStatus")}
             </Typography>
 
             {nodes ? (
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>URL</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Last crawled</TableCell>
-                    <TableCell>Down since</TableCell>
+                    <TableCell>{t("url")}</TableCell>
+                    <TableCell>{t("status")}</TableCell>
+                    <TableCell>{t("lastCrawled")}</TableCell>
+                    <TableCell>{t("downSince")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -324,7 +330,7 @@ export default function Home() {
                 </TableBody>
               </Table>
             ) : (
-              <Typography color="text.secondary">Loading…</Typography>
+              <Typography color="text.secondary">{tc("loading")}</Typography>
             )}
           </Stack>
         </Paper>
