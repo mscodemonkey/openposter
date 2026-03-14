@@ -108,3 +108,63 @@ Blobs are content-addressed (SHA-256). Metadata is signed (Ed25519 / JCS). Premi
 - Project is early-stage / beta; protocol marked DRAFT
 - This is a local dev environment — no production deployment yet
 - The `MEMORY.md` file has running notes on build status
+
+---
+
+## Production Readiness Checklist
+
+### 🔐 Security
+- [ ] Remove hardcoded dev secrets from `compose.multi.yml` (`dev-jwt-secret-change-me`, `dev-admin`) — replace with env file or secrets service
+- [ ] Move admin token out of browser localStorage → secure HTTP-only cookie / server-side session
+- [ ] Add rate limiting to admin endpoints, search, and key unwrap (FastAPI middleware + in-memory or Redis)
+- [ ] Enforce HTTPS in production — redirect HTTP, reject non-HTTPS node registrations outside localhost
+- [ ] Rotate bootstrap code on first claim; don't persist plaintext in `/data/bootstrap_code.txt` after use
+- [ ] Strengthen JWT: add `aud` + `iss` claim validation; consider RS256 with public JWKS endpoint
+- [ ] Add CSRF protection to onboarding and upload forms
+- [ ] Increase minimum password to 12 chars or enforce passphrase rules
+
+### 🪵 Logging & Observability
+- [ ] Add structured logging (Python `logging` module, JSON output) to reference-node, issuer, and indexer
+- [ ] Log auth events: failed logins, admin token use, pairing attempts
+- [ ] Add request IDs / correlation IDs across services
+- [ ] Add Prometheus metrics endpoint (`/metrics`) to each service
+- [ ] Add a `/v1/health` that checks DB connectivity, not just returns `{"ok": true}`
+
+### 🧪 Testing
+- [ ] Write integration tests for federation protocol (node → indexer crawl cycle)
+- [ ] Write auth flow tests (signup → claim handle → claim node → attach URL → upload poster)
+- [ ] Write signature verification tests (valid / tampered / expired)
+- [ ] Add CI pipeline (GitHub Actions) to run tests on every push
+- [ ] Add web UI smoke tests (Playwright or similar)
+
+### 🗃️ Database & Migrations
+- [ ] Replace pragma-based column-addition migration with Alembic (reference-node and issuer)
+- [ ] Add DB backup guidance / tooling for self-hosters
+- [ ] Add indexer deletion tracking — honour `deleted_at` from node changes feed
+
+### 🚀 Deployment
+- [ ] Create a `compose.prod.yml` (no source mounts, production env vars, restart policies, no dev ports exposed)
+- [ ] Write deployment docs: DNS setup, reverse proxy (Caddy/nginx), TLS, env var reference
+- [ ] Add healthcheck dependencies in compose so services wait for each other properly
+- [ ] Publish Docker images to a registry (ghcr.io/openposter/*)
+
+### 🌐 Web UI
+- [ ] TMDB ID lookup / autocomplete on the upload form (search by title → fill tmdb_id)
+- [ ] Image preview and basic validation before upload (dimensions, file size, MIME type)
+- [ ] Upload progress indicator
+- [ ] Creator dashboard / library page (list, edit, delete own posters)
+- [ ] Bulk upload support
+- [ ] Proper error messages from backend surfaced cleanly in the upload UI
+- [ ] Settings page: connect/disconnect node, change display name
+
+### 📡 Protocol
+- [ ] Implement `POST /v1/keys/{key_id}:unwrap` on reference-node (premium blob key delivery)
+- [ ] Implement creator-signed mirror grants (automated mirror approval flow)
+- [ ] Finalise and version the spec (remove DRAFT status once core flows are stable)
+- [ ] Add `imdb_id` search support end-to-end (spec lists it; verify indexer + node both support it)
+
+### 🔍 Search & Discovery
+- [ ] Add full-text search index to indexer (SQLite FTS5 on title / creator)
+- [ ] Genre / tag faceting (indexer `/v1/facets` returns genres once nodes publish them)
+- [ ] Homepage "recent" and "stats" sections wired up
+- [ ] Creator profile pages show bio / links if node publishes them

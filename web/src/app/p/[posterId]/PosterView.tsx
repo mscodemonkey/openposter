@@ -234,8 +234,17 @@ export default function PosterView({
 
   const attribution = (poster as unknown as { attribution?: PosterAttribution }).attribution;
   const isLandscape = (p: PosterEntry) => p.media.type === "episode" || p.media.type === "backdrop";
-  const portrait = moreByCreator.filter((p) => !isLandscape(p));
-  const landscape = moreByCreator.filter(isLandscape);
+  const typeOrder = (type: string) =>
+    type === "collection" ? 0 : type === "show" ? 1 : type === "movie" ? 2 : type === "season" ? 3 : type === "episode" ? 4 : 5;
+  const sortedMore = [...moreByCreator].sort((a, b) => {
+    const tDiff = typeOrder(a.media.type) - typeOrder(b.media.type);
+    if (tDiff !== 0) return tDiff;
+    const sDiff = (a.media.season_number ?? 0) - (b.media.season_number ?? 0);
+    if (sDiff !== 0) return sDiff;
+    return (a.media.episode_number ?? 0) - (b.media.episode_number ?? 0);
+  });
+  const portrait = sortedMore.filter((p) => !isLandscape(p));
+  const landscape = sortedMore.filter(isLandscape);
 
   return (
     <>
@@ -256,7 +265,7 @@ export default function PosterView({
             component="img"
             src={backdropUrl}
             alt=""
-            sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.4 }}
+            sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.3 }}
           />
           <Box
             sx={{
@@ -333,7 +342,7 @@ export default function PosterView({
               <Paper sx={{ p: 2.5 }}>
                 <Stack spacing={2}>
                   <Stack spacing={1}>
-                    <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px" }}>
                       {t("tmdbIdLabel")}
                     </Typography>
                     <Typography>
@@ -358,7 +367,7 @@ export default function PosterView({
                       ) : "-"}
                     </Typography>
 
-                    <Typography variant="body2" sx={{ fontWeight: 800, mt: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 800, mt: 1, textTransform: "uppercase", letterSpacing: "1px" }}>
                       {t("creatorLabel")}
                     </Typography>
                     <Typography>
@@ -367,7 +376,7 @@ export default function PosterView({
                       </MuiLink>
                     </Typography>
 
-                    <Typography variant="body2" sx={{ fontWeight: 800, mt: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 800, mt: 1, textTransform: "uppercase", letterSpacing: "1px" }}>
                       {t("artworkIdLabel")}
                     </Typography>
                     <Typography variant="body2" sx={{ wordBreak: "break-all", fontFamily: "monospace" }}>
@@ -387,7 +396,7 @@ export default function PosterView({
                   <Divider />
 
                   <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 800 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px" }}>
                       {t("attribution")}
                     </Typography>
                     <Stack spacing={0.75} sx={{ mt: 1 }}>
@@ -509,7 +518,7 @@ export default function PosterView({
                     {linkSearchResults.length > 0 && (
                       <Paper variant="outlined" sx={{ p: 1.5 }}>
                         <Stack spacing={1}>
-                          <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px" }}>
                             {t("addALink")}
                           </Typography>
 

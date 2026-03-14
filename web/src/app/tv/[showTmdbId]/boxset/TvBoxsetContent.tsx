@@ -18,21 +18,6 @@ import PosterCard from "@/components/PosterCard";
 import type { PosterEntry } from "@/lib/types";
 import type { TvBoxsetResponse } from "@/lib/server-api";
 
-function PosterGrid({ items }: { items: PosterEntry[] }) {
-  return (
-    <Grid container spacing={2}>
-      {items.map((p) => (
-        <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 2 }}>
-          <PosterCard
-            poster={p}
-            showCreator={false}
-            actions={[{ label: "DETAILS", href: `/p/${encodeURIComponent(p.poster_id)}` }]}
-          />
-        </Grid>
-      ))}
-    </Grid>
-  );
-}
 
 function EpisodeGrid({ items }: { items: PosterEntry[] }) {
   return (
@@ -105,7 +90,7 @@ export default function TvBoxsetContent({ data }: { data: TvBoxsetResponse }) {
             component="img"
             src={backdropUrl}
             alt=""
-            sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.4 }}
+            sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.3 }}
           />
           <Box
             sx={{
@@ -124,31 +109,24 @@ export default function TvBoxsetContent({ data }: { data: TvBoxsetResponse }) {
               {showPoster?.media.title || t("tvBoxSet")}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {t("tvShowLabel")}
-              {showPoster?.media.year ? ` | ${showPoster.media.year}` : ""}
-              {showPoster?.creator.display_name ? ` | ${showPoster.creator.display_name}` : ""}
+              {[t("tvBoxSet"), showPoster?.creator.display_name].filter(Boolean).join(" · ")}
             </Typography>
           </Box>
 
-          {data.show.length > 0 && (
+          {(data.show.length > 0 || data.seasons.length > 0) && (
             <Box>
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                {t("mainShowPosters")}
-              </Typography>
-              <Box sx={{ mt: 1.5 }}>
-                <PosterGrid items={data.show} />
-              </Box>
-            </Box>
-          )}
-
-          {data.seasons.length > 0 && (
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                {t("seasonPosters")}
-              </Typography>
-              <Box sx={{ mt: 1.5 }}>
-                <PosterGrid items={data.seasons} />
-              </Box>
+              <Typography variant="h6" sx={{ fontWeight: 800, mb: 1.5 }}>{t("posters")}</Typography>
+              <Grid container spacing={2}>
+                {[...data.show, ...data.seasons].map((p) => (
+                  <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 2 }}>
+                    <PosterCard
+                      poster={p}
+                      showCreator={false}
+                      actions={[{ label: "DETAILS", href: `/p/${encodeURIComponent(p.poster_id)}` }]}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
             </Box>
           )}
 

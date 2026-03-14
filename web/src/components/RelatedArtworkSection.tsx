@@ -76,12 +76,12 @@ export default function RelatedArtworkSection({
           {items.map((p) => {
             const bsHref = boxSetHref(p);
             const isBoxset = !!bsHref;
-            const actions: CardAction[] = [
-              isBoxset
-                ? { label: "POSTER", href: `/p/${encodeURIComponent(p.poster_id)}` }
-                : { label: "VIEW", href: p.assets.full.url, external: true },
-              ...(isBoxset && bsHref ? [{ label: "BOX SET", href: bsHref }] : []),
-            ];
+            const actions: CardAction[] = isBoxset && bsHref
+              ? [
+                  { label: "BOX SET", href: bsHref },
+                  { label: "POSTER", href: `/p/${encodeURIComponent(p.poster_id)}` },
+                ]
+              : [{ label: "VIEW", href: p.assets.full.url, external: true }];
             return (
               <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 2 }}>
                 <PosterCard

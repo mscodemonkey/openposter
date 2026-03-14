@@ -52,6 +52,7 @@
   },
   "posterCard": {
     "boxSet": "BOX SET",
+    "movieBoxSet": "MOVIE BOX SET",
     "movie": "MOVIE",
     "tvShow": "TV SHOW",
     "season": "SEASON",
@@ -301,16 +302,18 @@
   },
   "movieBoxset": {
     "movieCollection": "Movie Collection",
+    "movieBoxSetLabel": "Movie Box Set",
     "movieBoxSet": "MOVIE BOX SET | {creator}",
-    "boxSetPoster": "Box set poster",
-    "movies": "Movies",
+    "posters": "Posters",
+    "movies": "Movies in this box set",
     "noBoxSet": "No box set found for this collection."
   },
   "tvBoxset": {
     "tvBoxSet": "TV Box Set",
     "tvShowLabel": "TV SHOW",
+    "posters": "Posters",
     "mainShowPosters": "Main show posters",
-    "seasonPosters": "Season posters",
+    "seasonPosters": "Seasons",
     "episodeCards": "Episode cards",
     "seasonHeading": "Season {number}"
   },

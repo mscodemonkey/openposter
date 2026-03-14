@@ -121,9 +121,9 @@ export default function PosterCard({
     ) : null;
 
   const typeChipProps: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" } | null =
-    poster.media.type === "collection" ? { label: t("boxSet"), color: "primary" }
+    poster.media.type === "collection" ? { label: t("movieBoxSet"), color: "primary" }
     : poster.media.type === "movie" ? { label: t("movie"), color: "success" }
-    : poster.media.type === "show" ? { label: t("tvShow"), color: "error" }
+    : poster.media.type === "show" ? { label: t("tvBoxSet"), color: "error" }
     : poster.media.type === "season" ? { label: t("season"), color: "secondary" }
     : poster.media.type === "episode" ? { label: t("episode"), color: "warning" }
     : poster.media.type === "backdrop" ? { label: t("backdrop"), color: "warning" }

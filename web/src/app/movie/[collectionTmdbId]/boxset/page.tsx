@@ -64,29 +64,18 @@ export default async function MovieBoxsetPage({
             {displayTitle}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {t("movieBoxSet", { creator: collection.creator.display_name ?? "" })}
+            {[t("movieBoxSetLabel"), collection.creator.display_name].filter(Boolean).join(" · ")}
           </Typography>
         </Box>
 
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 800 }}>
-            {t("boxSetPoster")}
+            {t("posters")}
           </Typography>
           <Box sx={{ mt: 1.5 }}>
-            <PosterGrid items={[collection]} />
+            <PosterGrid items={[collection, ...movies]} />
           </Box>
         </Box>
-
-        {movies.length > 0 && (
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 800 }}>
-              {t("movies")}
-            </Typography>
-            <Box sx={{ mt: 1.5 }}>
-              <PosterGrid items={movies} />
-            </Box>
-          </Box>
-        )}
 
         <RelatedArtworkSection
           base={INDEXER_BASE_URL}
