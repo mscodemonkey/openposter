@@ -15,7 +15,7 @@ export default async function BrowsePage({
   let items = await fetchPosters({ q, limit: 200 }).catch(() => null);
 
   return (
-    <Container maxWidth="lg" sx={{ py: 3 }}>
+    <Container maxWidth="lg" sx={{ pt: 0, pb: 3 }}>
       {items === null && (
         <Typography color="error" role="alert" sx={{ mb: 2 }}>
           Could not reach the indexer at {BASE}. Is it running?

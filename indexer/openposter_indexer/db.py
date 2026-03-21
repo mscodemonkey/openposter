@@ -30,6 +30,8 @@ class IndexedPoster(Base):
     show_tmdb_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     season_number: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     episode_number: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    # Collection grouping
+    collection_tmdb_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
 
     changed_at: Mapped[str] = mapped_column(String, index=True)
 

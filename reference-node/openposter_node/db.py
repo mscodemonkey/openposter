@@ -2,13 +2,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import Integer, String, Text
+from sqlalchemy import Boolean, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(AsyncAttrs, DeclarativeBase):
     pass
+
+
+class CreatorTheme(Base):
+    __tablename__ = "creator_theme"
+
+    theme_id: Mapped[str] = mapped_column(String, primary_key=True)
+    creator_id: Mapped[str] = mapped_column(String, index=True)
+    name: Mapped[str] = mapped_column(String)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cover_hash: Mapped[str | None] = mapped_column(String, nullable=True)  # optional blob hash for cover image
+    created_at: Mapped[str] = mapped_column(String)  # RFC3339
+    updated_at: Mapped[str] = mapped_column(String)  # RFC3339
+    deleted_at: Mapped[str | None] = mapped_column(String, nullable=True)  # RFC3339 or null
 
 
 class AdminSession(Base):
@@ -34,6 +47,8 @@ class Poster(Base):
     show_tmdb_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     season_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     episode_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Collection grouping (for movie/backdrop posters that belong to a collection)
+    collection_tmdb_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -48,6 +63,12 @@ class Poster(Base):
 
     # Optional creator-authored links (JSON array)
     links_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Theme this poster belongs to (FK into creator_theme)
+    theme_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Draft / published — False = draft (not visible to indexers), True = published
+    published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     preview_hash: Mapped[str] = mapped_column(String)
     preview_bytes: Mapped[int] = mapped_column(Integer)
@@ -65,6 +86,46 @@ class Poster(Base):
     enc_alg: Mapped[str | None] = mapped_column(String, nullable=True)
     enc_key_id: Mapped[str | None] = mapped_column(String, nullable=True)
     enc_nonce: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class CreatorSettings(Base):
+    """Arbitrary JSON settings keyed by (creator_id, key). Used for Studio preferences."""
+
+    __tablename__ = "creator_settings"
+
+    creator_id: Mapped[str] = mapped_column(String, primary_key=True)
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text)  # JSON-encoded
+    updated_at: Mapped[str] = mapped_column(String)  # RFC3339
+
+
+class CreatorProfile(Base):
+    """Per-creator profile metadata (backdrop image, etc.)."""
+
+    __tablename__ = "creator_profile"
+
+    creator_id: Mapped[str] = mapped_column(String, primary_key=True)
+    backdrop_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    updated_at: Mapped[str] = mapped_column(String)  # RFC3339
+
+
+class AppliedArtwork(Base):
+    """Tracks OpenPoster artwork applied to media server items."""
+
+    __tablename__ = "applied_artwork"
+
+    media_item_id: Mapped[str] = mapped_column(String, primary_key=True)  # Plex ratingKey
+    tmdb_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    media_type: Mapped[str] = mapped_column(String)          # movie/show/season/episode
+    poster_id: Mapped[str] = mapped_column(String)           # OpenPoster poster_id
+    asset_hash: Mapped[str] = mapped_column(String)          # full.hash at apply time
+    creator_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    theme_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    node_base: Mapped[str | None] = mapped_column(String, nullable=True)  # creator's home node URL
+    applied_at: Mapped[str] = mapped_column(String)          # RFC3339
+    auto_update: Mapped[bool] = mapped_column(Boolean, default=False)
+    plex_label: Mapped[str | None] = mapped_column(String, nullable=True)  # label we added (for removal)
+    creator_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Peer(Base):

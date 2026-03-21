@@ -1,253 +1,85 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
-import CardActions from "@mui/material/CardActions";
-import CardContent from "@mui/material/CardContent";
-import CardMedia from "@mui/material/CardMedia";
+import CardActionArea from "@mui/material/CardActionArea";
 import Container from "@mui/material/Container";
-import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Grid from "@mui/material/GridLegacy";
 
-import { INDEXER_BASE_URL } from "@/lib/config";
-import { loadCreatorConnection } from "@/lib/storage";
-import type { PosterEntry, SearchResponse } from "@/lib/types";
+import { POSTER_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
+import Typography from "@mui/material/Typography";
+
+import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
+import BookmarkIcon from "@mui/icons-material/Bookmark";
+
+import { getSubscriptions, type ThemeSubscription } from "@/lib/subscriptions";
 
 export default function LibraryPage() {
   const t = useTranslations("library");
-  const tc = useTranslations("common");
-  const tn = useTranslations("nav");
-  const conn = loadCreatorConnection();
-  const baseUrl = useMemo(() => conn?.nodeUrl?.replace(/\/+$/, "") || "", [conn]);
-
-  const [autoCheck, setAutoCheck] = useState(false);
-  const [items, setItems] = useState<PosterEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [indexed, setIndexed] = useState<Record<string, "yes" | "no" | "checking">>({});
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  async function loadFirstPage() {
-    if (!conn) {
-      setItems([]);
-      setNextCursor(null);
-      return;
-    }
-    setError(null);
-    const r = await fetch(baseUrl + "/v1/posters?limit=50");
-    if (!r.ok) throw new Error(`list failed: ${r.status}`);
-    const json = (await r.json()) as SearchResponse;
-    setItems(json.results);
-    setNextCursor(json.next_cursor);
-  }
-
-  async function loadMore() {
-    if (!conn) return;
-    if (!nextCursor) return;
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const r = await fetch(baseUrl + "/v1/posters?limit=50&cursor=" + encodeURIComponent(nextCursor));
-      if (!r.ok) throw new Error(`list failed: ${r.status}`);
-      const json = (await r.json()) as SearchResponse;
-      setItems((prev) => [...(prev || []), ...json.results]);
-      setNextCursor(json.next_cursor);
-
-      if (autoCheck && json.results.length > 0) {
-        void checkAllIndexed(json.results);
-      }
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  async function checkIndexed(p: PosterEntry) {
-    if (!p.media.tmdb_id) {
-      setIndexed((m) => ({ ...m, [p.poster_id]: "no" }));
-      return;
-    }
-    setIndexed((m) => ({ ...m, [p.poster_id]: "checking" }));
-
-    const url = new URL(INDEXER_BASE_URL.replace(/\/+$/, "") + "/v1/search");
-    url.searchParams.set("tmdb_id", String(p.media.tmdb_id));
-    if (p.media.type) url.searchParams.set("type", p.media.type);
-
-    const r = await fetch(url.toString());
-    if (!r.ok) throw new Error(`indexer search failed: ${r.status}`);
-    const json = (await r.json()) as SearchResponse;
-    const found = json.results.some((x) => x.poster_id === p.poster_id);
-    setIndexed((m) => ({ ...m, [p.poster_id]: found ? "yes" : "no" }));
-  }
-
-  async function checkAllIndexed(list: PosterEntry[]) {
-    const concurrency = 4;
-    const queue = list.filter((p) => !indexed[p.poster_id]);
-
-    async function worker() {
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const p = queue.shift();
-        if (!p) return;
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          await checkIndexed(p);
-        } catch (e: unknown) {
-          setError(e instanceof Error ? e.message : String(e));
-        }
-      }
-    }
-
-    await Promise.all(Array.from({ length: concurrency }, () => worker()));
-  }
-
-  async function del(posterId: string) {
-    if (!conn) return;
-    setError(null);
-    const r = await fetch(baseUrl + `/v1/admin/posters/${encodeURIComponent(posterId)}`, {
-      method: "DELETE",
-      headers: { authorization: `Bearer ${conn.adminToken}` },
-    });
-    const json = await r.json().catch(() => null);
-    if (!r.ok) {
-      setError(`delete failed: ${r.status} ${JSON.stringify(json)}`);
-      return;
-    }
-    await loadFirstPage();
-  }
+  const [subs, setSubs] = useState<ThemeSubscription[]>([]);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      setAutoCheck(sp.get("check") === "1");
-    } catch {
-      setAutoCheck(false);
-    }
-
-    void loadFirstPage().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setSubs(getSubscriptions());
+    setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!autoCheck) return;
-    if (!items || items.length === 0) return;
-    void checkAllIndexed(items);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoCheck, items]);
+  if (!mounted) return null;
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
-      <Stack spacing={2.5}>
-        <Box>
+      <Stack spacing={3}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <BookmarkIcon sx={{ color: "primary.main" }} />
           <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            {t("title")}
+            {t("following")}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {t("description")}
+        </Stack>
+
+        {subs.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            {t("noSubscriptions")}
           </Typography>
-        </Box>
-
-        {!conn ? (
-          <Alert severity="warning">
-            {t("notConnected")} <Link href="/settings">{tn("settings")}</Link>.
-          </Alert>
         ) : (
-          <Alert severity="success">
-            {t("connectedNode", { url: baseUrl })}
-          </Alert>
-        )}
-
-        {error && <Alert severity="error">{error}</Alert>}
-
-        {items === null ? (
-          <Typography color="text.secondary">{tc("loading")}</Typography>
-        ) : items.length === 0 ? (
-          <Typography color="text.secondary">{tc("noPostersFound")}</Typography>
-        ) : (
-          <>
-            <Paper sx={{ p: 2 }}>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" alignItems={{ sm: "center" }}>
-                <Button
-                  variant="outlined"
-                  onClick={() => void checkAllIndexed(items).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
-                >
-                  {t("checkAllIndexed")}
-                </Button>
-                <Typography variant="body2" color="text.secondary">
-                  {tc("indexerLabel", { url: INDEXER_BASE_URL })}
-                </Typography>
-              </Stack>
-            </Paper>
-
-            <Grid container spacing={2}>
-              {items.map((p) => (
-                <Grid key={p.poster_id} item xs={12} sm={6} md={4} lg={3}>
-                  <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                    <Link href={`/p/${encodeURIComponent(p.poster_id)}`} style={{ textDecoration: "none" }}>
-                      <CardMedia
-                        component="img"
-                        height={360}
-                        image={p.assets.preview.url}
-                        alt={p.media.title || p.poster_id}
-                        sx={{ objectFit: "cover" }}
-                      />
-                    </Link>
-                    <CardContent sx={{ flex: 1 }}>
-                      <Typography sx={{ fontWeight: 800 }} noWrap>
-                        {p.media.title || tc("untitled")}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" noWrap>
-                        {p.media.type} · TMDB {p.media.tmdb_id}
-                      </Typography>
-                    </CardContent>
-                    <CardActions sx={{ display: "flex", justifyContent: "space-between" }}>
-                      <Button size="small" variant="text" href={p.assets.full.url} target="_blank" rel="noreferrer">
-                        {tc("download")}
-                      </Button>
-
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => void checkIndexed(p).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
-                        disabled={indexed[p.poster_id] === "checking"}
-                      >
-                        {indexed[p.poster_id] === "checking"
-                          ? t("checking")
-                          : indexed[p.poster_id]
-                          ? t("indexed", { status: indexed[p.poster_id] })
-                          : t("checkIndexed")}
-                      </Button>
-
-                      {conn && (
-                        <Button color="error" size="small" variant="outlined" onClick={() => void del(p.poster_id)}>
-                          {tc("delete")}
-                        </Button>
+          <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
+            {subs.map((sub) => (
+              <Box key={sub.themeId}>
+                <Card>
+                  <CardActionArea
+                    component={Link}
+                    href={`/creator/${encodeURIComponent(sub.creatorId)}/themes/${encodeURIComponent(sub.themeId)}`}
+                  >
+                    <Box sx={{ aspectRatio: "2 / 3", bgcolor: "action.hover", overflow: "hidden" }}>
+                      {sub.coverUrl ? (
+                        <Box
+                          component="img"
+                          src={sub.coverUrl}
+                          alt={sub.themeName}
+                          sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        />
+                      ) : (
+                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+                          <LayersOutlinedIcon sx={{ color: "text.disabled", fontSize: "2rem" }} />
+                        </Box>
                       )}
-                    </CardActions>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-
-            <Box sx={{ pt: 1 }}>
-              {nextCursor ? (
-                <Button variant="outlined" onClick={() => void loadMore().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))} disabled={loadingMore}>
-                  {loadingMore ? tc("loadingMore") : tc("loadMore")}
-                </Button>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  {tc("endOfList")}
-                </Typography>
-              )}
-            </Box>
-          </>
+                    </Box>
+                    <Box sx={{ px: 1.5, pt: 0.75, pb: 1 }}>
+                      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block", fontWeight: 700 }}>
+                        {sub.themeName}
+                      </Typography>
+                      <Typography variant="caption" color="text.disabled" noWrap sx={{ display: "block" }}>
+                        {sub.creatorDisplayName}
+                      </Typography>
+                    </Box>
+                  </CardActionArea>
+                </Card>
+              </Box>
+            ))}
+          </Box>
         )}
       </Stack>
     </Container>

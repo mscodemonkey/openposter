@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from .config import load_config
 from .crypto.signing import ensure_ed25519_keypair
-from .db import Base, Peer, Poster, make_engine, make_sessionmaker
+from .db import AppliedArtwork, Base, CreatorProfile, CreatorSettings, CreatorTheme, Peer, Poster, make_engine, make_sessionmaker
 
 
 async def init_app_state(app: FastAPI) -> None:
@@ -75,6 +75,9 @@ async def init_app_state(app: FastAPI) -> None:
             ("season_number", "ALTER TABLE posters ADD COLUMN season_number INTEGER"),
             ("episode_number", "ALTER TABLE posters ADD COLUMN episode_number INTEGER"),
             ("links_json", "ALTER TABLE posters ADD COLUMN links_json TEXT"),
+            ("theme_id", "ALTER TABLE posters ADD COLUMN theme_id TEXT"),
+            ("collection_tmdb_id", "ALTER TABLE posters ADD COLUMN collection_tmdb_id INTEGER"),
+            ("published", "ALTER TABLE posters ADD COLUMN published INTEGER NOT NULL DEFAULT 1"),
         ]:
             if name not in col_names:
                 await conn.exec_driver_sql(ddl)
@@ -85,6 +88,32 @@ async def init_app_state(app: FastAPI) -> None:
         now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         await conn.exec_driver_sql("UPDATE posters SET created_at = COALESCE(created_at, ?)", (now,))
         await conn.exec_driver_sql("UPDATE posters SET updated_at = COALESCE(updated_at, ?)", (now,))
+
+        # creator_profile and creator_settings tables — created by create_all above, nothing to migrate yet
+        _ = CreatorProfile  # ensure the import is used
+        _ = CreatorSettings  # ensure the import is used
+        _ = AppliedArtwork  # ensure the import is used
+
+        # applied_artwork table — use CREATE TABLE IF NOT EXISTS for safety on existing DBs
+        await conn.exec_driver_sql(
+            "CREATE TABLE IF NOT EXISTS applied_artwork ("
+            "  media_item_id TEXT PRIMARY KEY, "
+            "  tmdb_id INTEGER, "
+            "  media_type TEXT NOT NULL, "
+            "  poster_id TEXT NOT NULL, "
+            "  asset_hash TEXT NOT NULL, "
+            "  creator_id TEXT, "
+            "  theme_id TEXT, "
+            "  node_base TEXT, "
+            "  applied_at TEXT NOT NULL, "
+            "  auto_update INTEGER NOT NULL DEFAULT 0, "
+            "  plex_label TEXT"
+            ")"
+        )
+        # applied_artwork column additions (for existing DBs that predate this column)
+        aa_cols = {c[1] for c in (await conn.exec_driver_sql("PRAGMA table_info(applied_artwork)")).all()}
+        if "creator_display_name" not in aa_cols:
+            await conn.exec_driver_sql("ALTER TABLE applied_artwork ADD COLUMN creator_display_name TEXT")
 
         # Peers table migrations (table is created by create_all above; add any new columns here)
         peer_cols = (await conn.exec_driver_sql("PRAGMA table_info(peers)")).all()

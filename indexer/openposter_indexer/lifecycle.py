@@ -195,6 +195,7 @@ async def crawl_once(app: FastAPI) -> None:
                         show_tmdb_id=(str(media.get("show_tmdb_id")) if media.get("show_tmdb_id") is not None else None),
                         season_number=(str(media.get("season_number")) if media.get("season_number") is not None else None),
                         episode_number=(str(media.get("episode_number")) if media.get("episode_number") is not None else None),
+                        collection_tmdb_id=(str(media.get("collection_tmdb_id")) if media.get("collection_tmdb_id") is not None else None),
                         changed_at=_norm_rfc3339(changed_at),
                         poster_json=json.dumps(poster, separators=(",", ":")),
                     )
@@ -257,6 +258,7 @@ async def init_app_state(app: FastAPI) -> None:
             ("show_tmdb_id", "ALTER TABLE indexed_posters ADD COLUMN show_tmdb_id VARCHAR"),
             ("season_number", "ALTER TABLE indexed_posters ADD COLUMN season_number VARCHAR"),
             ("episode_number", "ALTER TABLE indexed_posters ADD COLUMN episode_number VARCHAR"),
+            ("collection_tmdb_id", "ALTER TABLE indexed_posters ADD COLUMN collection_tmdb_id VARCHAR"),
         ]:
             if col not in existing:
                 await conn.exec_driver_sql(ddl)
@@ -282,6 +284,9 @@ async def init_app_state(app: FastAPI) -> None:
         )
         await conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_indexed_posters_show_tmdb_id ON indexed_posters(show_tmdb_id)"
+        )
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_indexed_posters_collection_tmdb_id ON indexed_posters(collection_tmdb_id)"
         )
         await conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_indexed_posters_season_number ON indexed_posters(season_number)"
@@ -322,6 +327,7 @@ async def init_app_state(app: FastAPI) -> None:
                 r.show_tmdb_id = (str(media.get("show_tmdb_id")) if media.get("show_tmdb_id") is not None else None)
                 r.season_number = (str(media.get("season_number")) if media.get("season_number") is not None else None)
                 r.episode_number = (str(media.get("episode_number")) if media.get("episode_number") is not None else None)
+                r.collection_tmdb_id = (str(media.get("collection_tmdb_id")) if media.get("collection_tmdb_id") is not None else None)
             except Exception:
                 continue
         await session.commit()

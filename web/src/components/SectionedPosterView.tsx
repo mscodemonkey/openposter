@@ -1,21 +1,18 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
-import CardActions from "@mui/material/CardActions";
-import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import FormGroup from "@mui/material/FormGroup";
-import Grid from "@mui/material/Grid";
 import Stack from "@mui/material/Stack";
-import Switch from "@mui/material/Switch";
+
+import { POSTER_GRID_COLS, EPISODE_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 
@@ -24,14 +21,14 @@ import LocalMoviesOutlinedIcon from "@mui/icons-material/LocalMoviesOutlined";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 
 import PosterCard from "@/components/PosterCard";
+import OPLogo from "@/components/OPLogo";
 import type { PosterEntry } from "@/lib/types";
-import { loadShowPosterDetails } from "@/lib/storage";
 
 const SECTION_LIMIT = 50;
 
 // ─── Data types ──────────────────────────────────────────────────────────────
 
-type CollectionGroup = {
+export type CollectionGroup = {
   key: string;
   title: string;
   year?: number;
@@ -49,7 +46,7 @@ type CollectionGroup = {
   movieCount: number;
 };
 
-type TVShowGroup = {
+export type TVShowGroup = {
   key: string;
   title: string;
   year?: number;
@@ -311,12 +308,21 @@ function MosaicBox({
   previews,
   aspectRatio,
   alt,
+  onImageError,
 }: {
   previews: string[];
   aspectRatio: string;
   alt: string;
+  onImageError?: () => void;
 }) {
   const n = previews.length;
+  const [failed, setFailed] = useState<Set<number>>(new Set());
+
+  function handleError(i: number) {
+    setFailed((prev) => prev.has(i) ? prev : new Set([...prev, i]));
+    if (i === 0) onImageError?.();
+  }
+
   return (
     <Box
       sx={{
@@ -329,11 +335,15 @@ function MosaicBox({
       }}
     >
       {previews.map((url, i) => (
+        failed.has(i) ? (
+          <Box key={i} sx={{ width: "100%", height: "100%", bgcolor: "action.hover" }} />
+        ) : (
         <Box
           key={i}
           component="img"
           src={url}
           alt={n === 1 ? alt : `${alt} (${i + 1})`}
+          onError={() => handleError(i)}
           sx={{
             width: "100%",
             height: "100%",
@@ -341,12 +351,13 @@ function MosaicBox({
             display: "block",
           }}
         />
+        )
       ))}
     </Box>
   );
 }
 
-function CountBadge({ icon, count, tooltip }: { icon: ReactNode; count: number; tooltip: string }) {
+export function CountBadge({ icon, count, tooltip }: { icon: ReactNode; count: number; tooltip: string }) {
   return (
     <Tooltip title={tooltip} placement="top">
       <Box
@@ -369,247 +380,132 @@ function CountBadge({ icon, count, tooltip }: { icon: ReactNode; count: number; 
   );
 }
 
-function CollectionCard({
-  group,
-  showCreator,
-  showDetails,
+export function CollectionCard({
+  group, onClick, onImageError, chip, managed, menuSlot, imageWrapper,
 }: {
   group: CollectionGroup;
-  showCreator: boolean;
-  showDetails: boolean;
+  onClick?: () => void;
+  onImageError?: () => void;
+  chip?: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" };
+  managed?: boolean;
+  menuSlot?: React.ReactNode;
+  imageWrapper?: (img: React.ReactElement) => React.ReactElement;
 }) {
   const t = useTranslations("sections");
-  const tc = useTranslations("common");
   const href = `/movie/${group.collectionTmdbId}/boxset`;
-  const cover = (
+  const chipProps = chip ?? { label: t("movieBoxSet"), color: "primary" as const };
+  const subtitleParts = [
+    group.movieCount > 0 ? `${group.movieCount} movies` : null,
+    group.creatorName || null,
+  ].filter(Boolean);
+  const subtitleLine = subtitleParts.join(" · ");
+  const imageBox = (
     <Box sx={{ position: "relative" }}>
-      <MosaicBox previews={group.coverUrls} aspectRatio="2 / 3" alt={group.title} />
-      <Chip
-        label={t("movieBoxSet")}
-        size="small"
-        color="primary"
-        sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none" }}
-      />
-      {group.movieCount > 0 && (
-        <Box sx={{ position: "absolute", bottom: 8, right: 8, pointerEvents: "none" }}>
-          <CountBadge icon={<LocalMoviesOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.movieCount} tooltip={t("movieIncluded", { count: group.movieCount })} />
+      <MosaicBox previews={group.coverUrls} aspectRatio="2 / 3" alt={group.title} onImageError={onImageError} />
+      <Chip label={chipProps.label} size="small" color={chipProps.color} sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none", opacity: 0.9 }} />
+      {managed && (
+        <Box sx={{ position: "absolute", top: 10, right: 6, pointerEvents: "none" }}>
+          <OPLogo size={20} />
         </Box>
       )}
     </Box>
   );
-
-  const collectionTitleStrip = (
-    <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
-      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
-        {group.title}
-      </Typography>
-    </Box>
-  );
-
-  if (!showDetails) {
-    return (
-      <Card sx={{ height: "100%" }}>
-        <Link href={href} style={{ display: "block" }} aria-label={group.title}>{cover}</Link>
-        {collectionTitleStrip}
-      </Card>
-    );
-  }
-
   return (
-    <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      {cover}
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Typography sx={{ fontWeight: 800 }} noWrap>
+    <Card sx={{ height: "100%", border: 0, boxShadow: "none", bgcolor: "transparent" }}>
+      <Link href={href} style={{ display: "block" }} aria-label={group.title} onClick={onClick ? (e) => { e.preventDefault(); onClick(); } : undefined}>
+        {imageWrapper ? imageWrapper(imageBox) : imageBox}
+      </Link>
+      <Box sx={{ px: 1, pt: 0.75, pb: 0.75, textAlign: "center", position: "relative" }}>
+        <Typography variant="caption" noWrap sx={{ display: "block", fontWeight: 600, color: "text.primary", lineHeight: 1.4 }}>
           {group.title}
         </Typography>
-        {showCreator && (
-          <Typography variant="body2" color="text.secondary">
-            {group.creatorName}
+        {subtitleLine && (
+          <Typography variant="caption" noWrap sx={{ display: "block", color: "text.secondary", fontSize: "0.6rem", lineHeight: 1.4 }}>
+            {subtitleLine}
           </Typography>
         )}
-      </CardContent>
-      <CardActions sx={{ pt: 0 }}>
-        <Button
-          component={Link}
-          href={href}
-          size="small"
-          variant="text"
-          sx={{ px: 1, minWidth: 0 }}
-        >
-          {t("boxSetAction")}
-        </Button>
-      </CardActions>
+        {menuSlot && (
+          <Box sx={{ position: "absolute", top: "50%", right: 0, transform: "translateY(-50%)" }}>
+            {menuSlot}
+          </Box>
+        )}
+      </Box>
     </Card>
   );
 }
 
-function TVShowCard({
-  group,
-  showCreator,
-  showDetails,
-}: {
-  group: TVShowGroup;
-  showCreator: boolean;
-  showDetails: boolean;
-}) {
+export function TVShowCard({ group, onClick, onImageError, chip, menuSlot }: { group: TVShowGroup; onClick?: () => void; onImageError?: () => void; chip?: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" }; menuSlot?: React.ReactNode }) {
   const t = useTranslations("sections");
   const n = group.coverPreviews.length;
-  const linkLabel = group.hasBoxSet ? t("boxSetAction") : t("tvShowAction");
   const href = `/tv/${group.showTmdbId}/boxset`;
+  const chipProps = chip ?? { label: t("tvBoxSetChip"), color: "error" as const };
+  const [failed, setFailed] = useState<Set<number>>(new Set());
 
-  const imageArea = (
-    <Box sx={{ position: "relative" }}>
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: n >= 2 ? "1fr 1fr" : "1fr",
-          aspectRatio: "2 / 3",
-          overflow: "hidden",
-          bgcolor: "action.hover",
-        }}
-      >
-        {group.coverPreviews.map((url, i) => (
-          <Box
-            key={i}
-            component="img"
-            src={url}
-            alt={n === 1 ? group.title : `${group.title} (${i + 1})`}
-            sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
-        ))}
-      </Box>
-      <Chip
-        label={t("tvBoxSetChip")}
-        size="small"
-        color="error"
-        sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none" }}
-      />
-      {(group.seasonCount > 0 || group.episodeCount > 0) && (
-        <Box sx={{ position: "absolute", bottom: 8, right: 8, display: "flex", flexDirection: "row", alignItems: "center", gap: 0.5, pointerEvents: "none" }}>
-          {group.seasonCount > 0 && (
-            <CountBadge icon={<TvOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.seasonCount} tooltip={t("seasonPostersIncluded", { count: group.seasonCount })} />
-          )}
-          {group.episodeCount > 0 && (
-            <CountBadge icon={<DvrOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.episodeCount} tooltip={t("episodeCardsIncluded", { count: group.episodeCount })} />
-          )}
-        </Box>
-      )}
-    </Box>
-  );
-
-  const tvTitleStrip = (
-    <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
-      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
-        {group.title}{group.year ? ` (${group.year})` : ""}
-      </Typography>
-    </Box>
-  );
-
-  if (!showDetails) {
-    return (
-      <Card sx={{ height: "100%" }}>
-        <Link href={href} style={{ display: "block" }} aria-label={group.title}>{imageArea}</Link>
-        {tvTitleStrip}
-      </Card>
-    );
+  function handleError(i: number) {
+    setFailed((prev) => prev.has(i) ? prev : new Set([...prev, i]));
+    if (i === 0) onImageError?.();
   }
 
   return (
-    <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      {imageArea}
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Typography sx={{ fontWeight: 800 }} noWrap>
+    <Card sx={{ height: "100%", border: 0, boxShadow: "none", bgcolor: "transparent" }}>
+      <Link href={href} style={{ display: "block" }} aria-label={group.title} onClick={onClick ? (e) => { e.preventDefault(); onClick(); } : undefined}>
+        <Box sx={{ position: "relative" }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: n >= 2 ? "1fr 1fr" : "1fr", aspectRatio: "2 / 3", overflow: "hidden", bgcolor: "action.hover" }}>
+            {group.coverPreviews.map((url, i) => (
+              failed.has(i) ? (
+                <Box key={i} sx={{ width: "100%", height: "100%", bgcolor: "action.hover" }} />
+              ) : (
+                <Box key={i} component="img" src={url} alt={n === 1 ? group.title : `${group.title} (${i + 1})`} onError={() => handleError(i)} sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              )
+            ))}
+          </Box>
+          <Chip label={chipProps.label} size="small" color={chipProps.color} sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none", opacity: 0.9 }} />
+          {(group.seasonCount > 0 || group.episodeCount > 0) && (
+            <Box sx={{ position: "absolute", bottom: 8, right: 8, display: "flex", flexDirection: "row", alignItems: "center", gap: 0.5, pointerEvents: "none" }}>
+              {group.seasonCount > 0 && <CountBadge icon={<TvOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.seasonCount} tooltip={t("seasonPostersIncluded", { count: group.seasonCount })} />}
+              {group.episodeCount > 0 && <CountBadge icon={<DvrOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.episodeCount} tooltip={t("episodeCardsIncluded", { count: group.episodeCount })} />}
+            </Box>
+          )}
+        </Box>
+      </Link>
+      <Box sx={{ px: 1, pt: 0.75, pb: 0.75, textAlign: "center", position: "relative" }}>
+        <Typography variant="caption" noWrap sx={{ display: "block", fontWeight: 600, color: "text.primary", lineHeight: 1.4 }}>
           {group.title}
         </Typography>
-        {showCreator && (
-          <Typography variant="body2" color="text.secondary">
-            {group.creatorName}
+        {(group.year || group.creatorName) && (
+          <Typography variant="caption" noWrap sx={{ display: "block", color: "text.secondary", fontSize: "0.6rem", lineHeight: 1.4 }}>
+            {[group.year, group.creatorName || null].filter(Boolean).join(" · ")}
           </Typography>
         )}
-        <Typography variant="caption" color="text.secondary">
-          {t("tvShowAction")}{group.year ? ` · ${group.year}` : ""}
-        </Typography>
-      </CardContent>
-      <CardActions sx={{ pt: 0 }}>
-        <Button
-          component={Link}
-          href={href}
-          size="small"
-          variant="text"
-          sx={{ px: 1, minWidth: 0 }}
-        >
-          {linkLabel}
-        </Button>
-      </CardActions>
+        {menuSlot && (
+          <Box sx={{ position: "absolute", top: "50%", right: 0, transform: "translateY(-50%)" }}>
+            {menuSlot}
+          </Box>
+        )}
+      </Box>
     </Card>
   );
 }
 
-function EpisodeSeasonCard({
-  group,
-  showDetails,
-}: {
-  group: EpisodeSeasonGroup;
-  showDetails: boolean;
-}) {
+function EpisodeSeasonCard({ group }: { group: EpisodeSeasonGroup }) {
   const t = useTranslations("sections");
   const href = `/tv/${group.showTmdbId}/boxset#season-${group.seasonNumber}`;
-  const mosaic = (
-    <Box sx={{ position: "relative" }}>
-      <MosaicBox previews={group.episodePreviews} aspectRatio="16 / 9" alt={`${group.showTitle || t("unknownShow")} S${String(group.seasonNumber).padStart(2, "0")}`} />
-      <Tooltip title={group.seasonTitle ?? ""} placement="right" disableHoverListener={!group.seasonTitle}>
-        <Chip
-          label={t("seasonLabel", { number: String(group.seasonNumber).padStart(2, "0") })}
-          size="small"
-          color="secondary"
-          sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: group.seasonTitle ? "auto" : "none" }}
-        />
-      </Tooltip>
-      <Box sx={{ position: "absolute", bottom: 8, right: 8, pointerEvents: "none" }}>
-        <CountBadge icon={<DvrOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.episodeCount} tooltip={t("episodeCardsIncluded", { count: group.episodeCount })} />
-      </Box>
-    </Box>
-  );
-
-  const seasonStrip = (
-    <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
-      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
-        {group.showTitle || t("unknownShow")}
-      </Typography>
-    </Box>
-  );
-
-  if (!showDetails) {
-    return (
-      <Card sx={{ height: "100%" }}>
-        <Link href={href} style={{ display: "block" }} aria-label={`${group.showTitle || t("unknownShow")} S${String(group.seasonNumber).padStart(2, "0")}`}>{mosaic}</Link>
-        {seasonStrip}
-      </Card>
-    );
-  }
-
   return (
-    <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      {mosaic}
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Typography sx={{ fontWeight: 800 }} noWrap>
-          {group.showTitle || t("unknownShow")}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {t("seasonLabel", { number: String(group.seasonNumber).padStart(2, "0") })} · {t("episodeCardCount", { count: group.episodeCount })}
-        </Typography>
-      </CardContent>
-      <CardActions sx={{ pt: 0 }}>
-        <Button
-          component={Link}
-          href={href}
-          size="small"
-          variant="text"
-          sx={{ px: 1, minWidth: 0 }}
-        >
-          {t("seasonLabel", { number: group.seasonNumber })}
-        </Button>
-      </CardActions>
+    <Card sx={{ height: "100%" }}>
+      <Link href={href} style={{ display: "block" }} aria-label={`${group.showTitle || t("unknownShow")} S${String(group.seasonNumber).padStart(2, "0")}`}>
+        <Box sx={{ position: "relative" }}>
+          <MosaicBox previews={group.episodePreviews} aspectRatio="16 / 9" alt={`${group.showTitle || t("unknownShow")} S${String(group.seasonNumber).padStart(2, "0")}`} />
+          <Tooltip title={group.seasonTitle ?? ""} placement="right" disableHoverListener={!group.seasonTitle}>
+            <Chip label={t("seasonLabel", { number: String(group.seasonNumber).padStart(2, "0") })} size="small" color="secondary" sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: group.seasonTitle ? "auto" : "none", opacity: 0.9 }} />
+          </Tooltip>
+          <Box sx={{ position: "absolute", bottom: 8, right: 8, pointerEvents: "none" }}>
+            <CountBadge icon={<DvrOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.episodeCount} tooltip={t("episodeCardsIncluded", { count: group.episodeCount })} />
+          </Box>
+        </Box>
+      </Link>
+      <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
+        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>{group.showTitle || t("unknownShow")}</Typography>
+      </Box>
     </Card>
   );
 }
@@ -640,15 +536,11 @@ export default function SectionedPosterView({
 }: Props) {
   const t = useTranslations("sections");
   const tc = useTranslations("common");
-  const [showBoxSets, setShowBoxSets] = useState(true);
-  const [showMoviePosters, setShowMoviePosters] = useState(true);
-  const [showTVShows, setShowTVShows] = useState(true);
-  const [showEpisodeCards, setShowEpisodeCards] = useState(true);
-  const [showDetails, setShowDetails] = useState(true);
-
-  useEffect(() => {
-    setShowDetails(loadShowPosterDetails());
-  }, []);
+  const [filters, setFilters] = useState(["boxSets", "moviePosters", "tvShows", "episodeCards"]);
+  const showBoxSets = filters.includes("boxSets");
+  const showMoviePosters = filters.includes("moviePosters");
+  const showTVShows = filters.includes("tvShows");
+  const showEpisodeCards = filters.includes("episodeCards");
 
   const { collectionGroups, allMovies, tvShowGroups, episodeSeasonGroups } =
     useMemo(() => groupContent(items), [items]);
@@ -665,33 +557,33 @@ export default function SectionedPosterView({
 
   return (
     <Stack spacing={3}>
-      {/* Toggle switches */}
-      <Box component="fieldset" sx={{ border: "none", m: 0, p: 0 }}>
-        <Box
-          component="legend"
-          sx={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", clipPath: "inset(50%)", whiteSpace: "nowrap" }}
+      {/* Fixed filter bar — always directly below the AppBar */}
+      <Box sx={{
+        position: "fixed",
+        top: { xs: "56px", sm: "64px" },
+        left: 0,
+        right: 0,
+        zIndex: 1099,
+        bgcolor: "background.default",
+        borderBottom: 1,
+        borderColor: "divider",
+        px: 2,
+        py: 1,
+      }}>
+        <ToggleButtonGroup
+          value={filters}
+          onChange={(_, v) => v.length > 0 && setFilters(v)}
+          size="small"
+          aria-label={t("showPosterDetails")}
         >
-          {t("showPosterDetails")}
-        </Box>
-        <FormGroup row>
-          <FormControlLabel
-            control={<Switch checked={showBoxSets} onChange={(e) => setShowBoxSets(e.target.checked)} />}
-            label={t("boxSets")}
-          />
-          <FormControlLabel
-            control={<Switch checked={showMoviePosters} onChange={(e) => setShowMoviePosters(e.target.checked)} />}
-            label={t("moviePosters")}
-          />
-          <FormControlLabel
-            control={<Switch checked={showTVShows} onChange={(e) => setShowTVShows(e.target.checked)} />}
-            label={t("tvShows")}
-          />
-          <FormControlLabel
-            control={<Switch checked={showEpisodeCards} onChange={(e) => setShowEpisodeCards(e.target.checked)} />}
-            label={t("episodeCards")}
-          />
-        </FormGroup>
+          <ToggleButton value="boxSets">{t("boxSets")}</ToggleButton>
+          <ToggleButton value="moviePosters">{t("moviePosters")}</ToggleButton>
+          <ToggleButton value="tvShows">{t("tvShows")}</ToggleButton>
+          <ToggleButton value="episodeCards">{t("episodeCards")}</ToggleButton>
+        </ToggleButtonGroup>
       </Box>
+      {/* Spacer so content clears the fixed bar (~48px bar height) */}
+      <Box sx={{ height: "48px" }} />
 
       {noContent && items.length > 0 && (
         <Typography color="text.secondary" role="status">
@@ -704,24 +596,23 @@ export default function SectionedPosterView({
 
       {showBoxSets && collectionGroups.length > 0 && (
         <Section title={t("boxSets")}>
-          <Grid container spacing={2}>
+          <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
             {collectionGroups.map((g) => (
-              <Grid key={g.key} size={{ xs: 6, sm: 4, md: 2 }}>
-                <CollectionCard group={g} showCreator={showCreator} showDetails={showDetails} />
-              </Grid>
+              <Box key={g.key}>
+                <CollectionCard group={g} />
+              </Box>
             ))}
-          </Grid>
+          </Box>
         </Section>
       )}
 
       {showMoviePosters && allMovies.length > 0 && (
         <Section title={t("moviePosters")}>
-          <Grid container spacing={2}>
+          <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
             {allMovies.map((p) => (
-              <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 2 }}>
+              <Box key={p.poster_id}>
                 <PosterCard
                   poster={p}
-                  showCreator={showCreator}
                   actions={[
                     {
                       label: "DETAILS",
@@ -729,33 +620,33 @@ export default function SectionedPosterView({
                     },
                   ]}
                 />
-              </Grid>
+              </Box>
             ))}
-          </Grid>
+          </Box>
         </Section>
       )}
 
       {showTVShows && tvShowGroups.length > 0 && (
         <Section title={t("tvShows")}>
-          <Grid container spacing={2}>
+          <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
             {tvShowGroups.map((g) => (
-              <Grid key={g.key} size={{ xs: 6, sm: 4, md: 2 }}>
-                <TVShowCard group={g} showCreator={showCreator} showDetails={showDetails} />
-              </Grid>
+              <Box key={g.key}>
+                <TVShowCard group={g} />
+              </Box>
             ))}
-          </Grid>
+          </Box>
         </Section>
       )}
 
       {showEpisodeCards && episodeSeasonGroups.length > 0 && (
         <Section title={t("episodeCards")}>
-          <Grid container spacing={2}>
+          <Box sx={{ display: "grid", gridTemplateColumns: EPISODE_GRID_COLS, gap: GRID_GAP }}>
             {episodeSeasonGroups.map((g) => (
-              <Grid key={g.key} size={{ xs: 12, sm: 6, md: 3 }}>
-                <EpisodeSeasonCard group={g} showDetails={showDetails} />
-              </Grid>
+              <Box key={g.key}>
+                <EpisodeSeasonCard group={g} />
+              </Box>
             ))}
-          </Grid>
+          </Box>
         </Section>
       )}
     </Stack>

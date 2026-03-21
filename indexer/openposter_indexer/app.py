@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .lifecycle import attach_lifecycle
+from .routes.admin import router as admin_router
 from .routes.blob_sources import router as blob_sources_router
 from .routes.creators import router as creators_router
 from .routes.facets import router as facets_router
@@ -43,3 +44,4 @@ app.include_router(stats_router, prefix="/v1")
 app.include_router(tv_boxset_router, prefix="/v1")
 app.include_router(nodes_router, prefix="/v1")
 app.include_router(blob_sources_router, prefix="/v1")
+app.include_router(admin_router, prefix="/v1")

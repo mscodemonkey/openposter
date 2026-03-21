@@ -1,26 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 
 import Link from "next/link";
 
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
-import CardActions from "@mui/material/CardActions";
-import CardContent from "@mui/material/CardContent";
-import CardMedia from "@mui/material/CardMedia";
 import Chip from "@mui/material/Chip";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
+import CardMedia from "@mui/material/CardMedia";
 import Typography from "@mui/material/Typography";
 
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-
 import type { PosterEntry } from "@/lib/types";
-import { loadShowPosterDetails } from "@/lib/storage";
+import OPLogo from "./OPLogo";
 
 export type CardAction = {
   label: string;
@@ -34,54 +26,56 @@ interface PosterCardProps {
   /** Buttons rendered in the card footer. Omit or pass empty array for no buttons. */
   actions?: CardAction[];
   /**
-   * Show the creator name below the title, linked to /creator/[id].
-   * Default: true. Set false when creator is already clear from context,
-   * or when you are providing a custom subtitle instead.
-   */
-  showCreator?: boolean;
-  /**
-   * Override the subtitle line with plain text (e.g. "movie · TMDB 603").
-   * When provided, replaces the creator name regardless of showCreator.
-   */
-  subtitle?: string;
-  /**
-   * If provided, shows a ⋮ overflow icon button that opens a menu with a
-   * "Node" link to this URL. Useful on browse/search pages.
-   */
-  nodeUrl?: string;
-  /**
    * Image aspect ratio. Default "2 / 3" (portrait poster).
    * Use "16 / 9" for episode thumb cards.
    */
   aspectRatio?: string;
-  /** Called when the preview image fails to load (e.g. to remove broken cards). */
+  /** Called when the preview image fails to load. */
   onImageError?: () => void;
-  /** Suppress the auto-generated TV BOX SET link on episode cards. Default: false. */
-  hideBoxSetLink?: boolean;
+  /**
+   * Override the auto-derived type chip. Pass `false` to suppress it entirely,
+   * or an object to replace it with a custom label/color.
+   */
+  chip?: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" } | false;
+  /** Called when the card is clicked (image area). */
+  onClick?: () => void;
+  /** When true, draws a primary-colour ring on the image to indicate selection. */
+  selected?: boolean;
+  /** When true, skips rendering the image and shows a grey placeholder instead. */
+  imageFailed?: boolean;
+  /** When true, shows the OpenPoster logo badge in the top-right corner. */
+  managed?: boolean;
+  /** Optional node rendered in the title strip (e.g. retry menu). Ignored for episode cards. */
+  menuSlot?: React.ReactNode;
+  /**
+   * Optional wrapper applied to the image area only (not the title strip).
+   * Use this to attach a tooltip to just the image, e.g.:
+   *   imageWrapper={(img) => <ArtworkMetadataTooltip meta={...}>{img}</ArtworkMetadataTooltip>}
+   */
+  imageWrapper?: (img: React.ReactElement) => React.ReactElement;
+  /**
+   * Optional node rendered next to the creator name in the title strip.
+   * Use this for a subscribe star/menu. Only shown when creator.display_name is present.
+   */
+  subscribeSlot?: React.ReactNode;
 }
 
 export default function PosterCard({
   poster,
   actions,
-  showCreator = true,
-  subtitle,
-  nodeUrl,
   aspectRatio = "2 / 3",
   onImageError,
-  hideBoxSetLink = false,
+  chip,
+  onClick,
+  imageFailed: imageFailed_prop = false,
+  managed = false,
+  menuSlot,
+  selected = false,
+  imageWrapper,
+  subscribeSlot,
 }: PosterCardProps) {
   const t = useTranslations("posterCard");
   const tc = useTranslations("common");
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [showDetails, setShowDetails] = useState(true);
-
-  useEffect(() => {
-    setShowDetails(loadShowPosterDetails());
-  }, []);
-
-  const hasButtons = actions && actions.length > 0;
-  const hasMenu = !!nodeUrl;
-  const showFooter = hasButtons || hasMenu;
 
   const isEpisode = poster.media.type === "episode";
   const isSeason = poster.media.type === "season";
@@ -90,37 +84,9 @@ export default function PosterCard({
       ? `Season ${String(poster.media.season_number).padStart(2, "0")}`
       : poster.media.title || tc("untitled")
     : null;
-  const boxSetHref =
-    isEpisode && poster.media.show_tmdb_id != null
-      ? `/tv/${poster.media.show_tmdb_id}/boxset`
-      : null;
-  const episodeMetaLine = isEpisode
-    ? [
-        poster.media.season_number != null ? `Season ${String(poster.media.season_number).padStart(2, "0")}` : null,
-        poster.media.episode_number != null ? `Episode ${String(poster.media.episode_number).padStart(2, "0")}` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : null;
+  const episodeMeta = null; // replaced by title strip below
 
-  // Always-visible strip for episode cards (rendered in both compact and full modes)
-  const episodeMeta =
-    isEpisode && (episodeMetaLine || (boxSetHref && !hideBoxSetLink)) ? (
-      <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
-        {episodeMetaLine && (
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
-            {episodeMetaLine}
-          </Typography>
-        )}
-        {boxSetHref && !hideBoxSetLink && (
-          <Button component={Link} href={boxSetHref} variant="text" size="small" sx={{ px: 0, minWidth: 0 }}>
-            {t("tvBoxSet")}
-          </Button>
-        )}
-      </Box>
-    ) : null;
-
-  const typeChipProps: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" } | null =
+  const autoChipProps: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" } | null =
     poster.media.type === "collection" ? { label: t("movieBoxSet"), color: "primary" }
     : poster.media.type === "movie" ? { label: t("movie"), color: "success" }
     : poster.media.type === "show" ? { label: t("tvBoxSet"), color: "error" }
@@ -128,145 +94,100 @@ export default function PosterCard({
     : poster.media.type === "episode" ? { label: t("episode"), color: "warning" }
     : poster.media.type === "backdrop" ? { label: t("backdrop"), color: "warning" }
     : null;
+  // chip prop: false = suppress, object = override, undefined = use auto
+  const typeChipProps = chip === false ? null : (chip ?? autoChipProps);
 
-  const image = (
-    <Box sx={{ position: "relative" }}>
-      <CardMedia
-        component="img"
-        image={poster.assets.preview.url}
-        alt={poster.media.title || poster.poster_id}
-        onError={onImageError}
-        sx={{ aspectRatio, objectFit: "contain", display: "block" }}
-      />
+  const titleLine = seasonDisplayTitle ?? (poster.media.title || tc("untitled"));
+  const subtitleParts = isEpisode
+    ? [
+        poster.media.episode_number != null ? `Episode ${String(poster.media.episode_number).padStart(2, "0")}` : null,
+        poster.creator.display_name || null,
+      ].filter(Boolean)
+    : [
+        !isSeason && poster.media.year ? String(poster.media.year) : null,
+        poster.creator.display_name || null,
+      ].filter(Boolean);
+  const subtitleLine = subtitleParts.join(" · ");
+
+  const titleStrip = (
+    <Box sx={{ px: 1, pt: 0.75, pb: 0.75, textAlign: "center", position: "relative" }}>
+      <Typography
+        variant="caption"
+        noWrap
+        sx={{ display: "block", fontWeight: 600, color: "text.primary", lineHeight: 1.6 }}
+      >
+        {titleLine}
+      </Typography>
+      {subtitleLine && (
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0.25 }}>
+          <Typography
+            variant="caption"
+            noWrap
+            sx={{ color: "text.secondary", lineHeight: 1.4 }}
+          >
+            {subtitleLine}
+          </Typography>
+          {subscribeSlot}
+        </Box>
+      )}
+      {menuSlot && (
+        <Box sx={{ position: "absolute", top: "50%", right: 0, transform: "translateY(-50%)" }}>
+          {menuSlot}
+        </Box>
+      )}
+    </Box>
+  );
+
+  const primary = actions?.[0];
+  const [imgFailed, setImgFailed] = useState(false);
+  const showPlaceholder = imageFailed_prop || imgFailed;
+
+  const imageArea = (
+    <Box sx={{ position: "relative", ...(selected && { outline: "3px solid", outlineColor: "primary.main" }) }}>
+      {showPlaceholder ? (
+        <Box sx={{ aspectRatio, bgcolor: "action.hover", display: "block" }} />
+      ) : (
+        <CardMedia
+          component="img"
+          image={poster.assets.preview.url}
+          alt={poster.media.title || poster.poster_id}
+          onError={() => { setImgFailed(true); onImageError?.(); }}
+          sx={{ aspectRatio, objectFit: "contain", display: "block" }}
+        />
+      )}
       {typeChipProps && (
         <Chip
           label={typeChipProps.label}
           size="small"
           color={typeChipProps.color}
-          sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none" }}
+          sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none", opacity: 0.9 }}
         />
+      )}
+      {managed && (
+        <Box sx={{ position: "absolute", top: 10, right: 6, pointerEvents: "none" }}>
+          <OPLogo size={20} />
+        </Box>
       )}
     </Box>
   );
 
-  const titleStrip = !isEpisode ? (
-    <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
-      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
-        {seasonDisplayTitle ?? (poster.media.title || tc("untitled"))}{!isSeason && poster.media.type !== "collection" && poster.media.year ? ` (${poster.media.year})` : ""}
-      </Typography>
-    </Box>
-  ) : null;
-
-  // Compact mode: image only, tapping goes to the primary action
-  if (!showDetails) {
-    const primary = actions?.[0];
-    return (
-      <Card sx={{ height: "100%" }}>
-        {primary ? (
-          primary.external ? (
-            <a href={primary.href} target="_blank" rel="noreferrer" style={{ display: "block" }}>
-              {image}
-            </a>
-          ) : (
-            <Link href={primary.href} style={{ display: "block" }}>
-              {image}
-            </Link>
-          )
-        ) : image}
-        {episodeMeta}
-        {titleStrip}
-      </Card>
-    );
-  }
+  const wrappedImageArea = imageWrapper ? imageWrapper(imageArea) : imageArea;
 
   return (
-    <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      {image}
-      {episodeMeta}
-
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Typography sx={{ fontWeight: 800 }} noWrap>
-          {seasonDisplayTitle ?? (poster.media.title || tc("untitled"))}
-        </Typography>
-
-        {/* Subtitle line: explicit subtitle > linked creator name > nothing */}
-        {subtitle ? (
-          <Typography variant="body2" color="text.secondary" noWrap>
-            {subtitle}
-          </Typography>
-        ) : showCreator ? (
-          <Typography variant="body2" color="text.secondary" noWrap>
-            <Link
-              href={`/creator/${encodeURIComponent(poster.creator.creator_id)}`}
-              style={{ color: "inherit", textDecoration: "none" }}
-            >
-              {poster.creator.display_name}
-            </Link>
-          </Typography>
-        ) : null}
-      </CardContent>
-
-      {showFooter && (
-        <CardActions sx={{ justifyContent: "space-between" }}>
-          <Box>
-            {actions?.map((action) =>
-              action.external ? (
-                <Button
-                  key={action.label}
-                  component="a"
-                  variant="text"
-                  size="small"
-                  href={action.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  sx={{ px: 1, minWidth: 0 }}
-                >
-                  {action.label}
-                </Button>
-              ) : (
-                <Button
-                  key={action.label}
-                  component={Link}
-                  variant="text"
-                  size="small"
-                  href={action.href}
-                  sx={{ px: 1, minWidth: 0 }}
-                >
-                  {action.label}
-                </Button>
-              )
-            )}
-          </Box>
-
-          {hasMenu && (
-            <>
-              <IconButton
-                aria-label={t("more")}
-                size="small"
-                onClick={(e) => setMenuAnchor(e.currentTarget)}
-              >
-                <MoreVertIcon fontSize="small" />
-              </IconButton>
-
-              <Menu
-                open={Boolean(menuAnchor)}
-                anchorEl={menuAnchor}
-                onClose={() => setMenuAnchor(null)}
-              >
-                <MenuItem
-                  component="a"
-                  href={nodeUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => setMenuAnchor(null)}
-                >
-                  {t("node")}
-                </MenuItem>
-              </Menu>
-            </>
-          )}
-        </CardActions>
+    <Card sx={{ height: "100%", border: 0, boxShadow: "none", bgcolor: "transparent" }}>
+      {primary ? (
+        primary.external ? (
+          <a href={primary.href} target="_blank" rel="noreferrer" style={{ display: "block" }}>{wrappedImageArea}</a>
+        ) : (
+          <Link href={primary.href} style={{ display: "block" }}>{wrappedImageArea}</Link>
+        )
+      ) : (
+        <Box sx={{ cursor: onClick ? "pointer" : "default" }} onClick={onClick}>
+          {wrappedImageArea}
+        </Box>
       )}
+      {episodeMeta}
+      {titleStrip}
     </Card>
   );
 }

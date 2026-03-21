@@ -13,7 +13,12 @@ from .routes.node_descriptor import router as node_descriptor_router
 from .routes.node_info import router as node_info_router
 from .routes.pair_ui import router as pair_ui_router
 from .routes.nodes import router as nodes_router
+from .routes.feed import router as feed_router
+from .routes.applied_artwork import router as applied_artwork_router
+from .routes.plex import router as plex_router
+from .routes.media_server import router as media_server_router
 from .routes.posters import router as posters_router
+from .routes.themes import router as themes_router
 from .routes.posters_list import router as posters_list_router
 from .routes.search import router as search_router
 
@@ -74,4 +79,9 @@ app.include_router(posters_list_router, prefix="/v1")
 app.include_router(posters_router, prefix="/v1")
 app.include_router(blobs_router, prefix="/v1")
 app.include_router(admin_router, prefix="/v1")
+app.include_router(themes_router, prefix="/v1")
+app.include_router(feed_router, prefix="/v1")
+app.include_router(plex_router, prefix="/v1")
+app.include_router(applied_artwork_router, prefix="/v1")
+app.include_router(media_server_router, prefix="/v1")
 app.include_router(pair_ui_router)

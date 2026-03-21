@@ -49,9 +49,17 @@ Key pages:
 - `/onboarding` — first-run setup flow
 - `/p/[posterId]` — individual poster page
 - `/creators` — creator listing
+- `/creator/[creatorId]` — public creator page (backdrop hero, themes section, poster grid)
+- `/creator/[creatorId]/themes/[themeId]` — public theme detail page
+- `/library` — user library (subscribed themes "Following" section)
+- `/my-media` — media server integration; browse Plex/Jellyfin library (collections, movies, shows, seasons, episodes) with A–Z rail and missing-thumb detection
+- `/studio` — creator Studio workspace; sidebar-driven: pinned collections, standalone movies, TV shows; per-item detail views; theme management
+- `/studio/upload` — multi-step poster upload form
 
 Key shared components:
-- `PosterCard` — standard poster card (image + title + creator + actions); props: `poster`, `primaryActionLabel`, `primaryActionHref`, `showPosterLink`
+- `PosterCard` — standard poster card (image + type chip + title strip); key props: `poster`, `actions`, `aspectRatio` (default "2/3", use "16/9" for episodes), `chip` (override/suppress type chip), `onClick`, `imageFailed` (skip rendering `<img>` when parent knows it 404'd), `onImageError`
+- `CollectionCard` — mosaic/single-image card for movie collections; from `SectionedPosterView`; props include `chip` override, `onImageError`, `onClick`
+- `TVShowCard` — mosaic/single-image card for TV shows; from `SectionedPosterView`; props include `chip` override, `onImageError`, `onClick`
 
 ## Reference node (Python)
 
@@ -96,8 +104,38 @@ Blobs are content-addressed (SHA-256). Metadata is signed (Ed25519 / JCS). Premi
 - Web components use **MUI Material** imports from `@mui/material/*` (named imports per component)
 - Pages are "use client" when they need state/effects
 - The `PosterCard` component is the standard unit for poster display — reuse it rather than duplicating card markup
+- `CollectionCard` and `TVShowCard` (from `SectionedPosterView`) are the canonical cards for collections/shows everywhere — never recreate markup
 - Box set / grouped views use MUI `Grid` + `Accordion` for season groupings
+- TMDB lookups go through local proxy routes under `web/src/app/api/tmdb/` (never call TMDB directly from client)
+- Sub-components that hold local state (image error, menu open, etc.) must be defined **outside** parent components — otherwise every parent re-render causes remount, resetting that state
 - Keep protocol surface area minimal; the spec is DRAFT but changes need justification
+
+## Studio
+
+The Studio (`/studio`) is a creator workspace built in `web/src/app/studio/StudioWorkspace.tsx`.
+
+**Sidebar**: Three sections — Movies (collections + standalone movies), TV Shows. All pinned items persisted to node via `saveSetting` with keys `studio_pinned_collections`, `studio_pinned_movies`, `studio_pinned_tv_shows`. On load, any poster-derived groups not already pinned are auto-migrated. Overline headers ("Collections" / "Movies") separate the two subsections in the Movies sidebar section.
+
+**Adding movies**: The "+" button opens an "Add movie" dialog. User enters a TMDB movie ID. The lookup calls `GET /api/tmdb/movie/{id}`. If `belongs_to_collection` is set → pin the collection (same as before). If standalone → pin just the movie to `studio_pinned_movies`.
+
+**Detail views**:
+- `CollectionDetailView` — shows poster grid for a collection; uses `PlaceholderCard` for missing artwork (dashed border, 0.3 opacity TMDB image, red MISSING chip, upload IconButton)
+- `TvShowDetailView` — season accordion with episode cards; same `PlaceholderCard` pattern
+- `MovieDetailView` — shows poster slot and backdrop slot; same `PlaceholderCard` pattern when no uploads yet
+
+**PlaceholderCard pattern** (used in all detail views): `border: "1px dashed"`, grayscale TMDB image at 0.3 opacity, red MISSING chip top-left, small upload `IconButton` top-right, title strip below. Always reuse this pattern, never invent a different one.
+
+## My Media
+
+`/my-media` (`web/src/app/my-media/MyMediaContent.tsx`) shows the user's media server library (Plex/Jellyfin). It fetches from `web/src/lib/media-server.ts`.
+
+**Navigation**: Sidebar with Collections / Movies / TV Shows. Drill-down: collection → children movies; show → seasons; season → episodes (16:9 aspect). A–Z rail on right edge for alphabetical jump.
+
+**Missing thumbnails**: If a media server thumbnail 404s, `onImageError` sets the item ID in `failedThumbs: Set<string>`. Cards then show: grey placeholder (no `<img>` rendered), MISSING chip in red, and a `⋮` "Retry download" menu top-right. Retrying removes from `failedThumbs`; if still 404, `onImageError` fires again and MISSING re-appears.
+
+**Critical pattern — avoid remount flash**: `LetterGroup`, `BackButton`, and `CardRetryMenu` are defined **outside** `MyMediaContent`. If they were inside, every `setFailedThumbs` call would create a new component type, causing full subtree remount and resetting all internal image state (endless flash loop). This is the single most important architectural rule in this file.
+
+**Passing failure to mosaic cards**: `CollectionCard` receives `coverUrls: []` and `TVShowCard` receives `coverPreviews: []` when `failedThumbs.has(id)` — this prevents `MosaicBox` from rendering any `<img>` elements at all.
 
 ## Git
 

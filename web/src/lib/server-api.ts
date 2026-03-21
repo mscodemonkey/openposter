@@ -2,7 +2,7 @@
  * Server-only API helpers. Uses the Docker-internal INDEXER_BASE_URL so
  * server components can reach the indexer without going through the host.
  */
-import type { PosterEntry, SearchResponse } from "./types";
+import type { CreatorTheme, PosterEntry, SearchResponse } from "./types";
 
 export const BASE = (
   process.env.INDEXER_BASE_URL ||
@@ -135,6 +135,67 @@ export async function fetchCreatorPosters(creatorId: string): Promise<PosterEntr
   } while (cursor);
 
   return collected;
+}
+
+// ── Creator profile (public) ─────────────────────────────────────────────────
+
+export async function fetchCreatorProfile(
+  creatorId: string,
+  nodeBase?: string
+): Promise<{ backdrop_url: string | null }> {
+  const base = (nodeBase ?? BASE).replace(/\/+$/, "");
+  const r = await fetch(`${base}/v1/creators/${encodeURIComponent(creatorId)}/profile`, { cache: "no-store" });
+  if (!r.ok) return { backdrop_url: null };
+  return r.json() as Promise<{ backdrop_url: string | null }>;
+}
+
+// ── Themes (public) ───────────────────────────────────────────────────────────
+
+export async function fetchCreatorThemes(creatorId: string, nodeBase?: string): Promise<CreatorTheme[]> {
+  const base = nodeBase ? nodeBase.replace(/\/+$/, "") : BASE;
+  const r = await fetch(`${base}/v1/creators/${encodeURIComponent(creatorId)}/themes`, { cache: "no-store" });
+  if (!r.ok) return [];
+  const json = (await r.json()) as { themes: CreatorTheme[] };
+  return json.themes;
+}
+
+export async function fetchCreatorTheme(
+  creatorId: string,
+  themeId: string,
+  nodeBase?: string
+): Promise<{ theme: CreatorTheme; results: PosterEntry[] } | null> {
+  const base = nodeBase ? nodeBase.replace(/\/+$/, "") : BASE;
+  const r = await fetch(
+    `${base}/v1/creators/${encodeURIComponent(creatorId)}/themes/${encodeURIComponent(themeId)}`,
+    { cache: "no-store" }
+  );
+  if (!r.ok) return null;
+  return r.json() as Promise<{ theme: CreatorTheme; results: PosterEntry[] }>;
+}
+
+// ── Feed (public) ─────────────────────────────────────────────────────────────
+
+export async function fetchFeed(opts: {
+  nodeBase: string;
+  since?: string;
+  creatorId?: string;
+  themeId?: string;
+  collectionTmdbId?: number;
+  showTmdbId?: number;
+  limit?: number;
+}): Promise<{ results: PosterEntry[]; next_since: string | null }> {
+  const base = opts.nodeBase.replace(/\/+$/, "");
+  const u = new URL(`${base}/v1/feed`);
+  if (opts.since) u.searchParams.set("since", opts.since);
+  if (opts.creatorId) u.searchParams.set("creator_id", opts.creatorId);
+  if (opts.themeId) u.searchParams.set("theme_id", opts.themeId);
+  if (opts.collectionTmdbId != null) u.searchParams.set("collection_tmdb_id", String(opts.collectionTmdbId));
+  if (opts.showTmdbId != null) u.searchParams.set("show_tmdb_id", String(opts.showTmdbId));
+  if (opts.limit != null) u.searchParams.set("limit", String(opts.limit));
+
+  const r = await fetch(u.toString(), { cache: "no-store" });
+  if (!r.ok) return { results: [], next_since: null };
+  return r.json() as Promise<{ results: PosterEntry[]; next_since: string | null }>;
 }
 
 // ── Box sets ──────────────────────────────────────────────────────────────────

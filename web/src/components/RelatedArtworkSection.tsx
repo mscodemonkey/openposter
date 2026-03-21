@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import Box from "@mui/material/Box";
-import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
+
+import { POSTER_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
 
 import type { PosterEntry } from "@/lib/types";
 import PosterCard, { type CardAction } from "@/components/PosterCard";
@@ -72,27 +73,26 @@ export default function RelatedArtworkSection({
       </Typography>
 
       <Box sx={{ mt: 1.5 }}>
-        <Grid container spacing={2}>
+        <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
           {items.map((p) => {
             const bsHref = boxSetHref(p);
             const isBoxset = !!bsHref;
             const actions: CardAction[] = isBoxset && bsHref
               ? [
-                  { label: "BOX SET", href: bsHref },
+                  { label: p.media.type === "collection" ? "COLLECTION" : "BOX SET", href: bsHref },
                   { label: "POSTER", href: `/p/${encodeURIComponent(p.poster_id)}` },
                 ]
               : [{ label: "VIEW", href: p.assets.full.url, external: true }];
             return (
-              <Grid key={p.poster_id} size={{ xs: 6, sm: 4, md: 2 }}>
+              <Box key={p.poster_id}>
                 <PosterCard
                   poster={p}
                   actions={actions}
-                  nodeUrl={p.creator.home_node}
                 />
-              </Grid>
+              </Box>
             );
           })}
-        </Grid>
+        </Box>
       </Box>
     </Box>
   );

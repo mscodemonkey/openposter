@@ -15,6 +15,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
+import PlexApplyButton from "@/components/PlexApplyButton";
 import RelatedArtworkSection from "@/components/RelatedArtworkSection";
 import PosterCard from "@/components/PosterCard";
 import { INDEXER_BASE_URL } from "@/lib/config";
@@ -119,8 +120,6 @@ function SimilarSection({ poster, items }: { poster: PosterEntry; items: PosterE
             <PosterCard
               poster={p}
               aspectRatio={config.aspectRatio}
-              showCreator
-              hideBoxSetLink={poster.media.type === "episode"}
               actions={[{ label: config.actionLabel, href: config.getHref(p) }]}
             />
           </Box>
@@ -332,7 +331,6 @@ export default function PosterView({
               <PosterCard
                 poster={poster}
 
-                showCreator={false}
                 aspectRatio={poster.media.type === "episode" || poster.media.type === "backdrop" ? "16 / 9" : "2 / 3"}
                 actions={[{ label: tc("openFull"), href: poster.assets.full.url, external: true }]}
               />
@@ -393,6 +391,19 @@ export default function PosterView({
                     </Button>
                   </Stack>
 
+                  {poster.media.tmdb_id != null && (
+                    <PlexApplyButton
+                      items={[{
+                        imageUrl: poster.assets.full.url,
+                        tmdbId: poster.media.tmdb_id,
+                        mediaType: poster.media.type,
+                        showTmdbId: poster.media.show_tmdb_id ?? undefined,
+                        seasonNumber: poster.media.season_number ?? undefined,
+                        episodeNumber: poster.media.episode_number ?? undefined,
+                      }]}
+                    />
+                  )}
+
                   <Divider />
 
                   <Box>
@@ -438,7 +449,6 @@ export default function PosterView({
                     <Box key={p.poster_id} sx={{ minWidth: 160, maxWidth: 160, flex: "0 0 auto" }}>
                       <PosterCard
                         poster={p}
-                        showCreator={false}
                         actions={[{ label: "DETAILS", href: `/p/${encodeURIComponent(p.poster_id)}` }]}
                       />
                     </Box>
@@ -451,9 +461,7 @@ export default function PosterView({
                     <Box key={p.poster_id} sx={{ minWidth: 256, maxWidth: 256, flex: "0 0 auto" }}>
                       <PosterCard
                         poster={p}
-                        showCreator={false}
                         aspectRatio="16 / 9"
-                        hideBoxSetLink
                         actions={[{ label: "DETAILS", href: `/p/${encodeURIComponent(p.poster_id)}` }]}
                       />
                     </Box>

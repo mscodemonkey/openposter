@@ -1,13 +1,29 @@
+export type CreatorTheme = {
+  theme_id: string;
+  creator_id: string;
+  name: string;
+  description?: string | null;
+  cover_url?: string | null;
+  cover_hash?: string | null;
+  poster_count?: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PosterEntry = {
   poster_id: string;
+  /** True = published (visible to indexers/public), false/undefined = draft */
+  published?: boolean;
   media: {
     type: string;
     tmdb_id?: number;
     show_tmdb_id?: number;
+    collection_tmdb_id?: number | null;
     title?: string;
     year?: number;
     season_number?: number;
     episode_number?: number;
+    theme_id?: string | null;
   };
   creator: {
     creator_id: string;

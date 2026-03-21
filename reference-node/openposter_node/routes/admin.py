@@ -18,6 +18,35 @@ class LinksUpdate(BaseModel):
     links_json: str | None = None
 
 
+class ThemeCreate(BaseModel):
+    name: str
+    description: str | None = None
+
+
+class ThemeUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class PosterThemeUpdate(BaseModel):
+    theme_id: str | None = None
+
+
+class PosterMetaPatch(BaseModel):
+    """Patch mutable metadata on an existing poster.  All fields optional — only supplied fields are updated."""
+    tmdb_id: int | None = None
+    collection_tmdb_id: int | None = None
+    show_tmdb_id: int | None = None
+    season_number: int | None = None
+    episode_number: int | None = None
+    title: str | None = None
+    year: int | None = None
+    # Pass explicit sentinel to clear a field (e.g. collection_tmdb_id=0 means "remove the link")
+    clear_collection_tmdb_id: bool = False
+    clear_show_tmdb_id: bool = False
+    published: bool | None = None
+
+
 def _now_rfc3339() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -204,6 +233,233 @@ async def admin_whoami(request: Request):
     return {"admin": {"node_id": request.app.state.node_uuid}}
 
 
+@router.post("/admin/themes")
+async def admin_create_theme(request: Request, body: ThemeCreate):
+    await _require_admin(request)
+    import secrets
+    from ..db import CreatorTheme
+
+    # Derive creator_id from whoami — for now require creator_id in request header
+    # (same pattern as poster upload: creator passes their creator_id)
+    creator_id = request.headers.get("x-creator-id", "").strip()
+    if not creator_id:
+        raise http_error(400, "invalid_request", "x-creator-id header required")
+
+    name = (body.name or "").strip()
+    if not name:
+        raise http_error(400, "invalid_request", "name is required")
+
+    theme_id = "thm_" + secrets.token_hex(8)
+    now = _now_rfc3339()
+
+    async with request.app.state.Session() as session:
+        session.add(CreatorTheme(
+            theme_id=theme_id,
+            creator_id=creator_id,
+            name=name,
+            description=body.description,
+            cover_hash=None,
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
+        ))
+        await session.commit()
+
+    return {"theme_id": theme_id, "creator_id": creator_id, "name": name, "description": body.description, "created_at": now, "updated_at": now}
+
+
+@router.get("/admin/themes")
+async def admin_list_themes(request: Request):
+    await _require_admin(request)
+    from sqlalchemy import select
+    from ..db import CreatorTheme, Poster
+
+    creator_id = request.headers.get("x-creator-id", "").strip()
+    if not creator_id:
+        raise http_error(400, "invalid_request", "x-creator-id header required")
+
+    async with request.app.state.Session() as session:
+        stmt = select(CreatorTheme).where(
+            CreatorTheme.creator_id == creator_id,
+            CreatorTheme.deleted_at.is_(None),
+        ).order_by(CreatorTheme.created_at.asc())
+        themes = (await session.execute(stmt)).scalars().all()
+
+        # Count posters per theme
+        from sqlalchemy import func
+        count_stmt = select(Poster.theme_id, func.count(Poster.poster_id)).where(
+            Poster.creator_id == creator_id,
+            Poster.deleted_at.is_(None),
+            Poster.theme_id.is_not(None),
+        ).group_by(Poster.theme_id)
+        counts = dict((await session.execute(count_stmt)).all())
+
+    cfg = request.app.state.cfg
+
+    def _cover_url(cover_hash: str | None) -> str | None:
+        if not cover_hash:
+            return None
+        return (
+            f"{cfg.base_url}/v1/blobs/{cover_hash}"
+            if cfg.base_url
+            else f"{request.base_url}v1/blobs/{cover_hash}"
+        )
+
+    return {"themes": [
+        {
+            "theme_id": t.theme_id,
+            "creator_id": t.creator_id,
+            "name": t.name,
+            "description": t.description,
+            "cover_hash": t.cover_hash,
+            "cover_url": _cover_url(t.cover_hash),
+            "poster_count": counts.get(t.theme_id, 0),
+            "created_at": t.created_at,
+            "updated_at": t.updated_at,
+        }
+        for t in themes
+    ]}
+
+
+@router.put("/admin/themes/{theme_id}")
+async def admin_update_theme(request: Request, theme_id: str, body: ThemeUpdate):
+    await _require_admin(request)
+    from ..db import CreatorTheme
+
+    creator_id = request.headers.get("x-creator-id", "").strip()
+
+    now = _now_rfc3339()
+
+    async with request.app.state.Session() as session:
+        t = await session.get(CreatorTheme, theme_id)
+        if t is None or t.deleted_at is not None:
+            raise http_error(404, "not_found", "theme not found")
+        if creator_id and t.creator_id != creator_id:
+            raise http_error(403, "forbidden", "theme belongs to a different creator")
+        if body.name is not None:
+            name = body.name.strip()
+            if not name:
+                raise http_error(400, "invalid_request", "name cannot be empty")
+            t.name = name
+        if body.description is not None:
+            t.description = body.description
+        t.updated_at = now
+        await session.commit()
+
+    return {"ok": True, "theme_id": theme_id, "updated_at": now}
+
+
+@router.delete("/admin/themes/{theme_id}")
+async def admin_delete_theme(request: Request, theme_id: str):
+    await _require_admin(request)
+    from sqlalchemy import update
+    from ..db import CreatorTheme, Poster
+
+    creator_id = request.headers.get("x-creator-id", "").strip()
+    now = _now_rfc3339()
+
+    async with request.app.state.Session() as session:
+        t = await session.get(CreatorTheme, theme_id)
+        if t is None or t.deleted_at is not None:
+            raise http_error(404, "not_found", "theme not found")
+        if creator_id and t.creator_id != creator_id:
+            raise http_error(403, "forbidden", "theme belongs to a different creator")
+
+        # Unset theme_id on all associated posters
+        await session.execute(
+            update(Poster)
+            .where(Poster.theme_id == theme_id)
+            .values(theme_id=None, updated_at=now)
+        )
+
+        t.deleted_at = now
+        t.updated_at = now
+        await session.commit()
+
+    return {"ok": True, "theme_id": theme_id, "deleted_at": now}
+
+
+@router.put("/admin/posters/{poster_id}/theme")
+async def admin_set_poster_theme(request: Request, poster_id: str, body: PosterThemeUpdate):
+    """Reassign a poster to a different theme (or remove from theme with theme_id: null)."""
+    await _require_admin(request)
+    from ..db import CreatorTheme, Poster
+
+    now = _now_rfc3339()
+
+    async with request.app.state.Session() as session:
+        p = await session.get(Poster, poster_id)
+        if p is None or p.deleted_at is not None:
+            raise http_error(404, "not_found", "poster not found")
+
+        if body.theme_id is not None:
+            t = await session.get(CreatorTheme, body.theme_id)
+            if t is None or t.deleted_at is not None:
+                raise http_error(400, "invalid_request", "theme not found")
+            if t.creator_id != p.creator_id:
+                raise http_error(400, "invalid_request", "theme belongs to a different creator")
+
+        p.theme_id = body.theme_id
+        p.updated_at = now
+        await session.commit()
+
+    return {"ok": True, "poster_id": poster_id, "theme_id": body.theme_id, "updated_at": now}
+
+
+@router.post("/admin/themes/{theme_id}/cover")
+async def admin_upload_theme_cover(request: Request, theme_id: str, cover: UploadFile):
+    """Upload a cover image for a theme. Stored as a blob; sets cover_hash on the theme."""
+    await _require_admin(request)
+    from ..db import CreatorTheme
+
+    creator_id = request.headers.get("x-creator-id", "").strip()
+    cfg = request.app.state.cfg
+    now = _now_rfc3339()
+
+    cover_hash, _bytes, _mime = await _save_upload_to_blob(cfg.data_dir, cover)
+
+    async with request.app.state.Session() as session:
+        t = await session.get(CreatorTheme, theme_id)
+        if t is None or t.deleted_at is not None:
+            raise http_error(404, "not_found", "theme not found")
+        if creator_id and t.creator_id != creator_id:
+            raise http_error(403, "forbidden", "theme belongs to a different creator")
+        t.cover_hash = cover_hash
+        t.updated_at = now
+        await session.commit()
+
+    cover_url = f"{cfg.base_url}/v1/blobs/{cover_hash}" if cfg.base_url else f"{request.base_url}v1/blobs/{cover_hash}"
+    return {"ok": True, "theme_id": theme_id, "cover_hash": cover_hash, "cover_url": cover_url}
+
+
+@router.post("/admin/creator_profile/backdrop")
+async def admin_upload_creator_backdrop(request: Request, backdrop: UploadFile):
+    """Upload a backdrop image for the creator's public profile page."""
+    await _require_admin(request)
+    from ..db import CreatorProfile
+
+    creator_id = request.headers.get("x-creator-id", "").strip()
+    if not creator_id:
+        raise http_error(400, "invalid_request", "x-creator-id header required")
+
+    cfg = request.app.state.cfg
+    now = _now_rfc3339()
+
+    backdrop_hash, _bytes, _mime = await _save_upload_to_blob(cfg.data_dir, backdrop)
+
+    async with request.app.state.Session() as session:
+        existing = await session.get(CreatorProfile, creator_id)
+        if existing:
+            existing.backdrop_hash = backdrop_hash
+            existing.updated_at = now
+        else:
+            session.add(CreatorProfile(creator_id=creator_id, backdrop_hash=backdrop_hash, updated_at=now))
+        await session.commit()
+
+    backdrop_url = f"{cfg.base_url}/v1/blobs/{backdrop_hash}" if cfg.base_url else f"{request.base_url}v1/blobs/{backdrop_hash}"
+    return {"ok": True, "creator_id": creator_id, "backdrop_hash": backdrop_hash, "backdrop_url": backdrop_url}
+
+
 @router.post("/admin/posters")
 async def admin_upload_poster(
     request: Request,
@@ -212,13 +468,16 @@ async def admin_upload_poster(
     show_tmdb_id: int | None = Form(None),
     season_number: int | None = Form(None),
     episode_number: int | None = Form(None),
+    collection_tmdb_id: int | None = Form(None),
     title: str | None = Form(None),
     year: int | None = Form(None),
     creator_id: str = Form(...),
     creator_display_name: str = Form(...),
     links_json: str | None = Form(None),
+    theme_id: str | None = Form(None),
     attribution_license: str = Form("all-rights-reserved"),
     attribution_redistribution: str = Form("mirrors-approved"),
+    published: bool = Form(True),
     preview: UploadFile = File(...),
     full: UploadFile = File(...),
 ):
@@ -234,6 +493,16 @@ async def admin_upload_poster(
 
     if media_type in {"season", "episode"} and show_tmdb_id is None:
         raise http_error(400, "invalid_request", "show_tmdb_id is required for season/episode")
+
+    # validate theme_id if provided
+    if theme_id:
+        from ..db import CreatorTheme
+        async with request.app.state.Session() as _tsess:
+            _t = await _tsess.get(CreatorTheme, theme_id)
+            if _t is None or _t.deleted_at is not None:
+                raise http_error(400, "invalid_request", "theme not found")
+            if _t.creator_id != creator_id:
+                raise http_error(400, "invalid_request", "theme belongs to a different creator")
 
     # validate links_json if provided
     links_value = None
@@ -264,16 +533,42 @@ async def admin_upload_poster(
     preview_hash, preview_bytes, preview_mime = await _save_upload_to_blob(cfg.data_dir, preview)
     full_hash, full_bytes, full_mime = await _save_upload_to_blob(cfg.data_dir, full)
 
-    # Local id derived from content; stable-ish
-    local_id = "pst_" + hashlib.sha256((str(tmdb_id) + creator_id + full_hash).encode("utf-8")).hexdigest()[:8]
+    # Local id derived from content + metadata; stable-ish.
+    # Include media_type, season_number, episode_number so that e.g. a backdrop
+    # and a poster for the same show (same file, tmdb_id, creator) get distinct IDs.
+    id_components = ":".join([
+        str(tmdb_id),
+        creator_id,
+        media_type,
+        str(season_number) if season_number is not None else "",
+        str(episode_number) if episode_number is not None else "",
+        full_hash,
+    ])
+    local_id = "pst_" + hashlib.sha256(id_components.encode("utf-8")).hexdigest()[:8]
     poster_id = f"op:v1:{node_id}:{local_id}"
 
     from ..db import Poster
+    from sqlalchemy import select as _select
 
     now = _now_rfc3339()
 
     async with request.app.state.Session() as session:
-        existing = await session.get(Poster, poster_id)
+        # Semantic duplicate check: same creator, media type, TMDB id, and file content.
+        # This is robust against ID-formula changes — the old hash-based ID check would
+        # produce false conflicts (cross-type uploads with the same file) or miss duplicates
+        # (old IDs vs new formula).
+        dup_stmt = _select(Poster).where(
+            Poster.creator_id == creator_id,
+            Poster.media_type == media_type,
+            Poster.tmdb_id == tmdb_id,
+            Poster.full_hash == full_hash,
+            Poster.deleted_at.is_(None),
+        )
+        if season_number is not None:
+            dup_stmt = dup_stmt.where(Poster.season_number == season_number)
+        if episode_number is not None:
+            dup_stmt = dup_stmt.where(Poster.episode_number == episode_number)
+        existing = (await session.execute(dup_stmt)).scalars().first()
         if existing is not None:
             raise http_error(409, "invalid_request", "poster_id conflict")
 
@@ -306,6 +601,7 @@ async def admin_upload_poster(
             show_tmdb_id=show_tmdb_id,
             season_number=season_number,
             episode_number=episode_number,
+            collection_tmdb_id=collection_tmdb_id,
             title=title,
             year=year,
             creator_id=creator_id,
@@ -315,6 +611,7 @@ async def admin_upload_poster(
             attribution_redistribution=attribution_redistribution,
             attribution_source_url=None,
             links_json=(None if not links_json else links_json),
+            theme_id=theme_id,
             preview_hash=preview_hash,
             preview_bytes=preview_bytes,
             preview_mime=preview_mime,
@@ -329,6 +626,7 @@ async def admin_upload_poster(
             enc_alg=None,
             enc_key_id=None,
             enc_nonce=None,
+            published=published,
         )
         session.add(row)
         await session.commit()
@@ -393,6 +691,86 @@ async def admin_update_links(request: Request, poster_id: str, body: LinksUpdate
         await session.commit()
 
     return {"ok": True, "poster_id": poster_id, "updated_at": now}
+
+
+@router.patch("/admin/posters/{poster_id}")
+async def admin_patch_poster(request: Request, poster_id: str, body: PosterMetaPatch):
+    """Update mutable metadata on an existing poster (collection_tmdb_id, show_tmdb_id, title, year, etc.)."""
+    await _require_admin(request)
+    from ..db import Poster
+
+    now = _now_rfc3339()
+
+    async with request.app.state.Session() as session:
+        p = await session.get(Poster, poster_id)
+        if p is None or p.deleted_at is not None:
+            raise http_error(404, "not_found", "poster not found")
+
+        if body.tmdb_id is not None:
+            p.tmdb_id = body.tmdb_id
+
+        if body.clear_collection_tmdb_id:
+            p.collection_tmdb_id = None
+        elif body.collection_tmdb_id is not None:
+            p.collection_tmdb_id = body.collection_tmdb_id
+
+        if body.clear_show_tmdb_id:
+            p.show_tmdb_id = None
+        elif body.show_tmdb_id is not None:
+            p.show_tmdb_id = body.show_tmdb_id
+
+        if body.season_number is not None:
+            p.season_number = body.season_number
+        if body.episode_number is not None:
+            p.episode_number = body.episode_number
+        if body.title is not None:
+            p.title = body.title
+        if body.year is not None:
+            p.year = body.year
+        if body.published is not None:
+            p.published = body.published
+
+        p.updated_at = now
+        await session.commit()
+
+    return {"ok": True, "poster_id": poster_id, "updated_at": now}
+
+
+@router.get("/admin/settings/{key}")
+async def admin_get_setting(request: Request, key: str):
+    await _require_admin(request)
+    from ..db import CreatorSettings
+
+    creator_id = request.headers.get("x-creator-id", "")
+    async with request.app.state.Session() as session:
+        row = await session.get(CreatorSettings, (creator_id, key))
+        if row is None:
+            return {"key": key, "value": None}
+        return {"key": key, "value": row.value}
+
+
+@router.put("/admin/settings/{key}")
+async def admin_put_setting(request: Request, key: str):
+    await _require_admin(request)
+    from ..db import CreatorSettings
+
+    creator_id = request.headers.get("x-creator-id", "")
+    body = await request.json()
+    value = body.get("value")
+    if value is None:
+        raise http_error(400, "bad_request", "missing value")
+
+    now = _now_rfc3339()
+    async with request.app.state.Session() as session:
+        row = await session.get(CreatorSettings, (creator_id, key))
+        if row is None:
+            session.add(CreatorSettings(creator_id=creator_id, key=key, value=value, updated_at=now))
+        else:
+            row.value = value
+            row.updated_at = now
+        await session.commit()
+
+    return {"ok": True, "key": key, "updated_at": now}
 
 
 @router.delete("/admin/posters/{poster_id}")

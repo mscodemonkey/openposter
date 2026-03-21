@@ -78,6 +78,10 @@ async def list_posters(
             media["season_number"] = p.season_number
         if p.episode_number is not None:
             media["episode_number"] = p.episode_number
+        if p.collection_tmdb_id is not None:
+            media["collection_tmdb_id"] = p.collection_tmdb_id
+        if p.theme_id is not None:
+            media["theme_id"] = p.theme_id
 
         links = None
         if p.links_json:
@@ -88,6 +92,7 @@ async def list_posters(
 
         entry = {
             "poster_id": p.poster_id,
+            "published": bool(p.published),
             "media": media,
             "creator": {
                 "creator_id": p.creator_id,

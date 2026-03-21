@@ -260,9 +260,16 @@ Canonical IDs (v1):
   - `show_tmdb_id` (number) — the TMDB id of the parent show
   - `season_number` (number)
   - and for `type=episode` additionally: `episode_number` (number)
+- For `type=movie` that belongs to a TMDB collection, `media` MUST include:
+  - `collection_tmdb_id` (number) — the TMDB id of the parent collection
+- For `type=backdrop` that belongs to a collection, `media` SHOULD include:
+  - `collection_tmdb_id` (number) — the TMDB id of the parent collection
+- For `type=backdrop` that belongs to a TV show, `media` SHOULD include:
+  - `show_tmdb_id` (number) — the TMDB id of the parent show
 
 Optional IDs (v1):
 - `tmdb_id` (number) MAY be included for `season` and `episode` if known (object-level TMDB id).
+- `collection_tmdb_id` (number) MAY be included for standalone `movie` entries to associate them with a collection.
 - `imdb_id` (string like `tt0133093`) OPTIONAL
 - `tvdb_id` (number) OPTIONAL
 
