@@ -9,6 +9,7 @@ import { alpha, styled } from "@mui/material/styles";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
@@ -29,6 +30,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import SettingsIcon from "@mui/icons-material/Settings";
 
 import { loadCreatorConnection } from "@/lib/storage";
+import { fetchSyncStatus } from "@/lib/media-server";
 import OPLogo from "@/components/OPLogo";
 
 const NAV_ITEMS = [
@@ -126,6 +128,7 @@ export default function Nav() {
   const [connected, setConnected] = useState(false);
   const [nodeUrl, setNodeUrl] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     function refresh() {
@@ -137,6 +140,29 @@ export default function Nav() {
     const timer = setInterval(refresh, 2000);
     return () => clearInterval(timer);
   }, []);
+
+  // Poll Plex sync status — fast while syncing, slow at idle
+  useEffect(() => {
+    if (!connected) { setIsSyncing(false); return; }
+    const conn = loadCreatorConnection();
+    if (!conn) return;
+    let active = true;
+    let timerId: ReturnType<typeof setTimeout>;
+
+    async function poll() {
+      if (!active) return;
+      try {
+        const s = await fetchSyncStatus(conn!.nodeUrl, conn!.adminToken);
+        if (active) setIsSyncing(s.is_syncing);
+        timerId = setTimeout(poll, s.is_syncing ? 3000 : 15000);
+      } catch {
+        if (active) timerId = setTimeout(poll, 15000);
+      }
+    }
+
+    void poll();
+    return () => { active = false; clearTimeout(timerId); };
+  }, [connected]);
 
   const connTooltip = connected
     ? t("connected", { url: nodeUrl ?? "" })
@@ -185,6 +211,18 @@ export default function Nav() {
           <Suspense fallback={null}>
             <SearchBox />
           </Suspense>
+
+          {/* Plex background sync indicator */}
+          {isSyncing && (
+            <Tooltip title={t("syncInProgress")} arrow>
+              <CircularProgress
+                size={16}
+                thickness={5}
+                sx={{ color: "inherit", opacity: 0.7, ml: 1, flexShrink: 0 }}
+                aria-label={t("syncInProgress")}
+              />
+            </Tooltip>
+          )}
 
           {/* Node connection status */}
           <Tooltip title={connTooltip} arrow>

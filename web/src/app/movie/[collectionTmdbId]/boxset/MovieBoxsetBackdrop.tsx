@@ -20,7 +20,7 @@ export default function MovieBoxsetBackdrop({ url }: { url: string }) {
         component="img"
         src={url}
         alt=""
-        sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.3 }}
+        sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.2, filter: "grayscale(0.75)" }}
       />
       <Box
         sx={{

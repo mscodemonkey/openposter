@@ -12,38 +12,51 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import Skeleton from "@mui/material/Skeleton";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 
-import ArtworkMetadataTooltip from "@/components/ArtworkMetadataTooltip";
-import type { ArtworkMeta } from "@/components/ArtworkMetadataTooltip";
-import PosterCard from "@/components/PosterCard";
-import PosterSubscribeMenu from "@/components/PosterSubscribeMenu";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import SearchIcon from "@mui/icons-material/Search";
+import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import ReplayIcon from "@mui/icons-material/Replay";
+import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
+import UploadIcon from "@mui/icons-material/Upload";
+
+import AltArtworkDrawer from "@/components/AltArtworkDrawer";
+import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
+import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
 import type { PosterEntry } from "@/lib/types";
-import type { ThemeSubscription } from "@/lib/subscriptions";
-import { getSubscriptions } from "@/lib/subscriptions";
+import { getSubscriptions, getCreatorSubscriptions, subscribeCreator, unsubscribeCreator } from "@/lib/subscriptions";
 import { applyToPlexPoster } from "@/lib/plex";
-import { fetchPosterFromNode, getArtworkSettings, getTrackedArtwork, untrackArtwork } from "@/lib/artwork-tracking";
+import { getArtworkSettings, getTrackedArtwork, fetchPosterFromNode, untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
-import { thumbUrl } from "@/lib/media-server";
+import { thumbUrl, artUrl, logoUrl, squareUrl } from "@/lib/media-server";
 import type { MediaItem } from "@/lib/media-server";
-import { POSTER_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
+import { POSTER_GRID_COLS, BACKDROP_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
 
 // ─── TMDB resolution ──────────────────────────────────────────────────────────
 
 type TmdbResolution =
   | { status: "idle" }
   | { status: "resolving" }
-  | { status: "confirmed"; tmdbId: number }
-  | { status: "pending-confirm"; tmdbId: number; tmdbName: string; posterPath: string | null; movieThumbs: string[] }
+  | { status: "confirmed"; tmdbId: number; tmdbName: string; source: "auto" | "confirmed" }
+  | { status: "pending-confirm"; itemId: string; tmdbId: number; tmdbName: string; posterPath: string | null; movieThumbs: string[]; openInSearch?: boolean }
   | { status: "text-search" };
 
+/** Strips articles, "Collection" suffix, and non-alphanumeric characters for fuzzy name matching against TMDB. */
 function normaliseCollectionName(name: string): string {
   return name
     .toLowerCase()
@@ -53,170 +66,158 @@ function normaliseCollectionName(name: string): string {
     .trim();
 }
 
-// ─── CardRetryMenu ────────────────────────────────────────────────────────────
+const TMDB_MAP_KEY = "openposter_tmdb_collection_map";
+type TmdbMapEntry = { tmdbId: number; tmdbName: string; source?: "auto" | "confirmed" } | { rejected: true };
 
-function CardRetryMenu({ onRetry }: { onRetry: () => void }) {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  return (
-    <>
-      <IconButton
-        size="small"
-        aria-label="Card options"
-        sx={{ opacity: 0.9, "&:hover": { opacity: 1 } }}
-        onClick={(e) => { e.stopPropagation(); setAnchorEl(e.currentTarget); }}
-      >
-        <MoreVertIcon fontSize="small" />
-      </IconButton>
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-        <MenuItem onClick={() => { setAnchorEl(null); onRetry(); }} dense>
-          Retry download
-        </MenuItem>
-      </Menu>
-    </>
-  );
+/** Reads the persisted Plex item-id → TMDB mapping from localStorage. Returns an empty object on parse failure. */
+function loadTmdbMap(): Record<string, TmdbMapEntry> {
+  try { return JSON.parse(localStorage.getItem(TMDB_MAP_KEY) ?? "{}"); } catch { return {}; }
 }
 
-// ─── CardManageMenu ───────────────────────────────────────────────────────────
-
-function CardManageMenu({ onReset, onOpen }: { onReset: () => void; onOpen?: () => void }) {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const t = useTranslations("myMedia");
-  return (
-    <>
-      <IconButton
-        size="small"
-        aria-label="Card options"
-        sx={{ opacity: 0.9, "&:hover": { opacity: 1 } }}
-        onClick={(e) => { e.stopPropagation(); onOpen?.(); setAnchorEl(e.currentTarget); }}
-      >
-        <MoreVertIcon fontSize="small" />
-      </IconButton>
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-        <MenuItem onClick={() => { setAnchorEl(null); onReset(); }} dense>
-          {t("resetArtwork")}
-        </MenuItem>
-      </Menu>
-    </>
-  );
+/** Persists a single Plex item-id → TMDB entry to localStorage, merging into the existing map. */
+function saveTmdbMapEntry(itemId: string, entry: TmdbMapEntry) {
+  try {
+    const map = loadTmdbMap();
+    map[itemId] = entry;
+    localStorage.setItem(TMDB_MAP_KEY, JSON.stringify(map));
+  } catch { /* ignore */ }
 }
 
 // ─── TmdbConfirmCard ──────────────────────────────────────────────────────────
 
+type TmdbSearchResult = { id: number; name: string; poster_path: string | null };
+
+/**
+ * Inline UI shown when a TMDB candidate has been found but needs user confirmation.
+ * Renders in "confirm" mode (show the candidate poster + Accept / Search / Reject buttons) or
+ * "search" mode (free-text TMDB search with a results grid the user can pick from).
+ */
 function TmdbConfirmCard({
-  tmdbName, posterPath, movieThumbs, onConfirm, onReject,
+  tmdbId, tmdbName, posterPath, movieThumbs, collectionTitle, initialMode = "confirm", onConfirm, onNeverAgain,
 }: {
+  /** TMDB id of the auto-found candidate. */
+  tmdbId: number;
   tmdbName: string;
   posterPath: string | null;
   movieThumbs: string[];
-  onConfirm: () => void;
-  onReject: () => void;
+  /** Plex collection name — used to pre-fill the search box. */
+  collectionTitle: string;
+  initialMode?: "confirm" | "search";
+  onConfirm: (tmdbId: number, tmdbName: string) => void;
+  onNeverAgain: () => void;
 }) {
-  return (
-    <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2, mb: 3, maxWidth: 560 }}>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        We found a possible TMDB match: <strong>{tmdbName}</strong>
-      </Typography>
-      <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mb: 2 }}>
-        {posterPath && (
-          <Box component="img" src={`https://image.tmdb.org/t/p/w342${posterPath}`} alt={tmdbName}
-            sx={{ width: 80, borderRadius: 0.5, flexShrink: 0, display: "block" }} />
-        )}
-        {movieThumbs.map((url, i) => (
-          <Box key={i} component="img" src={url} alt={`Movie ${i + 1}`}
-            sx={{ width: 46, borderRadius: 0.5, flexShrink: 0, display: "block" }} />
-        ))}
-      </Stack>
-      <Stack direction="row" spacing={1}>
-        <Button size="small" variant="contained" onClick={onConfirm}>Yes, that&apos;s it</Button>
-        <Button size="small" variant="outlined" onClick={onReject}>No, search by name</Button>
-      </Stack>
-    </Box>
-  );
-}
+  const [mode, setMode] = useState<"confirm" | "search">(initialMode);
+  const [query, setQuery] = useState(collectionTitle);
+  const [results, setResults] = useState<TmdbSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
 
-// ─── AltArtworkCard ───────────────────────────────────────────────────────────
-// Module-level to prevent remount.
+  const doSearch = async () => {
+    if (!query.trim()) return;
+    setSearching(true);
+    setSearched(false);
+    try {
+      const r = await fetch(`/api/tmdb/search/collection?q=${encodeURIComponent(query.trim())}`);
+      const d = await r.json() as { results?: TmdbSearchResult[] };
+      setResults(d.results ?? []);
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+      setSearched(true);
+    }
+  };
 
-interface AltArtworkCardProps {
-  poster: PosterEntry;
-  subs: ThemeSubscription[];
-  applyingId: string | null;
-  appliedIds: Set<string>;
-  chip: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" };
-  onApply: (p: PosterEntry) => void;
-}
-
-function AltArtworkCard({ poster, subs, applyingId, appliedIds, chip, onApply }: AltArtworkCardProps) {
-  const t = useTranslations("myMedia");
-  const themeId = poster.media.theme_id ?? null;
-  const matchingSub = themeId ? subs.find((s) => s.themeId === themeId) : null;
-  const themeLabel = matchingSub?.themeName ?? (themeId ? t("inATheme") : null);
-  const isApplying = applyingId === poster.poster_id;
-  const isApplied = appliedIds.has(poster.poster_id);
-
-  return (
-    <Box>
-      <PosterCard
-        poster={poster}
-        chip={chip}
-        subscribeSlot={
-          poster.creator.creator_id ? (
-            <PosterSubscribeMenu
-              creatorId={poster.creator.creator_id}
-              creatorDisplayName={poster.creator.display_name}
-              themeId={themeId}
-              themeName={themeLabel}
-              coverUrl={poster.assets.preview.url}
-              nodeBase={poster.creator.home_node}
-            />
-          ) : undefined
-        }
-      />
-      <Box sx={{ px: 1, pt: 0.5, pb: 1 }}>
-        {themeLabel && (
-          <Typography variant="caption" color="text.secondary" display="block" noWrap textAlign="center">
-            {themeLabel}
-          </Typography>
-        )}
-        <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center" sx={{ mt: 0.75 }}>
-          <Button
-            size="small"
-            variant={isApplied ? "contained" : "outlined"}
-            onClick={() => onApply(poster)}
-            disabled={isApplying || isApplied}
-            sx={{ fontSize: "0.65rem", py: 0.25, minWidth: 0 }}
-          >
-            {isApplied ? "Applied ✓" : isApplying ? <CircularProgress size={12} /> : t("usePoster")}
+  if (mode === "confirm") {
+    return (
+      <Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          We found a possible TMDB match: <strong>{tmdbName}</strong>
+        </Typography>
+        <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mb: 2.5 }}>
+          {posterPath && (
+            <Box component="img" src={`https://image.tmdb.org/t/p/w342${posterPath}`} alt={tmdbName}
+              sx={{ width: 80, borderRadius: 0.5, flexShrink: 0, display: "block" }} />
+          )}
+          {movieThumbs.map((url, i) => (
+            <Box key={i} component="img" src={url} alt={`Movie ${i + 1}`}
+              sx={{ width: 46, borderRadius: 0.5, flexShrink: 0, display: "block" }} />
+          ))}
+        </Stack>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Button size="small" variant="contained"
+            onClick={() => onConfirm(tmdbId, tmdbName)}>
+            Yes, that&apos;s the one
+          </Button>
+          <Button size="small" variant="outlined"
+            onClick={() => { setMode("search"); }}>
+            Search TMDB
+          </Button>
+          <Button size="small" variant="outlined" color="warning"
+            onClick={onNeverAgain}>
+            No, don&apos;t try again
           </Button>
         </Stack>
       </Box>
+    );
+  }
+
+  // Search mode
+  return (
+    <Box>
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+        <TextField
+          size="small"
+          fullWidth
+          placeholder="Search TMDB collections…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") doSearch(); }}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
+        />
+        <Button variant="contained" size="small" onClick={doSearch} disabled={searching || !query.trim()}>
+          {searching ? <CircularProgress size={16} /> : "Search"}
+        </Button>
+      </Stack>
+
+      {searched && results.length === 0 && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          No TMDB collections found for &ldquo;{query}&rdquo;.
+        </Typography>
+      )}
+
+      {results.length > 0 && (
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2, maxHeight: 260, overflowY: "auto" }}>
+          {results.map((r) => (
+            <Box
+              key={r.id}
+              onClick={() => onConfirm(r.id, r.name)}
+              sx={{
+                width: 140, cursor: "pointer", borderRadius: 0.5, overflow: "hidden",
+                border: "2px solid transparent",
+                "&:hover": { borderColor: "primary.main" },
+              }}
+            >
+              {r.poster_path
+                ? <Box component="img" src={`https://image.tmdb.org/t/p/w185${r.poster_path}`}
+                    alt={r.name} sx={{ width: "100%", display: "block" }} />
+                : <Box sx={{ width: "100%", aspectRatio: "2/3", bgcolor: "action.hover", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center", px: 0.5 }}>{r.name}</Typography>
+                  </Box>
+              }
+              <Typography variant="caption" display="block" noWrap sx={{ px: 0.25, pt: 0.25, fontSize: "0.6rem" }}>
+                {r.name}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      <Button size="small" variant="outlined" color="warning" onClick={onNeverAgain}>
+        Don&apos;t try again
+      </Button>
     </Box>
   );
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function makePoster(item: MediaItem, src: string, creatorName = ""): PosterEntry {
-  return {
-    poster_id: item.id,
-    media: { type: item.type, tmdb_id: item.tmdb_id ?? undefined, title: item.title, year: item.year ?? undefined },
-    creator: { creator_id: "", display_name: creatorName, home_node: "" },
-    assets: {
-      preview: { url: src, hash: "", mime: "image/jpeg" },
-      full: { url: src, hash: "", mime: "image/jpeg", access: "public" },
-    },
-  };
-}
-
-function makeArtworkMeta(tracked: TrackedArtwork | undefined, subThemeNames: Map<string, string>): ArtworkMeta {
-  if (!tracked) return {};
-  return {
-    creator: tracked.creator_display_name ?? null,
-    theme: tracked.theme_id ? (subThemeNames.get(tracked.theme_id) ?? null) : null,
-    appliedAt: tracked.applied_at
-      ? new Date(tracked.applied_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-      : null,
-  };
 }
 
 // ─── CollectionMediaDetail ────────────────────────────────────────────────────
@@ -226,6 +227,8 @@ interface CollectionMediaDetailProps {
   conn: { nodeUrl: string; adminToken: string };
   onBack: () => void;
   movies: MediaItem[];
+  /** The item.id that the current `movies` array was loaded for. Null while loading. */
+  childrenForId: string | null;
   childrenLoading: boolean;
   failedThumbs: Set<string>;
   trackedArtwork: Map<string, TrackedArtwork>;
@@ -233,13 +236,21 @@ interface CollectionMediaDetailProps {
   onMarkRetry: (id: string) => void;
   onUntrack: (id: string) => void;
   onTrack: (id: string, artwork: TrackedArtwork) => void;
+  onNavigateToMovie: (movie: MediaItem) => void;
+  serverName?: string;
 }
 
+/**
+ * Detail view for a Plex collection, showing all four artwork types (poster, backdrop, square, logo)
+ * for the collection itself and per-movie artwork for every child movie. Handles TMDB resolution,
+ * artwork apply/reset, creator subscriptions, and the "apply all from same creator" suggestion flow.
+ */
 export default function CollectionMediaDetail({
   item,
   conn,
   onBack,
   movies,
+  childrenForId,
   childrenLoading,
   failedThumbs,
   trackedArtwork,
@@ -247,33 +258,74 @@ export default function CollectionMediaDetail({
   onMarkRetry,
   onUntrack,
   onTrack,
+  onNavigateToMovie,
+  serverName,
 }: CollectionMediaDetailProps) {
   const t = useTranslations("myMedia");
 
-  // ── TMDB resolution (for collection alt artwork) ───────────────────────────
+  // ── TMDB resolution ────────────────────────────────────────────────────────
   const [tmdbRes, setTmdbRes] = useState<TmdbResolution>({ status: "idle" });
+  // Tracks which item.id has already been resolved (from cache or lookup) so the
+  // resolution effect doesn't overwrite a cached result when deps re-fire.
+  const tmdbResolvedForRef = useRef<string | null>(null);
 
-  // ── Selection: collection pre-selected by default ─────────────────────────
-  const [selectedKind, setSelectedKind] = useState<"collection" | "movie">("collection");
-  const [selectedMovieId, setSelectedMovieId] = useState<string | null>(null);
+  // ── Drawer ─────────────────────────────────────────────────────────────────
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerKind, setDrawerKind] = useState<"collection" | "movie">("collection");
+  const [drawerMovieId, setDrawerMovieId] = useState<string | null>(null);
+  const [drawerIsBackdrop, setDrawerIsBackdrop] = useState(false);
+  const [drawerIsLogo, setDrawerIsLogo] = useState(false);
+  const [drawerIsSquare, setDrawerIsSquare] = useState(false);
+  const [drawerPosters, setDrawerPosters] = useState<PosterEntry[]>([]);
+  const [drawerLoading, setDrawerLoading] = useState(false);
 
-  // ── Alt artwork ───────────────────────────────────────────────────────────
-  const [altPosters, setAltPosters] = useState<PosterEntry[]>([]);
-  const [altLoading, setAltLoading] = useState(false);
-  const [altLoadedForKey, setAltLoadedForKey] = useState<string | null>(null);
-  const altFetchKeyRef = useRef<string | null>(null);
-
-  // ── Apply ─────────────────────────────────────────────────────────────────
+  // ── Apply ──────────────────────────────────────────────────────────────────
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
-  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
-  // Override thumb URLs immediately after applying, keyed by media_item_id.
   const [appliedPreviews, setAppliedPreviews] = useState<Map<string, string>>(new Map());
+  // Tracks keys where OP artwork was applied this session — separate from appliedPreviews
+  // which is also updated on reset (for cache-busting), so can't be used for badge logic.
+  const [opAppliedKeys, setOpAppliedKeys] = useState<Set<string>>(new Set());
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
+
+  // ── Reset ──────────────────────────────────────────────────────────────────
+  const [resettingIds, setResettingIds] = useState<Set<string>>(new Set());
+
+  // ── Collection tracking (local) ────────────────────────────────────────────
+  const [trackedItem, setTrackedItem] = useState<TrackedArtwork | null>(null);
+  const [trackedBackdrop, setTrackedBackdrop] = useState<TrackedArtwork | null>(null);
+  const [trackedLogo, setTrackedLogo] = useState<TrackedArtwork | null>(null);
+  const [trackedSquare, setTrackedSquare] = useState<TrackedArtwork | null>(null);
+
+  // ── Failures ──────────────────────────────────────────────────────────────
+  const [failedThumb, setFailedThumb] = useState(false);
+  const [failedShowBg, setFailedShowBg] = useState(false);
+  const [failedLogo, setFailedLogo] = useState(false);
+  const [failedSquare, setFailedSquare] = useState(false);
+  const [failedMovieBgs, setFailedMovieBgs] = useState<Set<string>>(() => new Set());
+  const [failedMovieLogos, setFailedMovieLogos] = useState<Set<string>>(() => new Set());
+  const [failedMovieSquares, setFailedMovieSquares] = useState<Set<string>>(() => new Set());
+
+  // ── TMDB default images (greyscale placeholders) ───────────────────────────
+  const [tmdbImages, setTmdbImages] = useState<{ posterPath: string | null; backdropPath: string | null } | null>(null);
+
+  // ── Card overlay selection ─────────────────────────────────────────────────
+  const [openCardKey, setOpenCardKey] = useState<string | null>(null);
+
+  // ── Creator subscriptions ──────────────────────────────────────────────────
+  const [creatorSubs, setCreatorSubs] = useState<Set<string>>(
+    () => new Set(getCreatorSubscriptions().map((s) => s.creatorId)),
+  );
+
+  // ── Snackbar ──────────────────────────────────────────────────────────────
+  const [autoMatchMenuAnchor, setAutoMatchMenuAnchor] = useState<HTMLElement | null>(null);
+  const [notMatchedMenuAnchor, setNotMatchedMenuAnchor] = useState<HTMLElement | null>(null);
+
   const [snack, setSnack] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
     open: false, message: "", severity: "success",
   });
 
-  // ── Creator suggestion state ───────────────────────────────────────────────
+  // ── Creator suggestion ─────────────────────────────────────────────────────
   type SuggestionItem = { mediaItem: MediaItem; poster: PosterEntry; isCollection: boolean };
   const [suggestion, setSuggestion] = useState<{
     creatorId: string;
@@ -282,9 +334,7 @@ export default function CollectionMediaDetail({
   } | null>(null);
   const [applyingAll, setApplyingAll] = useState(false);
 
-  // ── Collection tracking ───────────────────────────────────────────────────
-  const [trackedItem, setTrackedItem] = useState<TrackedArtwork | null>(null);
-  const [failedThumb, setFailedThumb] = useState(false);
+  // ── Effects ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     getArtworkSettings(conn.nodeUrl, conn.adminToken)
@@ -293,213 +343,268 @@ export default function CollectionMediaDetail({
 
   useEffect(() => {
     getTrackedArtwork(conn.nodeUrl, conn.adminToken).then((all) => {
-      const found = all.find((t) => t.media_item_id === item.id) ?? null;
+      const found = all.find((r) => r.media_item_id === item.id) ?? null;
+      const foundBg = all.find((r) => r.media_item_id === item.id + ":bg") ?? null;
+      const foundLogo = all.find((r) => r.media_item_id === item.id + ":logo") ?? null;
+      const foundSquare = all.find((r) => r.media_item_id === item.id + ":square") ?? null;
       setTrackedItem(found);
+      setTrackedBackdrop(foundBg);
+      setTrackedLogo(foundLogo);
+      setTrackedSquare(foundSquare);
       if (found && !found.creator_display_name && found.node_base && found.poster_id) {
         fetchPosterFromNode(found.node_base, found.poster_id).then((p) => {
-          if (p) setTrackedItem({ ...found, creator_display_name: p.creator.display_name });
+          if (p) setTrackedItem((prev) => prev ? { ...prev, creator_display_name: p.creator.display_name } : prev);
+        });
+      }
+      if (foundBg && !foundBg.creator_display_name && foundBg.node_base && foundBg.poster_id) {
+        fetchPosterFromNode(foundBg.node_base, foundBg.poster_id).then((p) => {
+          if (p) setTrackedBackdrop((prev) => prev ? { ...prev, creator_display_name: p.creator.display_name } : prev);
         });
       }
     });
   }, [item.id, conn.nodeUrl, conn.adminToken]);
 
-  // ── TMDB resolution: uses movies prop to avoid a duplicate fetch ───────────
+  // Fetch TMDB collection poster/backdrop paths once we have a confirmed tmdbId
+  const confirmedTmdbId = tmdbRes.status === "confirmed" ? tmdbRes.tmdbId : null;
   useEffect(() => {
+    if (!confirmedTmdbId) { setTmdbImages(null); return; }
+    let cancelled = false;
+    fetch(`/api/tmdb/collection/${confirmedTmdbId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { poster_path?: string | null; backdrop_path?: string | null } | null) => {
+        if (cancelled || !d) return;
+        setTmdbImages({ posterPath: d.poster_path ?? null, backdropPath: d.backdrop_path ?? null });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [confirmedTmdbId]);
+
+  // Load cached TMDB mapping or reset when collection changes
+  useEffect(() => {
+    tmdbResolvedForRef.current = null;
+    const saved = loadTmdbMap()[item.id];
+    if (saved) {
+      tmdbResolvedForRef.current = item.id;
+      if ("rejected" in saved) {
+        setTmdbRes({ status: "text-search" });
+      } else {
+        setTmdbRes({ status: "confirmed", tmdbId: saved.tmdbId, tmdbName: saved.tmdbName, source: saved.source ?? "confirmed" });
+      }
+    } else {
+      setTmdbRes({ status: "idle" });
+    }
+  }, [item.id]);
+
+  // TMDB resolution: use first movie's belongs_to_collection to find the collection TMDB id
+  useEffect(() => {
+    if (tmdbResolvedForRef.current === item.id) return; // already resolved from cache
     if (item.tmdb_id != null) {
-      setTmdbRes({ status: "confirmed", tmdbId: item.tmdb_id });
+      tmdbResolvedForRef.current = item.id;
+      saveTmdbMapEntry(item.id, { tmdbId: item.tmdb_id, tmdbName: item.title, source: "auto" });
+      setTmdbRes({ status: "confirmed", tmdbId: item.tmdb_id, tmdbName: item.title, source: "auto" });
       return;
     }
-    // Wait until children have loaded from the parent
-    if (childrenLoading) return;
-
+    if (childrenForId !== item.id || childrenLoading) return;
     setTmdbRes({ status: "resolving" });
     const first = movies.find((m) => m.tmdb_id != null);
     if (!first) { setTmdbRes({ status: "text-search" }); return; }
 
+    let cancelled = false;
     fetch(`/api/tmdb/movie/${first.tmdb_id}`)
       .then(async (r) => {
+        if (cancelled) return;
         if (!r.ok) { setTmdbRes({ status: "text-search" }); return; }
         const d = await r.json() as {
           belongs_to_collection?: { id: number; name: string; poster_path: string | null } | null;
         };
+        if (cancelled) return;
         const btc = d.belongs_to_collection;
         if (!btc) { setTmdbRes({ status: "text-search" }); return; }
         if (normaliseCollectionName(btc.name) === normaliseCollectionName(item.title)) {
-          setTmdbRes({ status: "confirmed", tmdbId: btc.id });
+          tmdbResolvedForRef.current = item.id;
+          saveTmdbMapEntry(item.id, { tmdbId: btc.id, tmdbName: btc.name, source: "auto" });
+          setTmdbRes({ status: "confirmed", tmdbId: btc.id, tmdbName: btc.name, source: "auto" });
         } else {
           const cr = await fetch(`/api/tmdb/collection/${btc.id}`)
             .then((r) => r.ok ? r.json() : null)
             .catch(() => null) as { parts?: { poster_path: string | null }[] } | null;
+          if (cancelled) return;
           const thumbs = (cr?.parts ?? [])
             .filter((p) => p.poster_path)
             .slice(0, 4)
             .map((p) => `https://image.tmdb.org/t/p/w92${p.poster_path}`);
-          setTmdbRes({ status: "pending-confirm", tmdbId: btc.id, tmdbName: btc.name, posterPath: btc.poster_path, movieThumbs: thumbs });
+          setTmdbRes({ status: "pending-confirm", itemId: item.id, tmdbId: btc.id, tmdbName: btc.name, posterPath: btc.poster_path, movieThumbs: thumbs });
         }
       })
-      .catch(() => setTmdbRes({ status: "text-search" }));
-  }, [item.id, item.tmdb_id, item.title, movies, childrenLoading]);
+      .catch(() => { if (!cancelled) setTmdbRes({ status: "text-search" }); });
+    return () => { cancelled = true; };
+  }, [item.id, item.tmdb_id, item.title, movies, childrenForId, childrenLoading]);
 
-  // ── Subscriptions ─────────────────────────────────────────────────────────
+  // ── Subscriptions ──────────────────────────────────────────────────────────
   const subs = useMemo(() => getSubscriptions(), []);
-  const subscribedThemeIds = useMemo(() => new Set(subs.map((s) => s.themeId)), [subs]);
-  const subscribedCreatorIds = useMemo(() => new Set(subs.map((s) => s.creatorId)), [subs]);
-  const subThemeNames = useMemo(() => new Map(subs.map((s) => [s.themeId, s.themeName])), [subs]);
 
-  // ── Derived selection ─────────────────────────────────────────────────────
-  const selectedMovie = useMemo(
-    () => movies.find((m) => m.id === selectedMovieId) ?? null,
-    [movies, selectedMovieId],
-  );
-  const selectedKey = selectedKind === "collection" ? "collection" : (selectedMovieId ?? "collection");
+  // ── Derived ────────────────────────────────────────────────────────────────
 
-  // ── Alt artwork fetch ─────────────────────────────────────────────────────
-  useEffect(() => {
-    const key = selectedKey;
-    altFetchKeyRef.current = key;
+  const isCollCreatorSubscribed = trackedItem?.creator_id ? creatorSubs.has(trackedItem.creator_id) : false;
+  const isCollPosterResetting = resettingIds.has(item.id);
+  const isCollBackdropResetting = resettingIds.has(item.id + ":bg");
+  const isCollLogoResetting = resettingIds.has(item.id + ":logo");
+  const isCollSquareResetting = resettingIds.has(item.id + ":square");
 
-    if (selectedKind === "collection") {
-      if (tmdbRes.status === "idle" || tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm") return;
-      setAltLoading(true);
-      const url = tmdbRes.status === "confirmed"
-        ? `/api/search?tmdb_id=${tmdbRes.tmdbId}&type=collection&limit=50`
-        : `/api/search?q=${encodeURIComponent(item.title)}&type=collection&limit=50`;
-      fetch(url)
-        .then((r) => r.json())
-        .then((d: { results: PosterEntry[] }) => {
-          if (altFetchKeyRef.current !== key) return;
-          setAltPosters(d.results.filter((p) => typeof p.assets?.preview?.url === "string" && p.assets.preview.url.length > 0));
-          setAltLoadedForKey(key);
-        })
-        .catch(() => { if (altFetchKeyRef.current === key) { setAltPosters([]); setAltLoadedForKey(key); } })
-        .finally(() => { if (altFetchKeyRef.current === key) setAltLoading(false); });
-    } else {
-      if (!selectedMovie?.tmdb_id) {
-        setAltPosters([]);
-        setAltLoading(false);
-        setAltLoadedForKey(key);
-        return;
-      }
-      setAltLoading(true);
-      fetch(`/api/search?tmdb_id=${selectedMovie.tmdb_id}&type=movie&limit=50`)
-        .then((r) => r.json())
-        .then((d: { results: PosterEntry[] }) => {
-          if (altFetchKeyRef.current !== key) return;
-          setAltPosters(d.results.filter((p) => typeof p.assets?.preview?.url === "string" && p.assets.preview.url.length > 0));
-          setAltLoadedForKey(key);
-        })
-        .catch(() => { if (altFetchKeyRef.current === key) { setAltPosters([]); setAltLoadedForKey(key); } })
-        .finally(() => { if (altFetchKeyRef.current === key) setAltLoading(false); });
+  const heroBackdropUrl = failedShowBg
+    ? null
+    : (appliedPreviews.get(item.id + ":bg") ?? artUrl(conn.nodeUrl, conn.adminToken, item.id));
+
+  const collPosterSrc = appliedPreviews.get(item.id) ?? thumbUrl(conn.nodeUrl, conn.adminToken, item.id);
+  const collBackdropSrc = appliedPreviews.get(item.id + ":bg") ?? artUrl(conn.nodeUrl, conn.adminToken, item.id);
+  const collLogoSrc = appliedPreviews.get(item.id + ":logo") ?? logoUrl(conn.nodeUrl, conn.adminToken, item.id);
+  const collSquareSrc = appliedPreviews.get(item.id + ":square") ?? squareUrl(conn.nodeUrl, conn.adminToken, item.id);
+
+  const drawerAppliedPosterId = (() => {
+    if (drawerKind === "collection") {
+      if (drawerIsLogo) return trackedLogo?.poster_id ?? null;
+      if (drawerIsSquare) return trackedSquare?.poster_id ?? null;
+      return drawerIsBackdrop
+        ? (trackedBackdrop?.poster_id ?? null)
+        : (trackedItem?.poster_id ?? null);
     }
-  }, [selectedKind, selectedKey, selectedMovie?.tmdb_id, tmdbRes, item.title]);
+    if (!drawerMovieId) return null;
+    if (drawerIsSquare) return trackedArtwork.get(drawerMovieId + ":square")?.poster_id ?? null;
+    return drawerIsBackdrop
+      ? (trackedArtwork.get(drawerMovieId + ":bg")?.poster_id ?? null)
+      : (trackedArtwork.get(drawerMovieId)?.poster_id ?? null);
+  })();
 
-  // ── Applied poster filtering ──────────────────────────────────────────────
-  const appliedPosterId = selectedKind === "collection"
-    ? (trackedItem?.poster_id ?? null)
-    : (trackedArtwork.get(selectedMovieId ?? "")?.poster_id ?? null);
-
-  const visibleAltPosters = useMemo(
-    () => altPosters.filter((p) => p.poster_id !== appliedPosterId),
-    [altPosters, appliedPosterId],
+  const visibleDrawerPosters = useMemo(
+    () => drawerPosters.filter((p) => p.poster_id !== drawerAppliedPosterId),
+    [drawerPosters, drawerAppliedPosterId],
   );
 
-  const fromSubs = useMemo(
-    () => visibleAltPosters.filter(
-      (p) => (p.media.theme_id && subscribedThemeIds.has(p.media.theme_id)) ||
-        subscribedCreatorIds.has(p.creator.creator_id),
-    ),
-    [visibleAltPosters, subscribedThemeIds, subscribedCreatorIds],
-  );
+  const drawerMovie = drawerMovieId ? movies.find((m) => m.id === drawerMovieId) ?? null : null;
+  const drawerTitle = drawerKind === "collection" ? item.title : (drawerMovie?.title ?? item.title);
+  const drawerSubtitle = drawerIsLogo ? t("logos").toUpperCase() : drawerIsSquare ? t("square").toUpperCase() : drawerIsBackdrop ? t("backdrops").toUpperCase() : t("posters").toUpperCase();
+  const drawerChip = drawerIsBackdrop
+    ? { label: "BACKDROP", color: "warning" as const }
+    : drawerKind === "collection"
+      ? { label: "COLLECTION", color: "error" as const }
+      : { label: "MOVIE", color: "success" as const };
+  const drawerHasTmdbId = drawerKind === "collection"
+    ? (tmdbRes.status === "confirmed" || tmdbRes.status === "text-search" || item.tmdb_id != null)
+    : !!(drawerMovie?.tmdb_id);
+  const drawerOthersLabel = drawerIsLogo
+    ? (drawerKind === "collection" ? "Other logos for this collection" : "Other logos for this movie")
+    : drawerIsSquare
+    ? (drawerKind === "collection" ? "Other squares for this collection" : "Other squares for this movie")
+    : drawerIsBackdrop
+    ? (drawerKind === "collection" ? "Other backdrops for this collection" : "Other backdrops for this movie")
+    : (drawerKind === "collection" ? "Other posters for this collection" : "Other posters for this movie");
 
-  const others = useMemo(
-    () => visibleAltPosters.filter((p) => !fromSubs.includes(p)),
-    [visibleAltPosters, fromSubs],
-  );
+  // ── Handlers ───────────────────────────────────────────────────────────────
 
-  // ── Apply handler ─────────────────────────────────────────────────────────
-  const resolvedTmdbId = tmdbRes.status === "confirmed" ? tmdbRes.tmdbId : item.tmdb_id;
+  /** Opens the artwork browse drawer for the given context (collection or movie, poster/backdrop/logo/square). Fetches matching posters from the search API immediately. */
+  function openDrawer(kind: "collection" | "movie", movieId: string | null, isBackdrop: boolean, isLogo = false, isSquare = false) {
+    setDrawerKind(kind);
+    setDrawerMovieId(movieId);
+    setDrawerIsBackdrop(isBackdrop);
+    setDrawerIsLogo(isLogo);
+    setDrawerIsSquare(isSquare);
+    setDrawerPosters([]);
+    setDrawerOpen(true);
 
+    const baseType = isBackdrop ? "backdrop" : (kind === "collection" ? "collection" : "movie");
+    const kindParam = isLogo ? "&kind=logo" : isSquare ? "&kind=square" : "";
+    let searchUrl: string | null = null;
+
+    if (kind === "collection") {
+      if (tmdbRes.status === "confirmed") {
+        searchUrl = `/api/search?tmdb_id=${tmdbRes.tmdbId}&type=${baseType}${kindParam}&limit=200`;
+      } else if (item.tmdb_id != null) {
+        searchUrl = `/api/search?tmdb_id=${item.tmdb_id}&type=${baseType}${kindParam}&limit=200`;
+      } else if (tmdbRes.status === "text-search") {
+        searchUrl = `/api/search?q=${encodeURIComponent(item.title)}&type=${baseType}${kindParam}&limit=200`;
+      }
+    } else {
+      const movieTmdbId = movies.find((m) => m.id === movieId)?.tmdb_id ?? null;
+      if (movieTmdbId) searchUrl = `/api/search?tmdb_id=${movieTmdbId}&type=${baseType}${kindParam}&limit=200`;
+    }
+
+    if (!searchUrl) return;
+    setDrawerLoading(true);
+    fetch(searchUrl)
+      .then((r) => r.json())
+      .then((d: { results: PosterEntry[] }) =>
+        setDrawerPosters(d.results.filter((p) => typeof p.assets?.preview?.url === "string" && p.assets.preview.url.length > 0)),
+      )
+      .catch(() => setDrawerPosters([]))
+      .finally(() => setDrawerLoading(false));
+  }
+
+  /** Applies the chosen poster to Plex via the node, updates local tracked/applied state, and triggers the same-creator match check. */
   async function handleApply(poster: PosterEntry) {
     setApplyingId(poster.poster_id);
+    const movie = drawerMovieId ? movies.find((m) => m.id === drawerMovieId) ?? null : null;
+    const isCollection = drawerKind === "collection";
+    const key = isCollection
+      ? (drawerIsLogo ? item.id + ":logo" : drawerIsSquare ? item.id + ":square" : drawerIsBackdrop ? item.id + ":bg" : item.id)
+      : (drawerIsSquare ? drawerMovieId! + ":square" : drawerIsBackdrop ? drawerMovieId! + ":bg" : drawerMovieId!);
+    const plexRatingKey = isCollection ? item.id : drawerMovieId!;
+    const tmdbId = isCollection
+      ? ((tmdbRes.status === "confirmed" ? tmdbRes.tmdbId : item.tmdb_id) ?? poster.media.tmdb_id ?? null)
+      : (movie?.tmdb_id ?? poster.media.tmdb_id ?? null);
+    const mediaType = isCollection ? "collection" : "movie";
     try {
-      if (selectedKind === "collection") {
-        const effectiveTmdbId = resolvedTmdbId ?? poster.media.tmdb_id ?? null;
-        await applyToPlexPoster(conn.nodeUrl, conn.adminToken, {
-          imageUrl: poster.assets.full.url,
-          tmdbId: effectiveTmdbId ?? undefined,
-          plexRatingKey: item.id,
-          mediaType: "collection",
-          posterId: poster.poster_id,
-          assetHash: poster.assets.full.hash,
-          creatorId: poster.creator.creator_id,
-          creatorDisplayName: poster.creator.display_name,
-          themeId: poster.media.theme_id ?? undefined,
-          nodeBase: poster.creator.home_node,
-          autoUpdate: autoUpdateEnabled,
-        });
-        setAppliedPreviews((prev) => new Map(prev).set(item.id, poster.assets.preview.url));
-        setTrackedItem({
-          media_item_id: item.id,
-          tmdb_id: effectiveTmdbId,
-          media_type: "collection",
-          poster_id: poster.poster_id,
-          asset_hash: poster.assets.full.hash,
-          creator_id: poster.creator.creator_id,
-          creator_display_name: poster.creator.display_name,
-          theme_id: poster.media.theme_id ?? null,
-          node_base: poster.creator.home_node,
-          applied_at: new Date().toISOString(),
-          auto_update: autoUpdateEnabled,
-          plex_label: null,
-        });
-      } else if (selectedMovie) {
-        const movieTmdbId = selectedMovie.tmdb_id ?? poster.media.tmdb_id ?? null;
-        await applyToPlexPoster(conn.nodeUrl, conn.adminToken, {
-          imageUrl: poster.assets.full.url,
-          tmdbId: movieTmdbId ?? undefined,
-          plexRatingKey: selectedMovie.id,
-          mediaType: "movie",
-          posterId: poster.poster_id,
-          assetHash: poster.assets.full.hash,
-          creatorId: poster.creator.creator_id,
-          creatorDisplayName: poster.creator.display_name,
-          themeId: poster.media.theme_id ?? undefined,
-          nodeBase: poster.creator.home_node,
-          autoUpdate: autoUpdateEnabled,
-        });
-        setAppliedPreviews((prev) => new Map(prev).set(selectedMovie.id, poster.assets.preview.url));
-        onTrack(selectedMovie.id, {
-          media_item_id: selectedMovie.id,
-          tmdb_id: movieTmdbId,
-          media_type: "movie",
-          poster_id: poster.poster_id,
-          asset_hash: poster.assets.full.hash,
-          creator_id: poster.creator.creator_id,
-          creator_display_name: poster.creator.display_name,
-          theme_id: poster.media.theme_id ?? null,
-          node_base: poster.creator.home_node,
-          applied_at: new Date().toISOString(),
-          auto_update: autoUpdateEnabled,
-          plex_label: null,
-        });
-      }
+      await applyToPlexPoster(conn.nodeUrl, conn.adminToken, {
+        imageUrl: poster.assets.full.url,
+        tmdbId: tmdbId ?? undefined,
+        plexRatingKey,
+        mediaType,
+        isBackdrop: drawerIsBackdrop,
+        isLogo: drawerIsLogo,
+        isSquare: drawerIsSquare,
+        posterId: poster.poster_id,
+        assetHash: poster.assets.full.hash,
+        creatorId: poster.creator.creator_id,
+        creatorDisplayName: poster.creator.display_name,
+        themeId: poster.media.theme_id ?? undefined,
+        nodeBase: poster.creator.home_node,
+        autoUpdate: autoUpdateEnabled,
+      });
       setAppliedIds((prev) => new Set([...prev, poster.poster_id]));
+      setAppliedPreviews((prev) => new Map(prev).set(key, poster.assets.preview.url));
+      setOpAppliedKeys((prev) => new Set([...prev, key]));
+      const record: TrackedArtwork = {
+        media_item_id: key,
+        tmdb_id: tmdbId,
+        media_type: mediaType,
+        poster_id: poster.poster_id,
+        asset_hash: poster.assets.full.hash,
+        creator_id: poster.creator.creator_id,
+        creator_display_name: poster.creator.display_name,
+        theme_id: poster.media.theme_id ?? null,
+        node_base: poster.creator.home_node,
+        applied_at: new Date().toISOString(),
+        auto_update: autoUpdateEnabled,
+        plex_label: null,
+      };
+      if (isCollection && drawerIsLogo) setTrackedLogo(record);
+      else if (isCollection && drawerIsSquare) setTrackedSquare(record);
+      else if (isCollection && !drawerIsBackdrop) setTrackedItem(record);
+      else if (isCollection && drawerIsBackdrop) setTrackedBackdrop(record);
+      else onTrack(key, record);
       setSnack({ open: true, message: t("applySuccess"), severity: "success" });
-      // Fire-and-forget: check if same creator has posters for other collection items
-      const targetId = selectedKind === "collection" ? item.id : (selectedMovie?.id ?? item.id);
-      const latestTrackedItem = selectedKind === "collection"
-        ? { creator_id: poster.creator.creator_id } as typeof trackedItem
-        : trackedItem;
-      const latestTrackedArtwork = selectedKind === "movie" && selectedMovie
-        ? new Map(trackedArtwork).set(selectedMovie.id, { creator_id: poster.creator.creator_id } as TrackedArtwork)
-        : trackedArtwork;
-      checkCreatorMatches(
-        poster.creator.creator_id,
-        poster.creator.display_name,
-        targetId,
-        latestTrackedItem,
-        latestTrackedArtwork,
-      ).catch(() => {});
+      if (!drawerIsBackdrop && !drawerIsLogo) {
+        const updatedTrackedItem = isCollection ? record : trackedItem;
+        const updatedTrackedArtwork = !isCollection && drawerMovieId
+          ? new Map(trackedArtwork).set(drawerMovieId, { creator_id: poster.creator.creator_id } as TrackedArtwork)
+          : trackedArtwork;
+        checkCreatorMatches(
+          poster.creator.creator_id,
+          poster.creator.display_name,
+          key,
+          updatedTrackedItem,
+          updatedTrackedArtwork,
+        ).catch(() => {});
+      }
     } catch (e) {
       setSnack({ open: true, message: e instanceof Error ? e.message : t("applyError"), severity: "error" });
     } finally {
@@ -507,19 +612,273 @@ export default function CollectionMediaDetail({
     }
   }
 
-  // ── Creator suggestion: check for same-creator posters on other items ─────
+  /** Resets the collection poster: untracks OP artwork, then restores the TMDB collection poster via Plex. */
+  async function handleResetCollectionPoster() {
+    setResettingIds((prev) => new Set([...prev, item.id]));
+    let newPreviewUrl: string | null = null;
+    try {
+      await untrackArtwork(conn.nodeUrl, conn.adminToken, item.id);
+      setTrackedItem(null);
+      setAppliedPreviews((prev) => { const m = new Map(prev); m.delete(item.id); return m; });
+      setOpAppliedKeys((prev) => { const s = new Set(prev); s.delete(item.id); return s; });
+      setAppliedIds(new Set());
+      const tmdbId = tmdbRes.status === "confirmed" ? tmdbRes.tmdbId : item.tmdb_id;
+      if (tmdbId) {
+        const tmdbData = await fetch(`/api/tmdb/collection/${tmdbId}`)
+          .then((r) => r.ok ? r.json() : null) as { poster_path?: string } | null;
+        if (tmdbData?.poster_path) {
+          await applyToPlexPoster(conn.nodeUrl, conn.adminToken, {
+            imageUrl: `https://image.tmdb.org/t/p/original${tmdbData.poster_path}`,
+            plexRatingKey: item.id,
+            mediaType: "collection",
+          });
+          newPreviewUrl = `https://image.tmdb.org/t/p/w342${tmdbData.poster_path}`;
+        }
+      }
+      setSnack({ open: true, message: t("resetSuccess"), severity: "success" });
+    } catch (e) {
+      setSnack({ open: true, message: e instanceof Error ? e.message : t("resetError"), severity: "error" });
+    } finally {
+      setResettingIds((prev) => { const s = new Set(prev); s.delete(item.id); return s; });
+      if (newPreviewUrl) {
+        setAppliedPreviews((prev) => new Map(prev).set(item.id, newPreviewUrl!));
+      } else {
+        setAppliedPreviews((prev) => new Map(prev).set(item.id, `${thumbUrl(conn.nodeUrl, conn.adminToken, item.id)}&v=${Date.now()}`));
+      }
+    }
+  }
+
+  /** Resets the collection backdrop: untracks OP artwork, then restores the TMDB collection backdrop via Plex. */
+  async function handleResetCollectionBackdrop() {
+    const bgKey = item.id + ":bg";
+    setResettingIds((prev) => new Set([...prev, bgKey]));
+    let newPreviewUrl: string | null = null;
+    try {
+      await untrackArtwork(conn.nodeUrl, conn.adminToken, bgKey).catch(() => {});
+      setTrackedBackdrop(null);
+      setAppliedPreviews((prev) => { const m = new Map(prev); m.delete(bgKey); return m; });
+      setOpAppliedKeys((prev) => { const s = new Set(prev); s.delete(bgKey); return s; });
+      setAppliedIds(new Set());
+      const tmdbId = tmdbRes.status === "confirmed" ? tmdbRes.tmdbId : item.tmdb_id;
+      if (tmdbId) {
+        const tmdbData = await fetch(`/api/tmdb/collection/${tmdbId}`)
+          .then((r) => r.ok ? r.json() : null) as { backdrop_path?: string } | null;
+        if (tmdbData?.backdrop_path) {
+          await applyToPlexPoster(conn.nodeUrl, conn.adminToken, {
+            imageUrl: `https://image.tmdb.org/t/p/original${tmdbData.backdrop_path}`,
+            plexRatingKey: item.id,
+            mediaType: "collection",
+            isBackdrop: true,
+          });
+          newPreviewUrl = `https://image.tmdb.org/t/p/w780${tmdbData.backdrop_path}`;
+        }
+      }
+      setSnack({ open: true, message: t("resetSuccess"), severity: "success" });
+    } catch (e) {
+      setSnack({ open: true, message: e instanceof Error ? e.message : t("resetError"), severity: "error" });
+    } finally {
+      setResettingIds((prev) => { const s = new Set(prev); s.delete(bgKey); return s; });
+      if (newPreviewUrl) {
+        setAppliedPreviews((prev) => new Map(prev).set(bgKey, newPreviewUrl!));
+      } else {
+        setAppliedPreviews((prev) => new Map(prev).set(bgKey, `${artUrl(conn.nodeUrl, conn.adminToken, item.id)}&v=${Date.now()}`));
+      }
+    }
+  }
+
+  /** Resets the collection logo: untracks OP artwork and busts the node's logo proxy cache so Plex's original logo is shown again. */
+  async function handleResetCollectionLogo() {
+    const logoKey = item.id + ":logo";
+    setResettingIds((prev) => new Set([...prev, logoKey]));
+    try {
+      await untrackArtwork(conn.nodeUrl, conn.adminToken, logoKey).catch(() => {});
+      await fetch(
+        `${conn.nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/logo/${encodeURIComponent(item.id)}/cache`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${conn.adminToken}` } },
+      ).catch(() => {});
+      setTrackedLogo(null);
+      setAppliedPreviews((prev) => { const m = new Map(prev); m.delete(logoKey); return m; });
+      setOpAppliedKeys((prev) => { const s = new Set(prev); s.delete(logoKey); return s; });
+      setAppliedIds(new Set());
+      setSnack({ open: true, message: t("resetSuccess"), severity: "success" });
+    } catch (e) {
+      setSnack({ open: true, message: e instanceof Error ? e.message : t("resetError"), severity: "error" });
+    } finally {
+      setResettingIds((prev) => { const s = new Set(prev); s.delete(logoKey); return s; });
+      setAppliedPreviews((prev) => new Map(prev).set(logoKey, `${logoUrl(conn.nodeUrl, conn.adminToken, item.id)}&v=${Date.now()}`));
+    }
+  }
+
+  /** Resets the logo for a child movie: untracks OP artwork and busts the node's logo proxy cache. */
+  async function handleResetMovieLogo(movie: MediaItem) {
+    const logoKey = movie.id + ":logo";
+    setResettingIds((prev) => new Set([...prev, logoKey]));
+    try {
+      await untrackArtwork(conn.nodeUrl, conn.adminToken, logoKey).catch(() => {});
+      await fetch(
+        `${conn.nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/logo/${encodeURIComponent(movie.id)}/cache`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${conn.adminToken}` } },
+      ).catch(() => {});
+      onUntrack(logoKey);
+      setAppliedPreviews((prev) => { const m = new Map(prev); m.delete(logoKey); return m; });
+      setOpAppliedKeys((prev) => { const s = new Set(prev); s.delete(logoKey); return s; });
+      setAppliedIds(new Set());
+      setSnack({ open: true, message: t("resetSuccess"), severity: "success" });
+    } catch (e) {
+      setSnack({ open: true, message: e instanceof Error ? e.message : t("resetError"), severity: "error" });
+    } finally {
+      setResettingIds((prev) => { const s = new Set(prev); s.delete(logoKey); return s; });
+      setAppliedPreviews((prev) => new Map(prev).set(logoKey, `${logoUrl(conn.nodeUrl, conn.adminToken, movie.id)}&v=${Date.now()}`));
+    }
+  }
+
+  /** Resets the collection square artwork: untracks OP artwork and busts the node's square proxy cache. */
+  async function handleResetCollectionSquare() {
+    const squareKey = item.id + ":square";
+    setResettingIds((prev) => new Set([...prev, squareKey]));
+    try {
+      await untrackArtwork(conn.nodeUrl, conn.adminToken, squareKey).catch(() => {});
+      await fetch(
+        `${conn.nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/square/${encodeURIComponent(item.id)}/cache`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${conn.adminToken}` } },
+      ).catch(() => {});
+      setTrackedSquare(null);
+      setAppliedPreviews((prev) => { const m = new Map(prev); m.delete(squareKey); return m; });
+      setOpAppliedKeys((prev) => { const s = new Set(prev); s.delete(squareKey); return s; });
+      setAppliedIds(new Set());
+      setSnack({ open: true, message: t("resetSuccess"), severity: "success" });
+    } catch (e) {
+      setSnack({ open: true, message: e instanceof Error ? e.message : t("resetError"), severity: "error" });
+    } finally {
+      setResettingIds((prev) => { const s = new Set(prev); s.delete(squareKey); return s; });
+      setAppliedPreviews((prev) => new Map(prev).set(squareKey, `${squareUrl(conn.nodeUrl, conn.adminToken, item.id)}&v=${Date.now()}`));
+    }
+  }
+
+  /** Resets the square artwork for a child movie: untracks OP artwork and busts the node's square proxy cache. */
+  async function handleResetMovieSquare(movie: MediaItem) {
+    const squareKey = movie.id + ":square";
+    setResettingIds((prev) => new Set([...prev, squareKey]));
+    try {
+      await untrackArtwork(conn.nodeUrl, conn.adminToken, squareKey).catch(() => {});
+      await fetch(
+        `${conn.nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/square/${encodeURIComponent(movie.id)}/cache`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${conn.adminToken}` } },
+      ).catch(() => {});
+      onUntrack(squareKey);
+      setAppliedPreviews((prev) => { const m = new Map(prev); m.delete(squareKey); return m; });
+      setOpAppliedKeys((prev) => { const s = new Set(prev); s.delete(squareKey); return s; });
+      setAppliedIds(new Set());
+      setSnack({ open: true, message: t("resetSuccess"), severity: "success" });
+    } catch (e) {
+      setSnack({ open: true, message: e instanceof Error ? e.message : t("resetError"), severity: "error" });
+    } finally {
+      setResettingIds((prev) => { const s = new Set(prev); s.delete(squareKey); return s; });
+      setAppliedPreviews((prev) => new Map(prev).set(squareKey, `${squareUrl(conn.nodeUrl, conn.adminToken, movie.id)}&v=${Date.now()}`));
+    }
+  }
+
+  /** Resets the poster for a child movie: untracks OP artwork, then restores the TMDB movie poster via Plex. */
+  async function handleResetMoviePoster(movie: MediaItem) {
+    setResettingIds((prev) => new Set([...prev, movie.id]));
+    let newPreviewUrl: string | null = null;
+    try {
+      await untrackArtwork(conn.nodeUrl, conn.adminToken, movie.id);
+      onUntrack(movie.id);
+      setAppliedPreviews((prev) => { const m = new Map(prev); m.delete(movie.id); return m; });
+      setOpAppliedKeys((prev) => { const s = new Set(prev); s.delete(movie.id); return s; });
+      setAppliedIds(new Set());
+      if (movie.tmdb_id) {
+        const tmdbData = await fetch(`/api/tmdb/movie/${movie.tmdb_id}`)
+          .then((r) => r.ok ? r.json() : null) as { poster_path?: string } | null;
+        if (tmdbData?.poster_path) {
+          await applyToPlexPoster(conn.nodeUrl, conn.adminToken, {
+            imageUrl: `https://image.tmdb.org/t/p/original${tmdbData.poster_path}`,
+            plexRatingKey: movie.id,
+            mediaType: "movie",
+          });
+          newPreviewUrl = `https://image.tmdb.org/t/p/w342${tmdbData.poster_path}`;
+        }
+      }
+      setSnack({ open: true, message: t("resetSuccess"), severity: "success" });
+    } catch (e) {
+      setSnack({ open: true, message: e instanceof Error ? e.message : t("resetError"), severity: "error" });
+    } finally {
+      setResettingIds((prev) => { const s = new Set(prev); s.delete(movie.id); return s; });
+      if (newPreviewUrl) {
+        setAppliedPreviews((prev) => new Map(prev).set(movie.id, newPreviewUrl!));
+      } else {
+        setAppliedPreviews((prev) => new Map(prev).set(movie.id, `${thumbUrl(conn.nodeUrl, conn.adminToken, movie.id)}&v=${Date.now()}`));
+      }
+    }
+  }
+
+  /** Resets the backdrop for a child movie: untracks OP artwork, then restores the TMDB movie backdrop via Plex. */
+  async function handleResetMovieBackdrop(movie: MediaItem) {
+    const bgKey = movie.id + ":bg";
+    setResettingIds((prev) => new Set([...prev, bgKey]));
+    let newPreviewUrl: string | null = null;
+    try {
+      await untrackArtwork(conn.nodeUrl, conn.adminToken, bgKey).catch(() => {});
+      onUntrack(bgKey);
+      setAppliedPreviews((prev) => { const m = new Map(prev); m.delete(bgKey); return m; });
+      setOpAppliedKeys((prev) => { const s = new Set(prev); s.delete(bgKey); return s; });
+      setAppliedIds(new Set());
+      if (movie.tmdb_id) {
+        const tmdbData = await fetch(`/api/tmdb/movie/${movie.tmdb_id}`)
+          .then((r) => r.ok ? r.json() : null) as { backdrop_path?: string } | null;
+        if (tmdbData?.backdrop_path) {
+          await applyToPlexPoster(conn.nodeUrl, conn.adminToken, {
+            imageUrl: `https://image.tmdb.org/t/p/original${tmdbData.backdrop_path}`,
+            plexRatingKey: movie.id,
+            mediaType: "movie",
+            isBackdrop: true,
+          });
+          newPreviewUrl = `https://image.tmdb.org/t/p/w780${tmdbData.backdrop_path}`;
+        }
+      }
+      setSnack({ open: true, message: t("resetSuccess"), severity: "success" });
+    } catch (e) {
+      setSnack({ open: true, message: e instanceof Error ? e.message : t("resetError"), severity: "error" });
+    } finally {
+      setResettingIds((prev) => { const s = new Set(prev); s.delete(bgKey); return s; });
+      if (newPreviewUrl) {
+        setAppliedPreviews((prev) => new Map(prev).set(bgKey, newPreviewUrl!));
+      } else {
+        setAppliedPreviews((prev) => new Map(prev).set(bgKey, `${artUrl(conn.nodeUrl, conn.adminToken, movie.id)}&v=${Date.now()}`));
+      }
+    }
+  }
+
+  /** Toggles the creator subscription for the tracked collection artwork's creator. */
+  function handleCollectionCreatorSubscribe() {
+    const cid = trackedItem?.creator_id;
+    if (!cid) return;
+    if (isCollCreatorSubscribed) {
+      unsubscribeCreator(cid);
+      setCreatorSubs((prev) => { const s = new Set(prev); s.delete(cid); return s; });
+    } else {
+      subscribeCreator({ creatorId: cid, creatorDisplayName: trackedItem?.creator_display_name ?? cid, nodeBase: trackedItem?.node_base ?? "" });
+      setCreatorSubs((prev) => new Set([...prev, cid]));
+    }
+  }
+
+  /**
+   * After applying artwork, searches for other posters by the same creator across the collection
+   * and all child movies. Populates the `suggestion` state if any matches are found, prompting
+   * the user to apply them all at once.
+   */
   async function checkCreatorMatches(
     appliedCreatorId: string,
     appliedCreatorName: string,
-    justAppliedItemId: string,
-    latestTrackedItem: typeof trackedItem,
-    latestTrackedArtwork: typeof trackedArtwork,
+    justAppliedKey: string,
+    latestTrackedItem: TrackedArtwork | null,
+    latestTrackedArtwork: Map<string, TrackedArtwork>,
   ) {
     type MatchItem = { mediaItem: MediaItem; poster: PosterEntry; isCollection: boolean };
     const checks: Promise<MatchItem | null>[] = [];
 
-    // Check collection (skip if we just applied to it, or it's already by this creator)
-    if (justAppliedItemId !== item.id && latestTrackedItem?.creator_id !== appliedCreatorId) {
+    if (justAppliedKey !== item.id && latestTrackedItem?.creator_id !== appliedCreatorId) {
       const collTmdbId = tmdbRes.status === "confirmed" ? tmdbRes.tmdbId : item.tmdb_id;
       if (collTmdbId != null) {
         const url = tmdbRes.status === "confirmed"
@@ -536,9 +895,8 @@ export default function CollectionMediaDetail({
       }
     }
 
-    // Check each movie (skip just-applied, already-by-this-creator, and no-tmdb-id)
     for (const movie of movies) {
-      if (movie.id === justAppliedItemId) continue;
+      if (movie.id === justAppliedKey) continue;
       if (latestTrackedArtwork.get(movie.id)?.creator_id === appliedCreatorId) continue;
       if (!movie.tmdb_id) continue;
       const tmdbId = movie.tmdb_id;
@@ -561,7 +919,7 @@ export default function CollectionMediaDetail({
     }
   }
 
-  // ── Apply-all handler ─────────────────────────────────────────────────────
+  /** Applies all items in the current creator suggestion to Plex in sequence, then dismisses the suggestion. */
   async function handleApplyAll() {
     if (!suggestion) return;
     setApplyingAll(true);
@@ -581,7 +939,8 @@ export default function CollectionMediaDetail({
           autoUpdate: autoUpdateEnabled,
         });
         setAppliedPreviews((prev) => new Map(prev).set(mediaItem.id, poster.assets.preview.url));
-        const record = {
+        setOpAppliedKeys((prev) => new Set([...prev, mediaItem.id]));
+        const record: TrackedArtwork = {
           media_item_id: mediaItem.id,
           tmdb_id: mediaItem.tmdb_id,
           media_type: isCollection ? "collection" : "movie",
@@ -595,231 +954,686 @@ export default function CollectionMediaDetail({
           auto_update: autoUpdateEnabled,
           plex_label: null,
         };
-        if (isCollection) {
-          setTrackedItem(record);
-        } else {
-          onTrack(mediaItem.id, record);
-        }
-      } catch {
-        // silent — best-effort per item
-      }
+        if (isCollection) setTrackedItem(record);
+        else onTrack(mediaItem.id, record);
+      } catch { /* best-effort per item */ }
     }
     setSuggestion(null);
     setApplyingAll(false);
     setSnack({ open: true, message: t("suggestionApplied"), severity: "success" });
   }
 
-  // ── Reset handler ─────────────────────────────────────────────────────────
-  async function handleReset(mediaItemId: string, tmdbId: number | null, mediaType: string) {
-    try {
-      await untrackArtwork(conn.nodeUrl, conn.adminToken, mediaItemId);
-      setAppliedPreviews((prev) => { const next = new Map(prev); next.delete(mediaItemId); return next; });
-      setAppliedIds(new Set());
-      if (mediaType === "collection") {
-        setTrackedItem(null);
-      } else {
-        onUntrack(mediaItemId);
-      }
+  // ── Render ─────────────────────────────────────────────────────────────────
 
-      // Push the TMDB default poster to Plex directly (no OP tracking).
-      if (tmdbId) {
-        const endpoint = mediaType === "collection" ? `/api/tmdb/collection/${tmdbId}` : `/api/tmdb/movie/${tmdbId}`;
-        try {
-          const tmdbData = await fetch(endpoint).then((r) => r.ok ? r.json() : null) as { poster_path?: string } | null;
-          if (tmdbData?.poster_path) {
-            const tmdbImageUrl = `https://image.tmdb.org/t/p/original${tmdbData.poster_path}`;
-            await applyToPlexPoster(conn.nodeUrl, conn.adminToken, {
-              imageUrl: tmdbImageUrl,
-              plexRatingKey: mediaItemId,
-              mediaType,
-              // No posterId / assetHash — backend will not create a tracking record
-            });
-            setAppliedPreviews((prev) => new Map(prev).set(mediaItemId, `https://image.tmdb.org/t/p/w342${tmdbData.poster_path}`));
-          }
-        } catch {
-          // TMDB fetch or apply failed — Plex poster may not revert immediately; silent
-        }
-      }
-
-      setSnack({ open: true, message: t("resetSuccess"), severity: "success" });
-    } catch (e) {
-      setSnack({ open: true, message: e instanceof Error ? e.message : t("resetError"), severity: "error" });
-    }
-  }
-
-  // ── Derived display values ────────────────────────────────────────────────
-  const creatorName = trackedItem?.creator_display_name ?? null;
-  const themeId = trackedItem?.theme_id ?? null;
-  const themeName = themeId ? (subs.find((s) => s.themeId === themeId)?.themeName ?? themeId) : null;
-  const appliedAt = trackedItem?.applied_at
-    ? new Date(trackedItem.applied_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-    : null;
-
-  const currentThumbSrc = appliedPreviews.get(item.id) ?? thumbUrl(conn.nodeUrl, conn.adminToken, item.id);
-  const currentThumbPoster: PosterEntry = {
-    poster_id: item.id,
-    media: { type: "collection", title: item.title, year: item.year ?? undefined },
-    creator: { creator_id: "", display_name: creatorName ?? "", home_node: "" },
-    assets: {
-      preview: { url: currentThumbSrc, hash: "", mime: "image/jpeg" },
-      full: { url: currentThumbSrc, hash: "", mime: "image/jpeg", access: "public" },
-    },
-  };
-
-  const missingChip = { label: "MISSING", color: "error" as const };
-  const altChip = selectedKind === "collection"
-    ? { label: "COLLECTION", color: "primary" as const }
-    : { label: "MOVIE", color: "success" as const };
-  const showAltSpinner = altLoading || altLoadedForKey !== selectedKey;
-  const selectedTitle = selectedKind === "collection" ? item.title : (selectedMovie?.title ?? item.title);
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Box>
-      {/* Back */}
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
-        <IconButton size="small" onClick={onBack} aria-label={t("backToCollections")}>
-          <ArrowBackIcon fontSize="small" />
-        </IconButton>
-        <Typography variant="body2" color="text.secondary" sx={{ cursor: "pointer" }} onClick={onBack}>
-          {t("backToCollections")}
-        </Typography>
-      </Stack>
-
-      <Typography variant="h5" gutterBottom>{item.title}</Typography>
-
-      {/* Collection card + Movies grid */}
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={3} alignItems="flex-start" sx={{ mb: 4 }}>
-
-        {/* Collection card */}
-        <Box sx={{ flexShrink: 0 }}>
-          <Typography variant="overline" color="text.secondary"
-            sx={{ display: "block", mb: 1, fontSize: "0.65rem", letterSpacing: 1.5 }}>
-            {t("currentCollection")}
-          </Typography>
+      {/* Hero backdrop */}
+      {heroBackdropUrl && (
+        <Box sx={{ position: "fixed", top: 64, left: 0, right: 0, height: "75vh", zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
           <Box
-            sx={{
-              width: "var(--op-poster-width, 180px)",
-              cursor: "pointer",
-              opacity: selectedKind === "movie" ? 0.85 : 1,
-              transition: "opacity 0.15s",
-            }}
-            onClick={() => { setSelectedKind("collection"); setSelectedMovieId(null); }}
-          >
-            <PosterCard
-              poster={currentThumbPoster}
-              managed={!!trackedItem}
-              selected={selectedKind === "collection"}
-              imageFailed={failedThumb}
-              menuSlot={trackedItem ? <CardManageMenu onReset={() => handleReset(item.id, trackedItem.tmdb_id ?? item.tmdb_id, "collection")} /> : undefined}
-              imageWrapper={trackedItem ? (img) => <ArtworkMetadataTooltip meta={{ creator: creatorName, theme: themeName, appliedAt }}>{img}</ArtworkMetadataTooltip> : undefined}
-              onImageError={() => setFailedThumb(true)}
-            />
-          </Box>
+            component="img"
+            src={heroBackdropUrl}
+            alt=""
+            sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.2, filter: "grayscale(0.75)" }}
+            onError={() => setFailedShowBg(true)}
+          />
+          <Box sx={{ position: "absolute", inset: 0, background: (theme) => `linear-gradient(to bottom, transparent 40%, ${theme.palette.background.default} 95%)` }} />
         </Box>
+      )}
 
-        {/* Movie cards */}
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="overline" color="text.secondary"
-            sx={{ display: "block", mb: 1, fontSize: "0.65rem", letterSpacing: 1.5 }}>
-            {t("movies")}
+      {/* Page content above hero */}
+      <Box sx={{ position: "relative", zIndex: 1 }}>
+
+        {/* Back */}
+        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
+          <IconButton size="small" onClick={onBack} aria-label={t("backToCollections")}>
+            <ArrowBackIcon fontSize="small" />
+          </IconButton>
+          <Typography variant="body2" color="text.secondary" sx={{ cursor: "pointer" }} onClick={onBack}>
+            {t("backToCollections")}
           </Typography>
-          {childrenLoading ? (
-            <Stack alignItems="center" sx={{ py: 3 }}><CircularProgress size={24} /></Stack>
-          ) : movies.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">{t("noItems")}</Typography>
-          ) : (
-            <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
-              {movies.map((movie) => {
-                const failed = failedThumbs.has(movie.id);
-                const isSelected = selectedKind === "movie" && movie.id === selectedMovieId;
-                const tracked = trackedArtwork.get(movie.id);
-                const meta = makeArtworkMeta(tracked, subThemeNames);
-                return (
-                  <Box key={movie.id} sx={{
-                    opacity: selectedKind === "collection" || (selectedKind === "movie" && !isSelected) ? 0.75 : 1,
-                    transition: "opacity 0.15s",
-                    cursor: "pointer",
+        </Stack>
+
+        <Typography variant="h5" gutterBottom>{item.title}</Typography>
+
+        {tmdbRes.status === "resolving" && (
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+            <CircularProgress size="1.375rem" sx={{ flexShrink: 0 }} />
+            <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              Searching for collection in TMDB
+            </Typography>
+          </Stack>
+        )}
+
+        {tmdbRes.status === "confirmed" && (() => {
+          const isAuto = tmdbRes.source === "auto";
+          // captured for menu handlers (avoids stale closure if tmdbRes changes)
+          const { tmdbId: cTmdbId, tmdbName: cTmdbName } = tmdbRes;
+          return (
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <IconButton
+                size="small"
+                sx={{ p: 0, color: "success.main", flexShrink: 0, lineHeight: 0 }}
+                onClick={(e) => setAutoMatchMenuAnchor(e.currentTarget)}
+                aria-haspopup="true"
+              >
+                {isAuto
+                  ? <CheckCircleOutlineIcon sx={{ fontSize: "1.375rem", display: "block" }} />
+                  : <CheckCircleIcon sx={{ fontSize: "1.375rem", display: "block" }} />
+                }
+              </IconButton>
+              <Menu
+                anchorEl={autoMatchMenuAnchor}
+                open={!!autoMatchMenuAnchor}
+                onClose={() => setAutoMatchMenuAnchor(null)}
+              >
+                {isAuto && (
+                  <MenuItem onClick={() => {
+                    setAutoMatchMenuAnchor(null);
+                    saveTmdbMapEntry(item.id, { tmdbId: cTmdbId, tmdbName: cTmdbName, source: "confirmed" });
+                    setTmdbRes({ status: "confirmed", tmdbId: cTmdbId, tmdbName: cTmdbName, source: "confirmed" });
                   }}>
-                    <PosterCard
-                      poster={makePoster(movie, appliedPreviews.get(movie.id) ?? thumbUrl(conn.nodeUrl, conn.adminToken, movie.id), tracked?.creator_display_name ?? undefined)}
-                      chip={failed ? missingChip : undefined}
-                      imageFailed={failed}
-                      managed={!!tracked}
-                      selected={isSelected}
-                      menuSlot={failed ? <CardRetryMenu onRetry={() => onMarkRetry(movie.id)} /> : (tracked ? <CardManageMenu onReset={() => handleReset(movie.id, movie.tmdb_id, "movie")} onOpen={() => { setSelectedKind("movie"); setSelectedMovieId(movie.id); }} /> : undefined)}
-                      imageWrapper={tracked ? (img) => <ArtworkMetadataTooltip meta={meta}>{img}</ArtworkMetadataTooltip> : undefined}
-                      onImageError={() => onMarkFailed(movie.id)}
-                      onClick={() => { setSelectedKind("movie"); setSelectedMovieId(movie.id); }}
+                    Confirm match
+                  </MenuItem>
+                )}
+                <MenuItem onClick={() => {
+                  setAutoMatchMenuAnchor(null);
+                  setTmdbRes({ status: "pending-confirm", itemId: item.id, tmdbId: cTmdbId, tmdbName: cTmdbName, posterPath: null, movieThumbs: [], openInSearch: true });
+                }}>
+                  Incorrect match, try again
+                </MenuItem>
+              </Menu>
+              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                {`${isAuto ? "Auto-matched with" : "Matched with"} ${cTmdbName} · TMDB ${cTmdbId}`}
+              </Typography>
+              <Button
+                component="a"
+                href={`https://www.themoviedb.org/collection/${cTmdbId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                size="small"
+                variant="outlined"
+                color="info"
+                endIcon={<OpenInNewIcon sx={{ fontSize: "0.75rem !important" }} />}
+                sx={{ fontSize: "0.65rem", py: 0.25, px: 0.75, minWidth: 0, whiteSpace: "nowrap", flexShrink: 0 }}
+              >
+                View in TMDB
+              </Button>
+            </Stack>
+          );
+        })()}
+        {tmdbRes.status === "text-search" && (
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+            <IconButton size="small" sx={{ p: 0, color: "warning.main", flexShrink: 0, lineHeight: 0 }}
+              onClick={(e) => setNotMatchedMenuAnchor(e.currentTarget)} aria-haspopup="true">
+              <CancelOutlinedIcon sx={{ fontSize: "1.375rem", display: "block" }} />
+            </IconButton>
+            <Menu anchorEl={notMatchedMenuAnchor} open={!!notMatchedMenuAnchor} onClose={() => setNotMatchedMenuAnchor(null)}>
+              <MenuItem onClick={() => {
+                setNotMatchedMenuAnchor(null);
+                setTmdbRes({ status: "pending-confirm", itemId: item.id, tmdbId: 0, tmdbName: "", posterPath: null, movieThumbs: [], openInSearch: true });
+              }}>
+                Search TMDB
+              </MenuItem>
+            </Menu>
+            <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              Not matched with a collection in TMDB
+            </Typography>
+          </Stack>
+        )}
+
+        {/* ── Posters section ── */}
+        <Typography variant="h6" sx={{ mb: 2 }}>{t("posters")}</Typography>
+
+        <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP, mb: 5 }}>
+
+          {/* Collection poster card */}
+          <MediaCard
+            image={failedThumb ? (tmdbImages?.posterPath ? `https://image.tmdb.org/t/p/w342${tmdbImages.posterPath}` : null) : collPosterSrc}
+            alt={item.title}
+            aspectRatio="2 / 3"
+            selected={openCardKey === "coll-poster"}
+            resetting={isCollPosterResetting}
+            placeholder={failedThumb && !!tmdbImages?.posterPath}
+            imageFailed={failedThumb && !tmdbImages?.posterPath}
+            onImageError={() => setFailedThumb(true)}
+            onClick={() => setOpenCardKey("coll-poster")}
+            onClose={() => setOpenCardKey(null)}
+            tooltip="View alternate artwork and other options"
+            creatorName={trackedItem?.creator_display_name}
+            badge={<ArtworkSourceBadge source={trackedItem ? "openposter" : failedThumb ? null : "plex"} creatorName={trackedItem?.creator_display_name} mediaServer={serverName} />}
+            chip={<CardChip label="COLLECTION" color="error" />}
+            overlayChip={<CardChip label="POSTER" color="warning" />}
+            overlay={
+              <MediaCardOverlay title={item.title}>
+                <Box sx={{ gridColumn: "span 4", display: "flex", gap: 0.75 }}>
+                  <Box sx={{ flex: 1 }}>
+                    <ToolbarButton
+                      icon={isCollCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                      disabled={!trackedItem}
+                      active={isCollCreatorSubscribed}
+                      tooltip={isCollCreatorSubscribed ? "Subscribed" : "Subscribe to creator"}
+                      menuItems={trackedItem?.creator_id ? [
+                        { label: isCollCreatorSubscribed ? "Unsubscribe" : "Subscribe", onClick: () => { handleCollectionCreatorSubscribe(); setTimeout(() => setOpenCardKey(null), 500); } },
+                      ] : undefined}
                     />
                   </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <ToolbarButton
+                      icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                      disabled={!trackedItem}
+                      tooltip="Reset to default"
+                      onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetCollectionPoster(); }}
+                    />
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <ToolbarButton
+                      icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />}
+                      tooltip="Upload your own poster"
+                      onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }}
+                    />
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <ToolbarButton
+                      icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                      disabled={tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm" || tmdbRes.status === "text-search" || tmdbRes.status === "idle"}
+                      tooltip={
+                        tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm"
+                          ? "Resolving TMDB ID…"
+                          : (tmdbRes.status === "text-search" || tmdbRes.status === "idle")
+                          ? "No TMDB match — cannot search for artwork"
+                          : "Select a new poster from an OpenPoster creator"
+                      }
+                      onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("collection", null, false); }}
+                    />
+                  </Box>
+                </Box>
+              </MediaCardOverlay>
+            }
+          />
+
+          {/* Movie poster cards */}
+          {childrenLoading
+            ? Array.from({ length: item.child_count ?? 3 }).map((_, i) => (
+                <Skeleton key={i} variant="rectangular" sx={{ aspectRatio: "2/3", width: "var(--op-backdrop-width, 340px)", height: "auto", borderRadius: 1 }} />
+              ))
+            : movies.map((movie) => {
+                const failed = failedThumbs.has(movie.id);
+                const tracked = trackedArtwork.get(movie.id);
+                const cardKey = movie.id + "-poster";
+                const isCreatorSubscribed = tracked?.creator_id ? creatorSubs.has(tracked.creator_id) : false;
+                const isResetting = resettingIds.has(movie.id);
+                const handleCreatorSubscribe = () => {
+                  if (!tracked?.creator_id) return;
+                  if (isCreatorSubscribed) {
+                    unsubscribeCreator(tracked.creator_id);
+                    setCreatorSubs((prev) => { const s = new Set(prev); s.delete(tracked.creator_id!); return s; });
+                  } else {
+                    subscribeCreator({ creatorId: tracked.creator_id, creatorDisplayName: tracked.creator_display_name ?? tracked.creator_id, nodeBase: tracked.node_base ?? "" });
+                    setCreatorSubs((prev) => new Set([...prev, tracked.creator_id!]));
+                  }
+                };
+                return (
+                  <MediaCard
+                    key={movie.id}
+                    image={failed ? null : (appliedPreviews.get(movie.id) ?? thumbUrl(conn.nodeUrl, conn.adminToken, movie.id))}
+                    alt={movie.title}
+                    aspectRatio="2 / 3"
+                    selected={openCardKey === cardKey}
+                    resetting={isResetting}
+                    imageFailed={failed}
+                    onImageError={() => onMarkFailed(movie.id)}
+                    onClick={() => setOpenCardKey(cardKey)}
+                    onClose={() => setOpenCardKey(null)}
+                    tooltip={failed ? "Retry failed download" : "View alternate artwork and other options"}
+                    creatorName={tracked?.creator_display_name}
+                    badge={<ArtworkSourceBadge source={tracked ? "openposter" : failed ? null : "plex"} creatorName={tracked?.creator_display_name} mediaServer={serverName} />}
+                    chip={
+                      failed
+                        ? <CardChip label="MISSING" color="error" />
+                        : <CardChip label="MOVIE" color="success" />
+                    }
+                    overlayChip={<CardChip label="POSTER" color="warning" />}
+                    overlay={
+                      <MediaCardOverlay title={movie.title} subtitle={movie.year ? String(movie.year) : ""}>
+                        <ToolbarButton
+                          cols={4}
+                          size="sm"
+                          label="GO TO MOVIE"
+                          tooltip="View movie detail page"
+                          onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); onNavigateToMovie(movie); }}
+                        />
+                        {failed ? (
+                          <ToolbarButton
+                            icon={<RefreshIcon sx={{ fontSize: "1.1rem" }} />}
+                            tooltip="Retry download"
+                            onClick={(e) => { e.stopPropagation(); onMarkRetry(movie.id); setOpenCardKey(null); }}
+                          />
+                        ) : (
+                          <ToolbarButton
+                            icon={isCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                            disabled={!tracked}
+                            active={isCreatorSubscribed}
+                            tooltip={isCreatorSubscribed ? "Subscribed" : "Subscribe to creator"}
+                            menuItems={tracked?.creator_id ? [
+                              { label: isCreatorSubscribed ? "Unsubscribe" : "Subscribe", onClick: () => { handleCreatorSubscribe(); setTimeout(() => setOpenCardKey(null), 500); } },
+                            ] : undefined}
+                          />
+                        )}
+                        <ToolbarButton
+                          icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                          disabled={failed || !tracked}
+                          tooltip="Reset to default"
+                          onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetMoviePoster(movie); }}
+                        />
+                        <ToolbarButton
+                          icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />}
+                          tooltip="Upload your own poster"
+                          onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }}
+                        />
+                        <ToolbarButton
+                          icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                          disabled={!movie.tmdb_id}
+                          tooltip={movie.tmdb_id ? "Select a new poster from an OpenPoster creator" : "No TMDB ID — cannot search for artwork"}
+                          onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("movie", movie.id, false); }}
+                        />
+                      </MediaCardOverlay>
+                    }
+                  />
                 );
               })}
-            </Box>
-          )}
         </Box>
-      </Stack>
 
-      {/* Alt artwork */}
-      <Typography variant="h6" gutterBottom>
-        {t("alternativePostersFor", { title: selectedTitle })}
-      </Typography>
+        {/* ── Backdrops section ── */}
+        <Typography variant="h6" sx={{ mb: 2 }}>{t("backdrops")}</Typography>
 
-      {selectedKind === "collection" && tmdbRes.status === "pending-confirm" && (
-        <TmdbConfirmCard
-          tmdbName={tmdbRes.tmdbName}
-          posterPath={tmdbRes.posterPath}
-          movieThumbs={tmdbRes.movieThumbs}
-          onConfirm={() => setTmdbRes({ status: "confirmed", tmdbId: tmdbRes.tmdbId })}
-          onReject={() => setTmdbRes({ status: "text-search" })}
-        />
-      )}
+        <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP, mb: 4 }}>
 
-      {selectedKind === "collection" && (tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm") ? (
-        <Stack alignItems="center" sx={{ py: 4 }}><CircularProgress /></Stack>
-      ) : showAltSpinner ? (
-        <Stack alignItems="center" sx={{ py: 4 }}><CircularProgress /></Stack>
-      ) : selectedKind === "movie" && !selectedMovie?.tmdb_id ? (
-        <Alert severity="info" sx={{ maxWidth: 500 }}>
-          No TMDB ID — artwork lookup unavailable for this movie.
-        </Alert>
-      ) : visibleAltPosters.length === 0 ? (
-        <Typography color="text.secondary">{t("noAlternatives")}</Typography>
-      ) : (
-        <Stack spacing={3}>
-          {fromSubs.length > 0 && (
-            <Box>
-              <Typography variant="overline" color="text.secondary"
-                sx={{ display: "block", mb: 1, fontSize: "0.65rem", letterSpacing: 1.5 }}>
-                {t("fromSubscriptions")}
-              </Typography>
-              <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
-                {fromSubs.map((p) => (
-                  <Box key={p.poster_id}>
-                    <AltArtworkCard poster={p} subs={subs} applyingId={applyingId} appliedIds={appliedIds} chip={altChip} onApply={handleApply} />
-                  </Box>
-                ))}
-              </Box>
-            </Box>
+          {/* Collection backdrop card */}
+          <MediaCard
+            image={failedShowBg ? (tmdbImages?.backdropPath ? `https://image.tmdb.org/t/p/w780${tmdbImages.backdropPath}` : null) : collBackdropSrc}
+            alt={`${item.title} backdrop`}
+            aspectRatio="16 / 9"
+            selected={openCardKey === "coll-backdrop"}
+            resetting={isCollBackdropResetting}
+            placeholder={failedShowBg && !!tmdbImages?.backdropPath}
+            imageFailed={failedShowBg && !tmdbImages?.backdropPath}
+            onImageError={() => setFailedShowBg(true)}
+            onClick={() => setOpenCardKey("coll-backdrop")}
+            onClose={() => setOpenCardKey(null)}
+            tooltip="View alternate backdrops and other options"
+            creatorName={trackedBackdrop?.creator_display_name}
+            badge={<ArtworkSourceBadge source={(trackedBackdrop || opAppliedKeys.has(item.id + ":bg")) ? "openposter" : failedShowBg ? null : "plex"} creatorName={trackedBackdrop?.creator_display_name} mediaServer={serverName} />}
+            chip={<CardChip label="COLLECTION" color="error" />}
+            overlayChip={<CardChip label="BACKDROP" color="warning" />}
+            overlay={
+              <MediaCardOverlay title={item.title}>
+                {(() => {
+                  const isBgSubbed = trackedBackdrop?.creator_id ? creatorSubs.has(trackedBackdrop.creator_id) : false;
+                  return (
+                    <ToolbarButton
+                      icon={isBgSubbed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                      disabled={!trackedBackdrop}
+                      active={isBgSubbed}
+                      tooltip={isBgSubbed ? "Subscribed" : "Subscribe to creator"}
+                      menuItems={trackedBackdrop?.creator_id ? [{
+                        label: isBgSubbed ? "Unsubscribe" : "Subscribe",
+                        onClick: () => {
+                          const cid = trackedBackdrop.creator_id!;
+                          if (isBgSubbed) { unsubscribeCreator(cid); setCreatorSubs((p) => { const s = new Set(p); s.delete(cid); return s; }); }
+                          else { subscribeCreator({ creatorId: cid, creatorDisplayName: trackedBackdrop.creator_display_name ?? cid, nodeBase: trackedBackdrop.node_base ?? "" }); setCreatorSubs((p) => new Set([...p, cid])); }
+                          setOpenCardKey(null);
+                        },
+                      }] : undefined}
+                    />
+                  );
+                })()}
+                <ToolbarButton
+                  icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                  disabled={!trackedBackdrop}
+                  tooltip="Reset to default backdrop"
+                  onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetCollectionBackdrop(); }}
+                />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own backdrop" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                <ToolbarButton
+                  icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                  disabled={tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm" || tmdbRes.status === "text-search" || tmdbRes.status === "idle"}
+                  tooltip={
+                    tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm"
+                      ? "Resolving TMDB ID…"
+                      : (tmdbRes.status === "text-search" || tmdbRes.status === "idle")
+                      ? "No TMDB match — cannot search for artwork"
+                      : "Select a backdrop from an OpenPoster creator"
+                  }
+                  onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("collection", null, true); }}
+                />
+              </MediaCardOverlay>
+            }
+          />
+
+          {/* Movie backdrop cards */}
+          {childrenLoading
+            ? Array.from({ length: item.child_count ?? 3 }).map((_, i) => (
+                <Skeleton key={i} variant="rectangular" sx={{ aspectRatio: "16/9", width: "100%", height: "auto", borderRadius: 1 }} />
+              ))
+            : movies.map((movie) => {
+                const bgKey = movie.id + ":bg";
+                const backdropSrc = appliedPreviews.get(bgKey) ?? artUrl(conn.nodeUrl, conn.adminToken, movie.id);
+                const trackedBg = trackedArtwork.get(bgKey);
+                const isBgResetting = resettingIds.has(bgKey);
+                const backdropCardKey = movie.id + "-backdrop";
+                return (
+                  <MediaCard
+                    key={bgKey}
+                    image={backdropSrc}
+                    alt={`${movie.title} backdrop`}
+                    aspectRatio="16 / 9"
+                    bottomLabel={movie.title}
+                    selected={openCardKey === backdropCardKey}
+                    resetting={isBgResetting}
+                    onClick={() => setOpenCardKey(backdropCardKey)}
+                    onClose={() => setOpenCardKey(null)}
+                    onImageError={() => setFailedMovieBgs((prev) => new Set(prev).add(movie.id))}
+                    tooltip="View alternate backdrops and other options"
+                    creatorName={trackedBg?.creator_display_name}
+                    badge={<ArtworkSourceBadge source={(trackedBg || opAppliedKeys.has(bgKey)) ? "openposter" : failedMovieBgs.has(movie.id) ? null : "plex"} creatorName={trackedBg?.creator_display_name} mediaServer={serverName} />}
+                    chip={<CardChip label="MOVIE" color="success" />}
+                    overlayChip={<CardChip label="BACKDROP" color="warning" />}
+                    overlay={
+                      <MediaCardOverlay title={movie.title} subtitle={movie.year ? String(movie.year) : ""}>
+                        {(() => {
+                          const isBgSubbed = trackedBg?.creator_id ? creatorSubs.has(trackedBg.creator_id) : false;
+                          return (
+                            <ToolbarButton
+                              icon={isBgSubbed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                              disabled={!trackedBg}
+                              active={isBgSubbed}
+                              tooltip={isBgSubbed ? "Subscribed" : "Subscribe to creator"}
+                              menuItems={trackedBg?.creator_id ? [{
+                                label: isBgSubbed ? "Unsubscribe" : "Subscribe",
+                                onClick: () => {
+                                  const cid = trackedBg.creator_id!;
+                                  if (isBgSubbed) { unsubscribeCreator(cid); setCreatorSubs((p) => { const s = new Set(p); s.delete(cid); return s; }); }
+                                  else { subscribeCreator({ creatorId: cid, creatorDisplayName: trackedBg.creator_display_name ?? cid, nodeBase: trackedBg.node_base ?? "" }); setCreatorSubs((p) => new Set([...p, cid])); }
+                                  setOpenCardKey(null);
+                                },
+                              }] : undefined}
+                            />
+                          );
+                        })()}
+                        <ToolbarButton
+                          icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                          disabled={!trackedBg}
+                          tooltip="Reset to default backdrop"
+                          onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetMovieBackdrop(movie); }}
+                        />
+                        <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own backdrop" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                        <ToolbarButton
+                          icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                          disabled={!movie.tmdb_id}
+                          tooltip={movie.tmdb_id ? "Select a backdrop from an OpenPoster creator" : "No TMDB ID — cannot search for artwork"}
+                          onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("movie", movie.id, true); }}
+                        />
+                      </MediaCardOverlay>
+                    }
+                  />
+                );
+              })}
+        </Box>
+
+        {/* ── Square section ── */}
+        <Typography variant="h6" sx={{ mt: 2, mb: 2 }}>{t("squareArtwork")}</Typography>
+
+        <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP, mb: 4 }}>
+
+          {/* Collection square card */}
+          <MediaCard
+            image={failedSquare ? null : collSquareSrc}
+            alt={`${item.title} square`}
+            aspectRatio="1 / 1"
+            selected={openCardKey === "coll-square"}
+            resetting={isCollSquareResetting}
+            imageFailed={failedSquare}
+            onImageError={() => setFailedSquare(true)}
+            onClick={() => setOpenCardKey("coll-square")}
+            onClose={() => setOpenCardKey(null)}
+            tooltip="View alternate square artwork and other options"
+            imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
+            creatorName={trackedSquare?.creator_display_name}
+            badge={<ArtworkSourceBadge source={(trackedSquare || opAppliedKeys.has(item.id + ":square")) ? "openposter" : failedSquare ? null : "plex"} creatorName={trackedSquare?.creator_display_name} mediaServer={serverName} />}
+            chip={<CardChip label="COLLECTION" color="error" />}
+            overlayChip={<CardChip label="SQUARE" color="warning" />}
+            overlay={
+              <MediaCardOverlay title={item.title}>
+                <ToolbarButton
+                  icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                  disabled={!trackedSquare}
+                  tooltip="Reset to default square"
+                  onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetCollectionSquare(); }}
+                />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own square" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                <ToolbarButton
+                  icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                  disabled={tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm" || tmdbRes.status === "text-search" || tmdbRes.status === "idle"}
+                  tooltip={
+                    tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm"
+                      ? "Resolving TMDB ID…"
+                      : (tmdbRes.status === "text-search" || tmdbRes.status === "idle")
+                      ? "No TMDB match — cannot search for artwork"
+                      : "Select a square from an OpenPoster creator"
+                  }
+                  onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("collection", null, false, false, true); }}
+                />
+              </MediaCardOverlay>
+            }
+          />
+
+          {/* Movie square cards */}
+          {childrenLoading
+            ? Array.from({ length: item.child_count ?? 3 }).map((_, i) => (
+                <Skeleton key={i} variant="rectangular" sx={{ aspectRatio: "1/1", width: "100%", height: "auto", borderRadius: 1 }} />
+              ))
+            : movies.map((movie) => {
+                const squareKey = movie.id + ":square";
+                const movieSquareSrc = appliedPreviews.get(squareKey) ?? squareUrl(conn.nodeUrl, conn.adminToken, movie.id);
+                const trackedMovieSquare = trackedArtwork.get(squareKey);
+                const isMovieSquareResetting = resettingIds.has(squareKey);
+                const squareCardKey = movie.id + "-square";
+                return (
+                  <MediaCard
+                    key={squareKey}
+                    image={failedMovieSquares.has(movie.id) ? null : movieSquareSrc}
+                    alt={`${movie.title} square`}
+                    aspectRatio="1 / 1"
+                    bottomLabel={movie.title}
+                    selected={openCardKey === squareCardKey}
+                    resetting={isMovieSquareResetting}
+                    imageFailed={failedMovieSquares.has(movie.id)}
+                    onImageError={() => setFailedMovieSquares((prev) => new Set(prev).add(movie.id))}
+                    onClick={() => setOpenCardKey(squareCardKey)}
+                    onClose={() => setOpenCardKey(null)}
+                    tooltip="View alternate square artwork and other options"
+                    imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
+                    creatorName={trackedMovieSquare?.creator_display_name}
+                    badge={<ArtworkSourceBadge source={(trackedMovieSquare || opAppliedKeys.has(squareKey)) ? "openposter" : failedMovieSquares.has(movie.id) ? null : "plex"} creatorName={trackedMovieSquare?.creator_display_name} mediaServer={serverName} />}
+                    chip={<CardChip label="MOVIE" color="success" />}
+                    overlayChip={<CardChip label="SQUARE" color="warning" />}
+                    overlay={
+                      <MediaCardOverlay title={movie.title} subtitle={movie.year ? String(movie.year) : ""}>
+                        <ToolbarButton
+                          icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                          disabled={!trackedMovieSquare}
+                          tooltip="Reset to default square"
+                          onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetMovieSquare(movie); }}
+                        />
+                        <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own square" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                        <ToolbarButton
+                          icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                          disabled={!movie.tmdb_id}
+                          tooltip={movie.tmdb_id ? "Select a square from an OpenPoster creator" : "No TMDB ID — cannot search for artwork"}
+                          onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("movie", movie.id, false, false, true); }}
+                        />
+                      </MediaCardOverlay>
+                    }
+                  />
+                );
+              })}
+        </Box>
+
+        {/* ── Logo section ── */}
+        <Typography variant="h6" sx={{ mt: 2, mb: 2 }}>{t("logos")}</Typography>
+
+        <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP, mb: 4 }}>
+
+          {/* Collection logo card */}
+          <MediaCard
+            image={failedLogo ? null : collLogoSrc}
+            alt={`${item.title} logo`}
+            aspectRatio="16 / 9"
+            selected={openCardKey === "coll-logo"}
+            resetting={isCollLogoResetting}
+            imageFailed={failedLogo}
+            onImageError={() => setFailedLogo(true)}
+            onClick={() => setOpenCardKey("coll-logo")}
+            onClose={() => setOpenCardKey(null)}
+            tooltip="View alternate logos and other options"
+            imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
+            creatorName={trackedLogo?.creator_display_name}
+            badge={<ArtworkSourceBadge source={(trackedLogo || opAppliedKeys.has(item.id + ":logo")) ? "openposter" : failedLogo ? null : "plex"} creatorName={trackedLogo?.creator_display_name} mediaServer={serverName} />}
+            chip={<CardChip label="COLLECTION" color="error" />}
+            overlayChip={<CardChip label="LOGO" color="warning" />}
+            overlay={
+              <MediaCardOverlay title={item.title}>
+                <ToolbarButton
+                  icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                  disabled={!trackedLogo}
+                  tooltip="Reset to default logo"
+                  onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetCollectionLogo(); }}
+                />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own logo" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                <ToolbarButton
+                  icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                  disabled={tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm" || tmdbRes.status === "text-search" || tmdbRes.status === "idle"}
+                  tooltip={
+                    tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm"
+                      ? "Resolving TMDB ID…"
+                      : (tmdbRes.status === "text-search" || tmdbRes.status === "idle")
+                      ? "No TMDB match — cannot search for artwork"
+                      : "Select a logo from an OpenPoster creator"
+                  }
+                  onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("collection", null, false, true); }}
+                />
+              </MediaCardOverlay>
+            }
+          />
+
+          {/* Movie logo cards */}
+          {childrenLoading
+            ? Array.from({ length: item.child_count ?? 3 }).map((_, i) => (
+                <Skeleton key={i} variant="rectangular" sx={{ aspectRatio: "16/9", width: "100%", height: "auto", borderRadius: 1 }} />
+              ))
+            : movies.map((movie) => {
+                const logoKey = movie.id + ":logo";
+                const movieLogoSrc = appliedPreviews.get(logoKey) ?? logoUrl(conn.nodeUrl, conn.adminToken, movie.id);
+                const trackedMovieLogo = trackedArtwork.get(logoKey);
+                const isMovieLogoResetting = resettingIds.has(logoKey);
+                const logoCardKey = movie.id + "-logo";
+                return (
+                  <MediaCard
+                    key={logoKey}
+                    image={failedMovieLogos.has(movie.id) ? null : movieLogoSrc}
+                    alt={`${movie.title} logo`}
+                    aspectRatio="16 / 9"
+                    bottomLabel={movie.title}
+                    selected={openCardKey === logoCardKey}
+                    resetting={isMovieLogoResetting}
+                    imageFailed={failedMovieLogos.has(movie.id)}
+                    onImageError={() => setFailedMovieLogos((prev) => new Set(prev).add(movie.id))}
+                    onClick={() => setOpenCardKey(logoCardKey)}
+                    onClose={() => setOpenCardKey(null)}
+                    tooltip="View alternate logos and other options"
+                    imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
+                    creatorName={trackedMovieLogo?.creator_display_name}
+                    badge={<ArtworkSourceBadge source={(trackedMovieLogo || opAppliedKeys.has(logoKey)) ? "openposter" : failedMovieLogos.has(movie.id) ? null : "plex"} creatorName={trackedMovieLogo?.creator_display_name} mediaServer={serverName} />}
+                    chip={<CardChip label="MOVIE" color="success" />}
+                    overlayChip={<CardChip label="LOGO" color="warning" />}
+                    overlay={
+                      <MediaCardOverlay title={movie.title} subtitle={movie.year ? String(movie.year) : ""}>
+                        <ToolbarButton
+                          icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                          disabled={!trackedMovieLogo}
+                          tooltip="Reset to default logo"
+                          onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetMovieLogo(movie); }}
+                        />
+                        <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own logo" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                        <ToolbarButton
+                          icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                          disabled={!movie.tmdb_id}
+                          tooltip={movie.tmdb_id ? "Select a logo from an OpenPoster creator" : "No TMDB ID — cannot search for artwork"}
+                          onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("movie", movie.id, false, true); }}
+                        />
+                      </MediaCardOverlay>
+                    }
+                  />
+                );
+              })}
+        </Box>
+
+      </Box>
+
+      {/* ── Drawer ── */}
+      <AltArtworkDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={drawerTitle}
+        subtitle={drawerSubtitle}
+        posters={visibleDrawerPosters}
+        loading={drawerLoading}
+        hasTmdbId={drawerHasTmdbId}
+        isBackdrop={drawerIsBackdrop}
+        aspectRatio={drawerIsLogo ? "16 / 9" : drawerIsSquare ? "1 / 1" : undefined}
+        gridCols={drawerIsBackdrop || drawerIsLogo ? BACKDROP_GRID_COLS : POSTER_GRID_COLS}
+        chip={drawerChip}
+        subs={subs}
+        appliedIds={appliedIds}
+        applyingId={applyingId}
+        othersLabel={drawerOthersLabel}
+        onApply={handleApply}
+      />
+
+      {/* ── TMDB confirm dialog ── */}
+      <Dialog
+        open={tmdbRes.status === "pending-confirm" && tmdbRes.itemId === item.id}
+        onClose={() => setTmdbRes({ status: "text-search" })}
+        maxWidth="sm"
+        fullWidth
+        disableRestoreFocus
+      >
+        <DialogTitle>Confirm TMDB Collection</DialogTitle>
+        <DialogContent>
+          {tmdbRes.status === "pending-confirm" && (
+            <TmdbConfirmCard
+              tmdbId={tmdbRes.tmdbId}
+              tmdbName={tmdbRes.tmdbName}
+              posterPath={tmdbRes.posterPath}
+              movieThumbs={tmdbRes.movieThumbs}
+              collectionTitle={item.title}
+              initialMode={tmdbRes.openInSearch ? "search" : "confirm"}
+              onConfirm={(confirmedId, confirmedName) => {
+                tmdbResolvedForRef.current = item.id;
+                saveTmdbMapEntry(item.id, { tmdbId: confirmedId, tmdbName: confirmedName, source: "confirmed" });
+                setTmdbRes({ status: "confirmed", tmdbId: confirmedId, tmdbName: confirmedName, source: "confirmed" });
+              }}
+              onNeverAgain={() => {
+                saveTmdbMapEntry(item.id, { rejected: true });
+                setTmdbRes({ status: "text-search" });
+              }}
+            />
           )}
-          {others.length > 0 && (
-            <Box>
-              <Typography variant="overline" color="text.secondary"
-                sx={{ display: "block", mb: 1, fontSize: "0.65rem", letterSpacing: 1.5 }}>
-                {t("otherPosters")}
-              </Typography>
-              <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
-                {others.map((p) => (
-                  <Box key={p.poster_id}>
-                    <AltArtworkCard poster={p} subs={subs} applyingId={applyingId} appliedIds={appliedIds} chip={altChip} onApply={handleApply} />
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-          )}
-        </Stack>
-      )}
+        </DialogContent>
+      </Dialog>
 
+      {/* ── Snackbar ── */}
       <Snackbar
         open={snack.open}
         autoHideDuration={snack.severity === "success" ? 4000 : null}
@@ -831,7 +1645,7 @@ export default function CollectionMediaDetail({
         </Alert>
       </Snackbar>
 
-      {/* Creator suggestion dialog */}
+      {/* ── Creator suggestion dialog ── */}
       <Dialog open={!!suggestion} onClose={() => setSuggestion(null)} maxWidth="xs" fullWidth>
         <DialogTitle>{t("suggestionTitle")}</DialogTitle>
         <DialogContent>

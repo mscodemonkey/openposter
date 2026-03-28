@@ -12,7 +12,7 @@ from ..auth import (
     validate_email,
     verify_password,
 )
-from ..db import User, new_uuid
+from ..db import CreatorHandle, User, new_uuid
 
 router = APIRouter()
 
@@ -80,4 +80,5 @@ async def me(request: Request):
         u = (await s.execute(select(User).where(User.user_id == user_id))).scalar_one_or_none()
         if not u:
             raise HTTPException(status_code=404, detail={"error": {"code": "not_found", "message": "user not found"}})
-        return {"user": {"user_id": u.user_id, "email": u.email, "display_name": u.display_name}}
+        ch = (await s.execute(select(CreatorHandle).where(CreatorHandle.user_id == user_id))).scalar_one_or_none()
+        return {"user": {"user_id": u.user_id, "email": u.email, "display_name": u.display_name, "handle": ch.handle if ch else None}}

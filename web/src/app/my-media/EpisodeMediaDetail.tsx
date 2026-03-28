@@ -6,13 +6,11 @@ import { useTranslations } from "next-intl";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
-import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import LinearProgress from "@mui/material/LinearProgress";
 import Snackbar from "@mui/material/Snackbar";
@@ -20,84 +18,57 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import CloseIcon from "@mui/icons-material/Close";
-import DoneIcon from "@mui/icons-material/Done";
+import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
 import ReplayIcon from "@mui/icons-material/Replay";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import StarIcon from "@mui/icons-material/Star";
 import UploadIcon from "@mui/icons-material/Upload";
 
-import OPLogo from "@/components/OPLogo";
-import PosterCard from "@/components/PosterCard";
-import PosterSubscribeMenu from "@/components/PosterSubscribeMenu";
-import MediaCard, { MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
+import AltArtworkDrawer from "@/components/AltArtworkDrawer";
+import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
+import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
 import type { PosterEntry } from "@/lib/types";
-import type { ThemeSubscription } from "@/lib/subscriptions";
 import { getSubscriptions, getCreatorSubscriptions, subscribeCreator, unsubscribeCreator } from "@/lib/subscriptions";
 import { applyToPlexPoster } from "@/lib/plex";
 import { getArtworkSettings, untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
-import { thumbUrl, fetchMediaChildren } from "@/lib/media-server";
+import { thumbUrl, artUrl } from "@/lib/media-server";
 import type { MediaItem } from "@/lib/media-server";
-import { EPISODE_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
+import { BACKDROP_GRID_COLS, GRID_GAP, CHIP_HEIGHT } from "@/lib/grid-sizes";
 
-// ─── AltArtworkCard ───────────────────────────────────────────────────────────
-// Module-level to prevent remount.
+// ─── MissingEpisodeCard ───────────────────────────────────────────────────────
 
-interface AltArtworkCardProps {
-  poster: PosterEntry;
-  subs: ThemeSubscription[];
-  applyingId: string | null;
-  appliedIds: Set<string>;
-  chip: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" };
-  onApply: (p: PosterEntry) => void;
-}
+/** Placeholder card for an episode that exists in TMDB but is not present on the media server. */
+function MissingEpisodeCard({ episodeNumber, airDate }: { episodeNumber: number; airDate: string | null }) {
+  const label = `EPISODE ${String(episodeNumber).padStart(2, "0")}`;
 
-function AltArtworkCard({ poster, subs, applyingId, appliedIds, chip, onApply }: AltArtworkCardProps) {
-  const t = useTranslations("myMedia");
-  const themeId = poster.media.theme_id ?? null;
-  const matchingSub = themeId ? subs.find((s) => s.themeId === themeId) : null;
-  const themeLabel = matchingSub?.themeName ?? (themeId ? t("inATheme") : null);
-  const isApplying = applyingId === poster.poster_id;
-  const isApplied = appliedIds.has(poster.poster_id);
+  const { statusLabel, statusColor } = (() => {
+    if (!airDate) return { statusLabel: "Not yet broadcast", statusColor: "text.disabled" as const };
+    const aired = new Date(airDate);
+    const now = new Date();
+    const daysDiff = (now.getTime() - aired.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysDiff < 0) {
+      const formatted = aired.toLocaleDateString(undefined, {
+        day: "numeric", month: "short",
+        ...(aired.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+      });
+      return { statusLabel: `Coming ${formatted}`, statusColor: "text.disabled" as const };
+    }
+    if (daysDiff < 2) return { statusLabel: "Expected soon", statusColor: "warning.main" as const };
+    return { statusLabel: "Episode missing", statusColor: "error.main" as const };
+  })();
 
   return (
-    <Box>
-      <PosterCard
-        poster={poster}
-        chip={chip}
-        aspectRatio="16 / 9"
-        subscribeSlot={
-          poster.creator.creator_id ? (
-            <PosterSubscribeMenu
-              creatorId={poster.creator.creator_id}
-              creatorDisplayName={poster.creator.display_name}
-              themeId={themeId}
-              themeName={themeLabel}
-              coverUrl={poster.assets.preview.url}
-              nodeBase={poster.creator.home_node}
-            />
-          ) : undefined
-        }
-      />
-      <Box sx={{ px: 1, pt: 0.5, pb: 1 }}>
-        {themeLabel && (
-          <Typography variant="caption" color="text.secondary" display="block" noWrap textAlign="center">
-            {themeLabel}
-          </Typography>
-        )}
-        <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center" sx={{ mt: 0.75 }}>
-          <Button
-            size="small"
-            variant={isApplied ? "contained" : "outlined"}
-            onClick={() => onApply(poster)}
-            disabled={isApplying || isApplied}
-            sx={{ fontSize: "0.65rem", py: 0.25, minWidth: 0 }}
-          >
-            {isApplied ? "Applied ✓" : isApplying ? <CircularProgress size={12} /> : t("useThumbnail")}
-          </Button>
-        </Stack>
+    <Box sx={{ border: "1px dashed", borderColor: "divider", borderRadius: 1, overflow: "hidden" }}>
+      <Box sx={{ position: "relative", aspectRatio: "16 / 9", bgcolor: "action.hover", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0.75 }}>
+        <TvOutlinedIcon sx={{ fontSize: "2rem", color: "text.disabled", opacity: 0.5 }} />
+        <Typography variant="caption" sx={{ color: statusColor, fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          {statusLabel}
+        </Typography>
+        <Box sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
+          <CardChip label={label} color="success" />
+        </Box>
       </Box>
     </Box>
   );
@@ -110,9 +81,12 @@ interface EpisodeMediaDetailProps {
   episodesLoading: boolean;
   seasonTitle: string;
   seasonIndex: number | null;
-  showId: string;
   showTitle: string;
   showTmdbId: number | null;
+  /** Plex rating key for the season — used to fetch the season backdrop hero. */
+  seasonId: string;
+  /** Plex rating key for the show — fallback hero if no season backdrop is available. */
+  showId: string;
   conn: { nodeUrl: string; adminToken: string };
   failedThumbs: Set<string>;
   trackedArtwork: Map<string, TrackedArtwork>;
@@ -121,6 +95,7 @@ interface EpisodeMediaDetailProps {
   onMarkRetry: (id: string) => void;
   onUntrack: (id: string) => void;
   onTrack: (id: string, artwork: TrackedArtwork) => void;
+  serverName?: string;
 }
 
 export default function EpisodeMediaDetail({
@@ -128,9 +103,10 @@ export default function EpisodeMediaDetail({
   episodesLoading,
   seasonTitle,
   seasonIndex,
-  showId,
   showTitle,
   showTmdbId,
+  seasonId,
+  showId,
   conn,
   failedThumbs,
   trackedArtwork,
@@ -139,8 +115,34 @@ export default function EpisodeMediaDetail({
   onMarkRetry,
   onUntrack,
   onTrack,
+  serverName,
 }: EpisodeMediaDetailProps) {
   const t = useTranslations("myMedia");
+
+  // ── TMDB episode count ─────────────────────────────────────────────────────
+  const [tmdbEpisodes, setTmdbEpisodes] = useState<{ episode_number: number; air_date: string | null }[] | null>(null);
+  const [tmdbEpisodeCountLoading, setTmdbEpisodeCountLoading] = useState(false);
+  useEffect(() => {
+    if (!showTmdbId || seasonIndex == null) { setTmdbEpisodes(null); return; }
+    let cancelled = false;
+    setTmdbEpisodeCountLoading(true);
+    fetch(`/api/tmdb/tv/${showTmdbId}/season/${seasonIndex}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { episodes?: { episode_number: number; air_date?: string | null }[] } | null) => {
+        if (!cancelled) setTmdbEpisodes(d?.episodes?.map((e) => ({ episode_number: e.episode_number, air_date: e.air_date ?? null })) ?? null);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setTmdbEpisodeCountLoading(false); });
+    return () => { cancelled = true; };
+  }, [showTmdbId, seasonIndex]);
+  const tmdbEpisodeCount = tmdbEpisodes?.length ?? null;
+
+  // ── Hero backdrop ──────────────────────────────────────────────────────────
+  const [failedSeasonBg, setFailedSeasonBg] = useState(false);
+  const [failedShowBg, setFailedShowBg] = useState(false);
+  const heroUrl = failedSeasonBg
+    ? (failedShowBg ? null : artUrl(conn.nodeUrl, conn.adminToken, showId))
+    : artUrl(conn.nodeUrl, conn.adminToken, seasonId);
 
   // ── Selection ──────────────────────────────────────────────────────────────
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
@@ -187,8 +189,16 @@ export default function EpisodeMediaDetail({
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
   const subs = useMemo(() => getSubscriptions(), []);
-  const subscribedThemeIds = useMemo(() => new Set(subs.map((s) => s.themeId)), [subs]);
-  const subscribedCreatorIds = useMemo(() => new Set(subs.map((s) => s.creatorId)), [subs]);
+
+  // Merged list of real episodes and TMDB-only placeholders, sorted by episode number.
+  const mergedEpisodes = useMemo<Array<{ type: "real"; episode: MediaItem } | { type: "missing"; episodeNumber: number; airDate: string | null }>>(() => {
+    const realByNumber = new Map(episodes.map((e) => [e.index ?? -1, e]));
+    if (!tmdbEpisodes) return episodes.map((e) => ({ type: "real", episode: e }));
+    return tmdbEpisodes.map((te) => {
+      const real = realByNumber.get(te.episode_number);
+      return real ? { type: "real", episode: real } : { type: "missing", episodeNumber: te.episode_number, airDate: te.air_date };
+    });
+  }, [episodes, tmdbEpisodes]);
 
   useEffect(() => {
     getArtworkSettings(conn.nodeUrl, conn.adminToken)
@@ -221,10 +231,9 @@ export default function EpisodeMediaDetail({
   );
 
   // ── Drawer poster partitions ───────────────────────────────────────────────
-  const drawerFromSubs = drawerPosters.filter(
-    (p) => (p.media.theme_id && subscribedThemeIds.has(p.media.theme_id)) || subscribedCreatorIds.has(p.creator.creator_id),
-  );
-  const drawerOthers = drawerPosters.filter((p) => !drawerFromSubs.includes(p));
+  // Exclude the poster that is already applied to this episode.
+  const appliedPosterId = drawerEpisodeId ? (trackedArtwork.get(drawerEpisodeId)?.poster_id ?? null) : null;
+  const visibleDrawerPosters = drawerPosters.filter((p) => p.poster_id !== appliedPosterId);
 
   // ── Apply handler ──────────────────────────────────────────────────────────
   async function handleApply(poster: PosterEntry, episode: MediaItem) {
@@ -336,82 +345,46 @@ export default function EpisodeMediaDetail({
   }
 
   // ── Creator suggestion ─────────────────────────────────────────────────────
+  // After applying an episode card, check if the same creator has cards for
+  // other episodes in this season that aren't applied yet.
   async function checkCreatorMatches(
     appliedCreatorId: string,
     appliedCreatorName: string,
     justAppliedEpisodeId: string,
   ) {
-    if (!showTmdbId) return;
+    if (!showTmdbId || seasonIndex == null) return;
     type SearchResult = { results: PosterEntry[] };
-    let showResults: SearchResult, seasonResults: SearchResult, backdropResults: SearchResult, episodeResults: SearchResult;
+    let episodeResults: SearchResult;
     try {
-      [showResults, seasonResults, backdropResults, episodeResults] = await Promise.all([
-        fetch(`/api/search?tmdb_id=${showTmdbId}&type=show&limit=50`).then((r) => r.json()) as Promise<SearchResult>,
-        fetch(`/api/search?tmdb_id=${showTmdbId}&type=season&limit=200`).then((r) => r.json()) as Promise<SearchResult>,
-        fetch(`/api/search?tmdb_id=${showTmdbId}&type=backdrop&limit=100`).then((r) => r.json()) as Promise<SearchResult>,
-        fetch(`/api/search?tmdb_id=${showTmdbId}&type=episode&limit=500`).then((r) => r.json()) as Promise<SearchResult>,
-      ]);
+      episodeResults = await fetch(
+        `/api/search?tmdb_id=${showTmdbId}&type=episode&creator_id=${encodeURIComponent(appliedCreatorId)}&limit=200`
+      ).then((r) => r.json()) as SearchResult;
     } catch { return; }
 
-    // Fetch all seasons for this show so we can map season_number → plexRatingKey.
-    let allSeasons: MediaItem[] = [];
-    try {
-      allSeasons = await fetchMediaChildren(conn.nodeUrl, conn.adminToken, showId);
-    } catch { return; }
+    // Filter to this season only.
+    const seasonPosters = (episodeResults.results ?? []).filter(
+      (p) => p.media.season_number === seasonIndex,
+    );
 
     type Job = { label: string; imageUrl: string; plexRatingKey: string; mediaType: string; isBackdrop: boolean; poster: PosterEntry | null; previewUrl: string };
     const jobs: Job[] = [];
     const fmt = (n: number) => String(n).padStart(2, "0");
 
-    // Show poster — skip if this creator's artwork is already tracked for the show
-    const showPoster = (showResults.results ?? []).find((p) => p.creator.creator_id === appliedCreatorId);
-    const showAlreadyTracked = trackedArtwork.get(showId)?.creator_id === appliedCreatorId;
-    if (showPoster && !showAlreadyTracked) {
-      jobs.push({ label: "TV show poster", imageUrl: showPoster.assets.full.url, plexRatingKey: showId, mediaType: "show", isBackdrop: false, poster: showPoster, previewUrl: showPoster.assets.preview.url });
-    }
-
-    // Show backdrop
-    const showBackdrop = (backdropResults.results ?? []).find((p) => p.creator.creator_id === appliedCreatorId && !p.media.season_number);
-    if (showBackdrop) {
-      jobs.push({ label: "TV show backdrop", imageUrl: showBackdrop.assets.full.url, plexRatingKey: showId, mediaType: "show", isBackdrop: true, poster: showBackdrop, previewUrl: showBackdrop.assets.preview.url });
-    }
-
-    // Season posters and backdrops
-    for (const season of allSeasons) {
-      if (season.index == null) continue;
-      const label = `Season ${fmt(season.index)}`;
-
-      const seasonPoster = (seasonResults.results ?? []).find((p) => p.creator.creator_id === appliedCreatorId && p.media.season_number === season.index);
-      const seasonAlreadyTracked = trackedArtwork.get(season.id)?.creator_id === appliedCreatorId;
-      if (seasonPoster && !seasonAlreadyTracked) {
-        jobs.push({ label: `${label} poster`, imageUrl: seasonPoster.assets.full.url, plexRatingKey: season.id, mediaType: "season", isBackdrop: false, poster: seasonPoster, previewUrl: seasonPoster.assets.preview.url });
-      }
-
-      const seasonBackdrop = (backdropResults.results ?? []).find((p) => p.creator.creator_id === appliedCreatorId && p.media.season_number === season.index);
-      if (seasonBackdrop) {
-        jobs.push({ label: `${label} backdrop`, imageUrl: seasonBackdrop.assets.full.url, plexRatingKey: season.id, mediaType: "season", isBackdrop: true, poster: seasonBackdrop, previewUrl: seasonBackdrop.assets.preview.url });
-      }
-    }
-
-    // Episode thumbnails — skip the one just applied
-    const creatorEpisodePosters = (episodeResults.results ?? []).filter((p) => p.creator.creator_id === appliedCreatorId);
-    if (creatorEpisodePosters.length > 0) {
-      const coveredSeasonNums = new Set(creatorEpisodePosters.map((p) => p.media.season_number).filter((n): n is number => n != null));
-      for (const seasonNum of coveredSeasonNums) {
-        const season = allSeasons.find((s) => s.index === seasonNum);
-        if (!season) continue;
-        try {
-          const eps = await fetchMediaChildren(conn.nodeUrl, conn.adminToken, season.id);
-          for (const ep of eps) {
-            if (ep.index == null || ep.id === justAppliedEpisodeId) continue;
-            const alreadyTracked = trackedArtwork.get(ep.id)?.creator_id === appliedCreatorId;
-            if (alreadyTracked) continue;
-            const epPoster = creatorEpisodePosters.find((p) => p.media.season_number === seasonNum && p.media.episode_number === ep.index);
-            if (epPoster) {
-              jobs.push({ label: `Season ${fmt(seasonNum)}, Episode ${fmt(ep.index)}`, imageUrl: epPoster.assets.full.url, plexRatingKey: ep.id, mediaType: "episode", isBackdrop: false, poster: epPoster, previewUrl: epPoster.assets.preview.url });
-            }
-          }
-        } catch { /* skip this season's episodes if fetch fails */ }
+    // Match against the episodes we already have for this season.
+    for (const ep of episodes) {
+      if (ep.index == null || ep.id === justAppliedEpisodeId) continue;
+      if (trackedArtwork.get(ep.id)?.creator_id === appliedCreatorId) continue;
+      const epPoster = seasonPosters.find((p) => p.media.episode_number === ep.index);
+      if (epPoster) {
+        jobs.push({
+          label: `Episode ${fmt(ep.index)}`,
+          imageUrl: epPoster.assets.full.url,
+          plexRatingKey: ep.id,
+          mediaType: "episode",
+          isBackdrop: false,
+          poster: epPoster,
+          previewUrl: epPoster.assets.preview.url,
+        });
       }
     }
 
@@ -467,12 +440,29 @@ export default function EpisodeMediaDetail({
     setApplyProgress(null);
     setSuggestion(null);
     setApplyingAll(false);
-    setSnack({ open: true, message: t("suggestionApplied"), severity: "success" });
+    setSnack({ open: true, message: t("episodeSuggestionApplied"), severity: "success" });
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <Box>
+      {/* Hero backdrop */}
+      {heroUrl && (
+        <Box sx={{ position: "fixed", top: 64, left: 0, right: 0, height: "75vh", zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
+          <Box
+            component="img"
+            src={heroUrl}
+            alt=""
+            sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.2, filter: "grayscale(0.75)" }}
+            onError={failedSeasonBg ? () => setFailedShowBg(true) : () => setFailedSeasonBg(true)}
+          />
+          <Box sx={{ position: "absolute", inset: 0, background: (theme) => `linear-gradient(to bottom, transparent 40%, ${theme.palette.background.default} 95%)` }} />
+        </Box>
+      )}
+
+      {/* Page content above hero */}
+      <Box sx={{ position: "relative", zIndex: 1 }}>
+
       {/* Back */}
       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
         <IconButton size="small" onClick={onBack} aria-label={t("backToShow", { title: showTitle })}>
@@ -483,25 +473,51 @@ export default function EpisodeMediaDetail({
         </Typography>
       </Stack>
 
-      <Typography variant="h5" gutterBottom>{seasonTitle}</Typography>
+      <Typography variant="h5" gutterBottom>
+        {seasonIndex != null
+          ? (seasonTitle && !/^season\s+0*\d+$/i.test(seasonTitle.trim())
+            ? `Season ${String(seasonIndex).padStart(2, "0")} · ${seasonTitle}`
+            : `Season ${String(seasonIndex).padStart(2, "0")}`)
+          : seasonTitle}
+      </Typography>
+      {!episodesLoading && episodes.length > 0 && (
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+          {tmdbEpisodeCountLoading
+            ? <><CircularProgress size={12} /><Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>Checking episode count</Typography></>
+            : tmdbEpisodeCount != null
+              ? <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  {episodes.length >= tmdbEpisodeCount
+                    ? `All available episodes are on ${serverName ?? "your media server"}`
+                    : `${episodes.length} of ${tmdbEpisodeCount} episodes are available on ${serverName ?? "your media server"}`}
+                </Typography>
+              : null}
+        </Stack>
+      )}
 
       {episodesLoading ? (
         <Stack alignItems="center" sx={{ py: 4 }}><CircularProgress /></Stack>
       ) : episodes.length === 0 ? (
         <Typography color="text.secondary">{t("noItems")}</Typography>
       ) : (
-        <Box ref={gridRef} sx={{ display: "grid", gridTemplateColumns: EPISODE_GRID_COLS, gap: GRID_GAP }}>
-          {episodes.map((episode) => {
+        <Box ref={gridRef} sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
+          {mergedEpisodes.map((entry) => {
+            if (entry.type === "missing") {
+              return <MissingEpisodeCard key={`missing-${entry.episodeNumber}`} episodeNumber={entry.episodeNumber} airDate={entry.airDate} />;
+            }
+            const episode = entry.episode;
             const failed = failedThumbs.has(episode.id);
             const tracked = trackedArtwork.get(episode.id) ?? null;
             const isResetting = resettingIds.has(episode.id);
             const isSelected = selectedEpisodeId === episode.id;
             const epLabel = episode.index != null
-              ? `EP ${String(episode.index).padStart(2, "0")}`
+              ? `EPISODE ${String(episode.index).padStart(2, "0")}`
               : (episode.title ?? "Episode");
-            const epSubtitle = episode.index != null
-              ? [seasonTitle, `EP ${String(episode.index).padStart(2, "0")}`].join(" · ")
+            const seasonLabel = seasonIndex != null
+              ? `SEASON ${String(seasonIndex).padStart(2, "0")}`
               : seasonTitle;
+            const epSubtitle = episode.index != null
+              ? [seasonLabel, `EPISODE ${String(episode.index).padStart(2, "0")}`].join(" · ")
+              : seasonLabel;
 
             const isCreatorSubscribed = tracked?.creator_id ? creatorSubs.has(tracked.creator_id) : false;
 
@@ -531,21 +547,15 @@ export default function EpisodeMediaDetail({
                   alt={episode.title ?? epLabel}
                   aspectRatio="16 / 9"
                   imageFailed={failed}
+                  imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
                   onImageError={() => onMarkFailed(episode.id)}
                   resetting={isResetting}
                   selected={isSelected}
                   onClick={() => setSelectedEpisodeId(episode.id)}
                   onClose={() => setSelectedEpisodeId(null)}
-                  badge={tracked ? (
-                    <Box sx={{ width: 20, height: 20, borderRadius: "50%", bgcolor: "white", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.08)" }}>
-                      <DoneIcon sx={{ fontSize: 13, color: "black" }} />
-                    </Box>
-                  ) : undefined}
-                  chip={
-                    failed
-                      ? <Chip label="MISSING" size="small" color="error" sx={{ fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none", textTransform: "uppercase" }} />
-                      : <Chip label={epLabel} size="small" color="warning" sx={{ fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none", textTransform: "uppercase" }} />
-                  }
+                  creatorName={tracked?.creator_display_name}
+                  badge={<ArtworkSourceBadge source={tracked ? "openposter" : failed ? null : "plex"} creatorName={tracked?.creator_display_name} mediaServer={serverName} />}
+                  chip={<CardChip label={epLabel} color="success" />}
                   overlay={
                     <MediaCardOverlay title={episode.title ?? epLabel} subtitle={epSubtitle}>
                       <Box sx={{ gridColumn: "span 4", display: "flex", gap: 0.75 }}>
@@ -571,14 +581,14 @@ export default function EpisodeMediaDetail({
                         <Box sx={{ flex: 1 }}>
                           <ToolbarButton
                             icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />}
-                            tooltip="Upload your own thumbnail"
+                            tooltip="Upload your own episode card"
                             onClick={(e) => { e.stopPropagation(); setSelectedEpisodeId(null); }}
                           />
                         </Box>
                         <Box sx={{ flex: 1 }}>
                           <ToolbarButton
                             icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                            tooltip="Select thumbnail from an OpenPoster creator"
+                            tooltip="Select an episode card from an OpenPoster creator"
                             onClick={(e) => { e.stopPropagation(); setSelectedEpisodeId(null); openDrawer(episode); }}
                           />
                         </Box>
@@ -593,87 +603,31 @@ export default function EpisodeMediaDetail({
       )}
 
       {/* Alt artwork drawer */}
-      <Drawer
-        anchor="right"
+      <AltArtworkDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        disableRestoreFocus
-        PaperProps={{ sx: { width: { xs: "100vw", sm: 520 }, display: "flex", flexDirection: "column" } }}
-      >
-        <Box sx={{ px: 2.5, py: 2, borderBottom: 1, borderColor: "divider", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
-            <OPLogo size={28} />
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="h6" noWrap sx={{ lineHeight: 1.2 }}>{showTitle}</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                {drawerEpisode?.index != null
-                  ? `${seasonTitle} · EP ${String(drawerEpisode.index).padStart(2, "0")}`
-                  : seasonTitle}
-              </Typography>
-            </Box>
-          </Box>
-          <IconButton size="small" onClick={() => setDrawerOpen(false)} sx={{ ml: 1, flexShrink: 0 }}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </Box>
-        <Box sx={{ flex: 1, overflowY: "auto", p: 2.5 }}>
-          {drawerLoading ? (
-            <Stack alignItems="center" sx={{ py: 4 }}><CircularProgress /></Stack>
-          ) : drawerPosters.length === 0 ? (
-            <Typography color="text.secondary">{t("noAlternatives")}</Typography>
-          ) : (
-            <Stack spacing={3}>
-              {drawerFromSubs.length > 0 && (
-                <Box>
-                  <Typography variant="overline" color="text.secondary"
-                    sx={{ display: "block", mb: 1, fontSize: "0.65rem", letterSpacing: 1.5 }}>
-                    {t("fromSubscriptions")}
-                  </Typography>
-                  <Box sx={{ display: "grid", gridTemplateColumns: EPISODE_GRID_COLS, gap: GRID_GAP }}>
-                    {drawerFromSubs.map((p) => (
-                      <Box key={p.poster_id}>
-                        <AltArtworkCard
-                          poster={p}
-                          subs={subs}
-                          applyingId={applyingId}
-                          appliedIds={appliedIds}
-                          chip={{ label: "EPISODE", color: "warning" }}
-                          onApply={(poster) => drawerEpisode ? handleApply(poster, drawerEpisode) : undefined}
-                        />
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-              )}
-              {drawerOthers.length > 0 && (
-                <Box>
-                  <Typography variant="overline" color="text.secondary"
-                    sx={{ display: "block", mb: 1, fontSize: "0.65rem", letterSpacing: 1.5 }}>
-                    Other thumbnails for this episode
-                  </Typography>
-                  <Box sx={{ display: "grid", gridTemplateColumns: EPISODE_GRID_COLS, gap: GRID_GAP }}>
-                    {drawerOthers.map((p) => (
-                      <Box key={p.poster_id}>
-                        <AltArtworkCard
-                          poster={p}
-                          subs={subs}
-                          applyingId={applyingId}
-                          appliedIds={appliedIds}
-                          chip={{ label: "EPISODE", color: "warning" }}
-                          onApply={(poster) => drawerEpisode ? handleApply(poster, drawerEpisode) : undefined}
-                        />
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-              )}
-            </Stack>
-          )}
-        </Box>
-      </Drawer>
+        title={showTitle}
+        subtitle={
+          drawerEpisode?.index != null
+            ? `${seasonIndex != null ? `SEASON ${String(seasonIndex).padStart(2, "0")}` : seasonTitle} · EPISODE ${String(drawerEpisode.index).padStart(2, "0")}`
+            : (seasonIndex != null ? `SEASON ${String(seasonIndex).padStart(2, "0")}` : seasonTitle)
+        }
+        posters={visibleDrawerPosters}
+        loading={drawerLoading}
+        hasTmdbId={!!showTmdbId}
+        isBackdrop={false}
+        gridCols={BACKDROP_GRID_COLS}
+        chip={{ label: "EPISODE", color: "warning" }}
+        subs={subs}
+        appliedIds={appliedIds}
+        applyingId={applyingId}
+        othersLabel="Other episode cards for this episode"
+        buttonLabel={t("useThumbnail")}
+        onApply={(poster) => drawerEpisode ? handleApply(poster, drawerEpisode) : undefined}
+      />
 
       <Dialog open={!!suggestion} onClose={applyingAll ? undefined : () => setSuggestion(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>{t("suggestionTitle")}</DialogTitle>
+        <DialogTitle>{t("episodeSuggestionTitle")}</DialogTitle>
         <DialogContent>
           {applyingAll && applyProgress ? (
             <Box>
@@ -691,10 +645,9 @@ export default function EpisodeMediaDetail({
             </Box>
           ) : (
             <Typography>
-              <strong>{suggestion?.creatorName}</strong> has{" "}
-              <strong>{suggestion?.jobs.length}</strong>{" "}
-              {suggestion?.jobs.length === 1 ? "item" : "items"} of matching artwork for this show
-              (posters, backdrops, and episodes). Would you like to apply them all?
+              <strong>{suggestion?.creatorName}</strong> has created cards for{" "}
+              <strong>{suggestion?.jobs.length} more {suggestion?.jobs.length === 1 ? "episode" : "episodes"}</strong>{" "}
+              in this season. Would you like to apply them all?
             </Typography>
           )}
         </DialogContent>
@@ -716,6 +669,7 @@ export default function EpisodeMediaDetail({
           {snack.message}
         </Alert>
       </Snackbar>
+      </Box> {/* end relative z-index content wrapper */}
     </Box>
   );
 }

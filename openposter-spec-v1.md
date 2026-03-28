@@ -168,7 +168,7 @@ Query params (v1 core):
 - `cursor` (optional, opaque pagination cursor from `next_cursor`)
 
 Query params (v1 recommended filters):
-- `kind` = `poster|background|banner|logo|clearlogo|thumb` (optional)
+- `kind` = `poster|background|logo|square|banner|thumb` (optional) — filters by artwork kind (see §4.3.3)
 - `orientation` = `portrait|landscape|square` (optional)
 - `text` = `text|textless|unknown` (optional)
 - `season_number` (optional; meaningful when `type=season|episode`)
@@ -280,7 +280,24 @@ Enrichment note (non-normative):
 - `title` (string)
 - `year` (number)
 
-#### 4.3.3 Creator object
+#### 4.3.3 Artwork kind
+
+The top-level `kind` field identifies **what type of artwork** this poster record represents. It is separate from `media.type`, which identifies **what entity** the artwork is for.
+
+| `kind` | Description | Typical dimensions | Supported entities |
+|---|---|---|---|
+| `poster` | Standard portrait artwork (default) | 2:3 | all |
+| `background` | Wide backdrop / fanart | 16:9 | movie, show, season, collection |
+| `logo` | ClearLogo / title treatment (transparent PNG preferred) | ~3:1 wide | movie, show, collection |
+| `square` | Square poster (1:1 crop, used in music-style shelves and mobile views) | 1:1 | movie, show, collection |
+| `banner` | Wide banner (traditionally 758×140) | ~5:1 | movie, show, collection |
+| `thumb` | Episode thumbnail | 16:9 | episode |
+
+`kind` defaults to `"poster"` when absent. Clients MUST treat a missing or `null` `kind` as `"poster"`.
+
+`media.type` and `kind` are orthogonal: a `kind="background"` poster for a TV show has `media.type="show"`. Do not conflate them.
+
+#### 4.3.4 Creator object
 
 `creator` MUST include:
 - `creator_id` (string; stable)
@@ -304,13 +321,7 @@ Assets MAY include:
 
 Assets SHOULD include:
 - `width` / `height` (integers)
-- `kind`:
-  - `poster` (default)
-  - `background` (aka fanart)
-  - `banner` (wide, typically for TV)
-  - `logo`
-  - `clearlogo`
-  - `thumb`
+- `kind`: canonical artwork kind (see §4.3.3) — `poster|background|logo|square|banner|thumb`
 - `orientation`: `portrait|landscape|square` (recommended; derived from width/height if present)
 - `language` (BCP-47 tag like `en`, `en-AU`, `ja`) or `null` for language-neutral
 - `text`: `text|textless|unknown` (whether the artwork contains titles/logos)

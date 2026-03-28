@@ -9,12 +9,23 @@ export type MediaItem = {
   tmdb_id: number | null;
   leaf_count: number | null;
   child_count: number | null; // season count for shows; null for movies/collections
+  collection_ids?: string[]; // ratingKeys of collections this movie belongs to (movies only)
 };
 
 export type MediaLibrary = {
   movies: MediaItem[];
   shows: MediaItem[];
   collections: MediaItem[];
+  synced_at: string | null;
+  is_syncing: boolean;
+};
+
+export type SyncStatus = {
+  is_syncing: boolean;
+  last_synced_at: string | null;
+  current_phase: string | null;
+  error: string | null;
+  item_count: number;
 };
 
 function _conn() {
@@ -35,6 +46,14 @@ export function artUrl(nodeUrl: string, adminToken: string, itemId: string): str
   return `${nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/art/${encodeURIComponent(itemId)}?t=${encodeURIComponent(adminToken)}`;
 }
 
+export function logoUrl(nodeUrl: string, adminToken: string, itemId: string): string {
+  return `${nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/logo/${encodeURIComponent(itemId)}?t=${encodeURIComponent(adminToken)}`;
+}
+
+export function squareUrl(nodeUrl: string, adminToken: string, itemId: string): string {
+  return `${nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/square/${encodeURIComponent(itemId)}?t=${encodeURIComponent(adminToken)}`;
+}
+
 export async function fetchMediaLibrary(): Promise<MediaLibrary> {
   const { nodeUrl, adminToken } = _conn();
   const r = await fetch(`${nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/library`, {
@@ -51,4 +70,21 @@ export async function fetchMediaChildren(nodeUrl: string, adminToken: string, it
   if (!r.ok) throw new Error(`Failed to fetch children: ${r.status}`);
   const json = await r.json() as { items: MediaItem[] };
   return json.items;
+}
+
+export async function fetchSyncStatus(nodeUrl: string, adminToken: string): Promise<SyncStatus> {
+  const r = await fetch(`${nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/sync/status`, {
+    headers: _headers(adminToken),
+  });
+  if (!r.ok) throw new Error(`Failed to fetch sync status: ${r.status}`);
+  return r.json() as Promise<SyncStatus>;
+}
+
+export async function triggerSync(nodeUrl: string, adminToken: string): Promise<{ started: boolean; reason?: string }> {
+  const r = await fetch(`${nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/sync/trigger`, {
+    method: "POST",
+    headers: _headers(adminToken),
+  });
+  if (!r.ok) throw new Error(`Failed to trigger sync: ${r.status}`);
+  return r.json() as Promise<{ started: boolean; reason?: string }>;
 }

@@ -8,6 +8,7 @@ All Plex API calls are proxied through the node admin API.
 
 import json
 import re
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,15 +40,16 @@ _PLEX_HEADERS = {
 
 
 # ---------------------------------------------------------------------------
-# Settings helpers
+# Multi-server storage helpers
 # ---------------------------------------------------------------------------
 
-def _settings_path(data_dir: Path) -> Path:
-    return data_dir / "plex_settings.json"
+def _servers_path(data_dir: Path) -> Path:
+    return data_dir / "media_servers.json"
 
 
-def _load_settings(data_dir: Path) -> dict | None:
-    p = _settings_path(data_dir)
+def _load_legacy_plex_settings(data_dir: Path) -> dict | None:
+    """Read the old single-server plex_settings.json (migration only)."""
+    p = data_dir / "plex_settings.json"
     if not p.exists():
         return None
     try:
@@ -56,14 +58,82 @@ def _load_settings(data_dir: Path) -> dict | None:
         return None
 
 
+def _load_servers(data_dir: Path) -> list[dict]:
+    """Return list of configured media server dicts (each includes token)."""
+    p = _servers_path(data_dir)
+    if not p.exists():
+        # Auto-migrate legacy plex_settings.json on first access
+        legacy = _load_legacy_plex_settings(data_dir)
+        if legacy:
+            server: dict = {
+                "id": "default",
+                "type": "plex",
+                "name": "Plex",
+                **legacy,
+            }
+            _save_servers(data_dir, [server])
+            return [server]
+        return []
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return []
+
+
+def _save_servers(data_dir: Path, servers: list[dict]) -> None:
+    _servers_path(data_dir).write_text(json.dumps(servers, indent=2) + "\n")
+
+
+def _get_server(data_dir: Path, server_id: str) -> dict | None:
+    return next((s for s in _load_servers(data_dir) if s["id"] == server_id), None)
+
+
+# ---------------------------------------------------------------------------
+# Legacy single-server helpers (kept for backwards compatibility)
+# Used by plex_apply and other routes that haven't migrated to multi-server yet.
+# ---------------------------------------------------------------------------
+
+def _load_settings(data_dir: Path) -> dict | None:
+    """Return the first configured Plex server as a settings dict, or None."""
+    servers = _load_servers(data_dir)
+    plex_servers = [s for s in servers if s.get("type") == "plex"]
+    if not plex_servers:
+        return None
+    s = plex_servers[0]
+    return {
+        "base_url": s.get("base_url", ""),
+        "token": s.get("token", ""),
+        "tv_libraries": s.get("tv_libraries", []),
+        "movie_libraries": s.get("movie_libraries", []),
+    }
+
+
 def _save_settings(data_dir: Path, settings: dict) -> None:
-    _settings_path(data_dir).write_text(json.dumps(settings, indent=2) + "\n")
+    """Upsert a single Plex server (legacy compat — upserts the 'default' server)."""
+    servers = _load_servers(data_dir)
+    existing = next((s for s in servers if s["id"] == "default"), None)
+    if existing:
+        existing.update({
+            "base_url": settings.get("base_url", ""),
+            "token": settings.get("token", ""),
+            "tv_libraries": settings.get("tv_libraries", []),
+            "movie_libraries": settings.get("movie_libraries", []),
+        })
+    else:
+        servers.insert(0, {
+            "id": "default",
+            "type": "plex",
+            "name": "Plex",
+            **settings,
+        })
+    _save_servers(data_dir, servers)
 
 
 def _delete_settings(data_dir: Path) -> None:
-    p = _settings_path(data_dir)
-    if p.exists():
-        p.unlink()
+    """Remove the legacy 'default' Plex server."""
+    servers = _load_servers(data_dir)
+    servers = [s for s in servers if s["id"] != "default"]
+    _save_servers(data_dir, servers)
 
 
 # ---------------------------------------------------------------------------
@@ -143,9 +213,20 @@ async def _apply_image(
     content_type: str,
     is_episode: bool = False,
     is_backdrop: bool = False,
+    is_logo: bool = False,
+    is_square: bool = False,
 ) -> None:
-    """Upload image bytes to Plex as the poster/thumb/art."""
-    endpoint = "arts" if is_backdrop else ("thumbs" if is_episode else "posters")
+    """Upload image bytes to Plex as the poster/thumb/art/logo/square."""
+    if is_logo:
+        endpoint = "logos"
+    elif is_square:
+        endpoint = "squares"
+    elif is_backdrop:
+        endpoint = "arts"
+    elif is_episode:
+        endpoint = "thumbs"
+    else:
+        endpoint = "posters"
     r = await client.post(
         f"{base_url}/library/metadata/{rating_key}/{endpoint}",
         content=image_data,
@@ -285,6 +366,137 @@ async def plex_disconnect(request: Request):
 
 
 # ---------------------------------------------------------------------------
+# Multi-server CRUD API
+# ---------------------------------------------------------------------------
+
+class MediaServerDetectRequest(BaseModel):
+    url: str
+    token: str
+
+
+@router.post("/admin/media-servers/detect")
+async def media_server_detect(request: Request, body: MediaServerDetectRequest):
+    """Detect server type (Plex/Jellyfin) and fetch its name. Does not save."""
+    await require_admin(request)
+    base_url = body.url.rstrip("/")
+
+    # Try Plex first
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                f"{base_url}/",
+                params={"X-Plex-Token": body.token},
+                headers={"Accept": "application/json", "X-Plex-Product": "OpenPoster"},
+            )
+            if r.is_success:
+                data = r.json().get("MediaContainer", {})
+                if "friendlyName" in data:
+                    return {"type": "plex", "name": data["friendlyName"]}
+    except Exception:
+        pass
+
+    # Try Jellyfin / Emby
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                f"{base_url}/System/Info",
+                headers={"X-Emby-Token": body.token, "Accept": "application/json"},
+            )
+            if r.is_success:
+                data = r.json()
+                if "ServerName" in data:
+                    return {"type": "jellyfin", "name": data["ServerName"]}
+    except Exception:
+        pass
+
+    raise http_error(400, "detect_failed",
+                     "Could not detect server type at this URL. "
+                     "Check the URL and token are correct.")
+
+
+class MediaServerAddRequest(BaseModel):
+    id: str | None = None          # omit to auto-generate
+    type: str                      # "plex" | "jellyfin"
+    name: str
+    base_url: str
+    token: str
+    tv_libraries: list[str] = []
+    movie_libraries: list[str] = []
+
+
+@router.get("/admin/media-servers")
+async def media_servers_list(request: Request):
+    """Return all configured media servers (token redacted)."""
+    await require_admin(request)
+    cfg = request.app.state.cfg
+    servers = _load_servers(cfg.data_dir)
+    return [
+        {k: v for k, v in s.items() if k != "token"}
+        for s in servers
+    ]
+
+
+@router.post("/admin/media-servers")
+async def media_servers_add(request: Request, body: MediaServerAddRequest):
+    """Add or update a media server. Validates the connection before saving."""
+    await require_admin(request)
+    cfg = request.app.state.cfg
+
+    base_url = body.base_url.rstrip("/")
+    server_id = body.id or str(uuid.uuid4())
+
+    # Validate connection for Plex servers
+    if body.type == "plex":
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                sections = await _get_sections(client, base_url, body.token)
+        except httpx.HTTPStatusError as e:
+            raise http_error(400, "plex_error", f"Plex returned {e.response.status_code}")
+        except Exception as e:
+            raise http_error(400, "plex_error", f"Could not reach server: {e}")
+
+        section_titles = {s.get("title") for s in sections}
+        all_requested = set(body.tv_libraries) | set(body.movie_libraries)
+        missing = all_requested - section_titles
+        if missing:
+            raise http_error(
+                400, "plex_error",
+                f"Library not found: {', '.join(sorted(missing))}. "
+                f"Available: {', '.join(sorted(section_titles))}",
+            )
+
+    servers = _load_servers(cfg.data_dir)
+    existing_idx = next((i for i, s in enumerate(servers) if s["id"] == server_id), None)
+    server_record = {
+        "id": server_id,
+        "type": body.type,
+        "name": body.name,
+        "base_url": base_url,
+        "token": body.token,
+        "tv_libraries": body.tv_libraries,
+        "movie_libraries": body.movie_libraries,
+    }
+    if existing_idx is not None:
+        servers[existing_idx] = server_record
+    else:
+        servers.append(server_record)
+    _save_servers(cfg.data_dir, servers)
+
+    return {k: v for k, v in server_record.items() if k != "token"}
+
+
+@router.delete("/admin/media-servers/{server_id}")
+async def media_servers_remove(request: Request, server_id: str):
+    """Remove a media server by ID."""
+    await require_admin(request)
+    cfg = request.app.state.cfg
+    servers = _load_servers(cfg.data_dir)
+    servers = [s for s in servers if s["id"] != server_id]
+    _save_servers(cfg.data_dir, servers)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
 # Apply artwork
 # ---------------------------------------------------------------------------
 
@@ -307,6 +519,8 @@ class PlexApplyRequest(BaseModel):
     node_base: str | None = None
     auto_update: bool = False
     is_backdrop: bool = False
+    is_logo: bool = False
+    is_square: bool = False
 
 
 @router.post("/admin/plex/apply")
@@ -436,6 +650,8 @@ async def plex_apply(request: Request, body: PlexApplyRequest):
                 image_data, content_type,
                 is_episode=(body.media_type == "episode"),
                 is_backdrop=body.is_backdrop,
+                is_logo=body.is_logo,
+                is_square=body.is_square,
             )
         except httpx.HTTPStatusError as e:
             err_body = e.response.text[:200]
@@ -444,7 +660,19 @@ async def plex_apply(request: Request, body: PlexApplyRequest):
             raise http_error(502, "plex_error", f"Failed to apply artwork to Plex: {e}")
 
         # Bust the disk-cache so the next page load fetches fresh art from Plex.
-        if body.is_backdrop:
+        if body.is_logo:
+            from .media_server import _logo_cache_path
+            try:
+                _logo_cache_path(cfg.data_dir, rating_key).unlink(missing_ok=True)
+            except Exception:
+                pass
+        elif body.is_square:
+            from .media_server import _square_cache_path
+            try:
+                _square_cache_path(cfg.data_dir, rating_key).unlink(missing_ok=True)
+            except Exception:
+                pass
+        elif body.is_backdrop:
             from .media_server import _art_cache_path
             try:
                 _art_cache_path(cfg.data_dir, rating_key).unlink(missing_ok=True)
@@ -471,9 +699,16 @@ async def plex_apply(request: Request, body: PlexApplyRequest):
             from ..db import AppliedArtwork
             from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-            # Backdrops are stored under a ":bg" suffixed key so poster and backdrop
-            # tracking records for the same item can coexist in the table.
-            tracking_key = f"{rating_key}:bg" if body.is_backdrop else str(rating_key)
+            # Each artwork slot gets a distinct tracking key so poster, backdrop, and
+            # logo records for the same item can coexist in the table.
+            if body.is_logo:
+                tracking_key = f"{rating_key}:logo"
+            elif body.is_square:
+                tracking_key = f"{rating_key}:square"
+            elif body.is_backdrop:
+                tracking_key = f"{rating_key}:bg"
+            else:
+                tracking_key = str(rating_key)
 
             now_str = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
             async with request.app.state.Session() as session:

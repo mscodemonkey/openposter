@@ -47,6 +47,8 @@ const STEPS = ["Media type", "Which title?", "File & options"];
 
 export type UploadPreFill = {
   mediaType?: string;
+  /** Artwork kind override ("poster" | "background" | "logo"). When set, the kind is sent to the API directly. */
+  kind?: string;
   tmdbId?: string;
   title?: string;
   year?: string;
@@ -55,6 +57,8 @@ export type UploadPreFill = {
   seasonNumber?: string;
   episodeNumber?: string;
   themeId?: string;
+  /** Label shown in the drawer header, e.g. "Collection poster", "Backdrop". */
+  drawerLabel?: string;
 };
 
 interface UploadDrawerProps {
@@ -68,7 +72,7 @@ interface UploadDrawerProps {
 
 // ─── Preview generation ───────────────────────────────────────────────────────
 
-async function generatePreview(full: File): Promise<File> {
+export async function generatePreview(full: File): Promise<File> {
   const url = URL.createObjectURL(full);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const el = new Image();
@@ -105,6 +109,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
 
   const [step, setStep] = useState(0);
   const [mediaType, setMediaType] = useState("");
+  const [kind, setKind] = useState("");
   const [tmdbId, setTmdbId] = useState("");
   const [showTmdbId, setShowTmdbId] = useState("");
   const [collectionTmdbId, setCollectionTmdbId] = useState("");
@@ -123,6 +128,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
   const [searching, setSearching] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Apply pre-fill when drawer opens
@@ -130,6 +136,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
     if (!open) return;
     setStep((preFill?.tmdbId || preFill?.showTmdbId) ? 2 : 0);
     setMediaType(preFill?.mediaType ?? "");
+    setKind(preFill?.kind ?? "");
     setTmdbId(preFill?.tmdbId ?? "");
     setTitle(preFill?.title ?? "");
     setYear(preFill?.year ?? "");
@@ -137,7 +144,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
     setShowTmdbId(preFill?.showTmdbId ?? "");
     setSeasonNumber(preFill?.seasonNumber ?? "");
     setEpisodeNumber(preFill?.episodeNumber ?? "");
-    setThemeId(preFill?.themeId ?? "");
+    setThemeId(preFill?.themeId || themes[0]?.theme_id || "");
     setFullFile(null);
     setPreviewUrl(null);
     setSearchQuery("");
@@ -145,6 +152,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
     setStatus(null);
     setUploading(false);
     setPublished(false);
+    setDuplicateWarning(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -191,13 +199,20 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
     setPreviewUrl(f ? URL.createObjectURL(f) : null);
   }
 
-  async function handleUpload() {
+  async function handleUpload(force = false) {
     if (!conn || !fullFile) return;
     setUploading(true);
     setStatus(t("uploading"));
+    setDuplicateWarning(false);
 
     try {
-      const preview = await generatePreview(fullFile);
+      let preview: File;
+      try {
+        preview = await generatePreview(fullFile);
+      } catch {
+        setStatus("Failed to generate preview — make sure the file is a valid JPG or PNG.");
+        return;
+      }
 
       const fd = new FormData();
       fd.set("tmdb_id", tmdbId);
@@ -211,21 +226,34 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
       fd.set("creator_id", conn.creatorId);
       fd.set("creator_display_name", conn.creatorDisplayName);
       if (themeId) fd.set("theme_id", themeId);
+      if (kind) fd.set("kind", kind);
       fd.set("attribution_redistribution", redistribution);
       fd.set("attribution_license", license);
       fd.set("published", String(published));
+      if (force) fd.set("force", "true");
       fd.set("preview", preview);
       fd.set("full", fullFile);
 
-      const r = await fetch(`${conn.nodeUrl}/v1/admin/posters`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${conn.adminToken}` },
-        body: fd,
-      });
+      let r: Response;
+      try {
+        r = await fetch(`${conn.nodeUrl}/v1/admin/posters`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${conn.adminToken}` },
+          body: fd,
+        });
+      } catch {
+        setStatus("Could not reach the node — check that it is running and the URL is correct.");
+        return;
+      }
 
       const json = await r.json().catch(() => null);
       if (!r.ok) {
-        setStatus(t("uploadFailed", { status: String(r.status), details: JSON.stringify(json) }));
+        if (r.status === 409) {
+          setDuplicateWarning(true);
+          setStatus(null);
+        } else {
+          setStatus(t("uploadFailed", { status: String(r.status), details: JSON.stringify(json) }));
+        }
         return;
       }
 
@@ -245,7 +273,25 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
     >
       {/* Header */}
       <Stack direction="row" alignItems="center" sx={{ px: 2.5, py: 2, borderBottom: 1, borderColor: "divider" }}>
-        <Typography variant="h6" sx={{ fontWeight: 800, flex: 1 }}>{t("title")}</Typography>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>{preFill?.drawerLabel ?? t("title")}</Typography>
+          {preFill && (() => {
+            const { title, year, seasonNumber, episodeNumber } = preFill;
+            let subtitle: string | null = null;
+            if (episodeNumber && seasonNumber) {
+              subtitle = `S${seasonNumber.padStart(2, "0")}.E${episodeNumber.padStart(2, "0")}`;
+              if (title) subtitle = `${title} · ${subtitle}`;
+            } else if (seasonNumber) {
+              subtitle = `Season ${seasonNumber.padStart(2, "0")}`;
+              if (title) subtitle = `${title} · ${subtitle}`;
+            } else if (title) {
+              subtitle = year ? `${title} (${year})` : title;
+            }
+            return subtitle ? (
+              <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>{subtitle}</Typography>
+            ) : null;
+          })()}
+        </Box>
         <IconButton size="small" onClick={onClose} aria-label={tc("cancel")}><CloseIcon /></IconButton>
       </Stack>
 
@@ -382,8 +428,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
             <Divider />
 
             {/* Theme */}
-            <TextField select label="Theme (optional)" value={themeId} onChange={(e) => setThemeId(e.target.value)} size="small" fullWidth>
-              <MenuItem value="">(No theme)</MenuItem>
+            <TextField select label="Theme" value={themeId} onChange={(e) => setThemeId(e.target.value)} size="small" fullWidth>
               {themes.map((th) => <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>)}
             </TextField>
 
@@ -420,6 +465,19 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
               </Stack>
             </Stack>
 
+            {duplicateWarning && (
+              <Alert
+                severity="warning"
+                action={
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Button size="small" color="inherit" onClick={() => setDuplicateWarning(false)}>Cancel</Button>
+                    <Button size="small" color="inherit" variant="outlined" onClick={() => void handleUpload(true)}>Upload anyway</Button>
+                  </Stack>
+                }
+              >
+                This looks like artwork you&apos;ve already uploaded. Upload a duplicate anyway?
+              </Alert>
+            )}
             {status && (
               <Alert severity={status.includes("ailed") ? "error" : "info"}>{status}</Alert>
             )}

@@ -59,6 +59,8 @@ async def claim_handle(req: ClaimReq, request: Request):
     async with session() as s:
         existing = (await s.execute(select(CreatorHandle).where(CreatorHandle.handle == h))).scalar_one_or_none()
         if existing:
+            if existing.user_id == user_id:
+                return {"creator": {"handle": h, "user_id": user_id}}
             raise HTTPException(
                 status_code=409,
                 detail={"error": {"code": "handle_taken", "message": "handle already taken"}},

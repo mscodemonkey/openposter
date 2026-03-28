@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 import Container from "@mui/material/Container";
 import Paper from "@mui/material/Paper";
@@ -24,27 +25,36 @@ import { applyPosterSize, getPosterSize, type PosterSize } from "@/lib/grid-size
 import { clearIssuerSession, loadIssuerUser } from "@/lib/issuer_storage";
 import { clearCreatorConnection, loadCreatorConnection, saveCreatorConnection } from "@/lib/storage";
 import { adminUploadCreatorBackdrop } from "@/lib/themes";
-import { disconnectPlex, getPlexStatus, savePlexConnection, testPlexConnection, type PlexStatus } from "@/lib/plex";
+import { fetchSyncStatus, triggerSync, type SyncStatus } from "@/lib/media-server";
+import { detectMediaServer, listMediaServers, addMediaServer, removeMediaServer, type MediaServerConfig, type DetectResult } from "@/lib/media-servers";
 import { getArtworkSettings, removeAllPlexLabels, saveArtworkSettings } from "@/lib/artwork-tracking";
 
 export default function SettingsPage() {
   const t = useTranslations("settings");
   const tc = useTranslations("common");
   const tn = useTranslations("nav");
-  const tp = useTranslations("plex");
+  const tms = useTranslations("mediaServers");
   const [nodeUrl, setNodeUrl] = useState("http://localhost:8081");
   const [adminToken, setAdminToken] = useState("");
   const [connStatus, setConnStatus] = useState<string | null>(null);
-const [issuerUser, setIssuerUser] = useState<ReturnType<typeof loadIssuerUser>>(null);
+  const [issuerUser, setIssuerUser] = useState<ReturnType<typeof loadIssuerUser>>(null);
 
-  // Plex connection state
-  const [plexStatus, setPlexStatus] = useState<PlexStatus | null>(null);
-  const [plexBaseUrl, setPlexBaseUrl] = useState("");
-  const [plexToken, setPlexToken] = useState("");
-  const [plexTvLibraries, setPlexTvLibraries] = useState("");
-  const [plexMovieLibraries, setPlexMovieLibraries] = useState("");
-  const [plexTestOk, setPlexTestOk] = useState(false);
-  const [plexStatus2, setPlexStatus2] = useState<string | null>(null);
+  // Media servers state
+  const [servers, setServers] = useState<MediaServerConfig[]>([]);
+  const [syncStatuses, setSyncStatuses] = useState<Record<string, SyncStatus>>({});
+
+  // Add-server form state
+  const [addingServer, setAddingServer] = useState(false);
+  const [detectUrl, setDetectUrl] = useState("");
+  const [detectToken, setDetectToken] = useState("");
+  const [detected, setDetected] = useState<DetectResult | null>(null);
+  const [detectError, setDetectError] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  const [addTvLibraries, setAddTvLibraries] = useState("");
+  const [addMovieLibraries, setAddMovieLibraries] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
   const [backdropPreview, setBackdropPreview] = useState<string | null>(null);
   const [backdropStatus, setBackdropStatus] = useState<string | null>(null);
   const backdropInputRef = useRef<HTMLInputElement>(null);
@@ -71,65 +81,117 @@ const [issuerUser, setIssuerUser] = useState<ReturnType<typeof loadIssuerUser>>(
       setAutoUpdateArtwork(s.auto_update_artwork);
       setAddPlexLabels(s.add_plex_labels);
     });
-    getPlexStatus(conn.nodeUrl, conn.adminToken).then((s) => {
-      setPlexStatus(s);
-      if (s.connected) {
-        setPlexBaseUrl(s.baseUrl ?? "");
-        setPlexTvLibraries((s.tvLibraries ?? []).join(", "));
-        setPlexMovieLibraries((s.movieLibraries ?? []).join(", "));
-      }
+    listMediaServers(conn.nodeUrl, conn.adminToken).then((list) => {
+      setServers(list);
+      list.forEach((srv) => {
+        fetchSyncStatus(conn.nodeUrl, conn.adminToken)
+          .then((status) => setSyncStatuses((prev) => ({ ...prev, [srv.id]: status })))
+          .catch(() => undefined);
+      });
     });
   }, []);
+
+  // Poll sync status for each server — faster while syncing
+  useEffect(() => {
+    if (!adminToken || servers.length === 0) return;
+    const conn = loadCreatorConnection();
+    if (!conn) return;
+    const isSyncing = Object.values(syncStatuses).some((s) => s.is_syncing);
+    const interval = isSyncing ? 2000 : 10000;
+    const id = setInterval(() => {
+      servers.forEach((srv) => {
+        fetchSyncStatus(conn.nodeUrl, conn.adminToken)
+          .then((status) => setSyncStatuses((prev) => ({ ...prev, [srv.id]: status })))
+          .catch(() => undefined);
+      });
+    }, interval);
+    return () => clearInterval(id);
+  }, [adminToken, servers, syncStatuses]);
 
   function parseCsvLibraries(v: string): string[] {
     return v.split(",").map((s) => s.trim()).filter(Boolean);
   }
 
-  async function testPlexConn() {
-    const conn = loadCreatorConnection();
-    if (!conn) { setPlexStatus2(tp("noNodeConnected")); return; }
-    setPlexTestOk(false);
-    setPlexStatus2(tp("testing"));
-    const result = await testPlexConnection(conn.nodeUrl, conn.adminToken, {
-      baseUrl: plexBaseUrl.trim().replace(/\/+$/, ""),
-      token: plexToken,
-      tvLibraries: parseCsvLibraries(plexTvLibraries),
-      movieLibraries: parseCsvLibraries(plexMovieLibraries),
-    });
-    if (result.ok) {
-      setPlexTestOk(true);
-      setPlexStatus2(tp("testOk"));
-    } else {
-      setPlexTestOk(false);
-      setPlexStatus2(result.error ?? tp("testFailed"));
-    }
-  }
-
-  async function savePlexConn() {
+  async function handleDetect() {
     const conn = loadCreatorConnection();
     if (!conn) return;
-    setPlexStatus2(tp("saving"));
+    setDetecting(true);
+    setDetected(null);
+    setDetectError(null);
     try {
-      await savePlexConnection(conn.nodeUrl, conn.adminToken, {
-        baseUrl: plexBaseUrl.trim().replace(/\/+$/, ""),
-        token: plexToken,
-        tvLibraries: parseCsvLibraries(plexTvLibraries),
-        movieLibraries: parseCsvLibraries(plexMovieLibraries),
-      });
-      setPlexStatus({ connected: true, baseUrl: plexBaseUrl, tvLibraries: parseCsvLibraries(plexTvLibraries), movieLibraries: parseCsvLibraries(plexMovieLibraries) });
-      setPlexStatus2(tc("save") + "d.");
+      const result = await detectMediaServer(conn.nodeUrl, conn.adminToken, detectUrl.trim(), detectToken);
+      setDetected(result);
     } catch (e: unknown) {
-      setPlexStatus2(e instanceof Error ? e.message : String(e));
+      setDetectError(e instanceof Error ? e.message : tms("detectFailed"));
+    } finally {
+      setDetecting(false);
     }
   }
 
-  async function disconnectPlexConn() {
+  async function handleAddServer() {
+    const conn = loadCreatorConnection();
+    if (!conn || !detected) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      const added = await addMediaServer(conn.nodeUrl, conn.adminToken, {
+        type: detected.type,
+        name: detected.name,
+        base_url: detectUrl.trim(),
+        token: detectToken,
+        tv_libraries: parseCsvLibraries(addTvLibraries),
+        movie_libraries: parseCsvLibraries(addMovieLibraries),
+      });
+      setServers((prev) => {
+        const idx = prev.findIndex((s) => s.id === added.id);
+        if (idx >= 0) { const next = [...prev]; next[idx] = added; return next; }
+        return [...prev, added];
+      });
+      setAddingServer(false);
+      setDetectUrl(""); setDetectToken(""); setDetected(null);
+      setAddTvLibraries(""); setAddMovieLibraries("");
+    } catch (e: unknown) {
+      setAddError(e instanceof Error ? e.message : tms("addFailed"));
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function handleRemoveServer(serverId: string) {
     const conn = loadCreatorConnection();
     if (!conn) return;
-    await disconnectPlex(conn.nodeUrl, conn.adminToken).catch(() => undefined);
-    setPlexStatus({ connected: false });
-    setPlexBaseUrl(""); setPlexToken(""); setPlexTvLibraries(""); setPlexMovieLibraries("");
-    setPlexTestOk(false); setPlexStatus2(null);
+    await removeMediaServer(conn.nodeUrl, conn.adminToken, serverId).catch(() => undefined);
+    setServers((prev) => prev.filter((s) => s.id !== serverId));
+    setSyncStatuses((prev) => { const next = { ...prev }; delete next[serverId]; return next; });
+  }
+
+  async function handleSyncNow(serverId: string) {
+    const conn = loadCreatorConnection();
+    if (!conn) return;
+    await triggerSync(conn.nodeUrl, conn.adminToken).catch(() => undefined);
+    fetchSyncStatus(conn.nodeUrl, conn.adminToken)
+      .then((status) => setSyncStatuses((prev) => ({ ...prev, [serverId]: status })))
+      .catch(() => undefined);
+  }
+
+  function syncPhaseLabel(phase: string | null): string {
+    switch (phase) {
+      case "movies": return tms("syncPhaseMovies");
+      case "shows": return tms("syncPhaseShows");
+      case "collections": return tms("syncPhaseCollections");
+      case "collection_children": return tms("syncPhaseCollectionChildren");
+      case "seasons": return tms("syncPhaseSeasons");
+      case "done": return tms("syncPhaseDone");
+      default: return phase ?? "";
+    }
+  }
+
+  function syncTimeAgo(isoString: string): string {
+    const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+    if (diff < 60) return `${diff}s`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    return `${Math.floor(diff / 86400)}d`;
   }
 
   async function handleBackdropUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -140,11 +202,7 @@ const [issuerUser, setIssuerUser] = useState<ReturnType<typeof loadIssuerUser>>(
     setBackdropPreview(URL.createObjectURL(file));
     setBackdropStatus(t("uploading"));
     try {
-      // derive creator_id from node (best effort — use first poster's creator_id)
-      const r = await fetch(`${conn.nodeUrl}/v1/posters?limit=1`, { headers: { Authorization: `Bearer ${conn.adminToken}` } });
-      const json = r.ok ? (await r.json() as { results: Array<{ creator: { creator_id: string } }> }) : { results: [] };
-      const creatorId = json.results[0]?.creator.creator_id ?? "unknown";
-      await adminUploadCreatorBackdrop(conn.nodeUrl, conn.adminToken, creatorId, file);
+      await adminUploadCreatorBackdrop(conn.nodeUrl, conn.adminToken, conn.creatorId, file);
       setBackdropStatus(t("uploadOk"));
     } catch (err: unknown) {
       setBackdropStatus(err instanceof Error ? err.message : t("uploadFailed"));
@@ -273,7 +331,7 @@ const [issuerUser, setIssuerUser] = useState<ReturnType<typeof loadIssuerUser>>(
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
               <Button
                 onClick={() => {
-                  saveCreatorConnection({ nodeUrl: nodeUrl.replace(/\/+$/, ""), adminToken });
+                  saveCreatorConnection({ nodeUrl: nodeUrl.replace(/\/+$/, ""), adminToken, creatorId: issuerUser?.handle ?? "" });
                   setConnStatus(t("saved"));
                 }}
               >
@@ -323,81 +381,165 @@ const [issuerUser, setIssuerUser] = useState<ReturnType<typeof loadIssuerUser>>(
         </Paper>
 
         <Paper sx={{ p: 3 }}>
-          <Stack spacing={1.5}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Box
-                sx={{
-                  bgcolor: "#e5a00d",
-                  color: "#000",
-                  fontWeight: 900,
-                  fontSize: "0.7rem",
-                  px: 1,
-                  py: 0.25,
-                  borderRadius: 1,
-                  letterSpacing: "0.05em",
-                  flexShrink: 0,
-                }}
-              >
-                PLEX
-              </Box>
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                {tp("sectionTitle")}
-              </Typography>
+          <Stack spacing={2}>
+            <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>{tms("title")}</Typography>
+              {!addingServer && (
+                <Button size="small" onClick={() => setAddingServer(true)}>
+                  {tms("addServer")}
+                </Button>
+              )}
             </Stack>
 
-            {plexStatus?.connected ? (
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
-                <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-                  {tp("connected", { url: plexStatus.baseUrl ?? "" })}
-                </Typography>
-                <Button
-                  color="error"
-                  variant="outlined"
-                  onClick={() => void disconnectPlexConn()}
-                >
-                  {tn("disconnect")}
-                </Button>
-              </Stack>
-            ) : (
-              <>
-                <TextField
-                  label={tp("baseUrl")}
-                  value={plexBaseUrl}
-                  onChange={(e) => { setPlexBaseUrl(e.target.value); setPlexTestOk(false); }}
-                  placeholder="http://192.168.1.10:32400"
-                />
-                <TextField
-                  label={tp("token")}
-                  value={plexToken}
-                  onChange={(e) => { setPlexToken(e.target.value); setPlexTestOk(false); }}
-                  placeholder={tp("tokenPlaceholder")}
-                  type="password"
-                />
-                <TextField
-                  label={tp("tvLibrary")}
-                  value={plexTvLibraries}
-                  onChange={(e) => { setPlexTvLibraries(e.target.value); setPlexTestOk(false); }}
-                  placeholder="TV Shows"
-                  helperText={tp("libraryHint")}
-                />
-                <TextField
-                  label={tp("movieLibrary")}
-                  value={plexMovieLibraries}
-                  onChange={(e) => { setPlexMovieLibraries(e.target.value); setPlexTestOk(false); }}
-                  placeholder="Movies"
-                />
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                  <Button variant="outlined" onClick={() => void testPlexConn()}>
-                    {tp("test")}
-                  </Button>
-                  <Button disabled={!plexTestOk} onClick={() => void savePlexConn()}>
-                    {tc("save")}
-                  </Button>
+            {/* Connected server rows */}
+            {servers.map((srv) => {
+              const sync = syncStatuses[srv.id];
+              return (
+                <Box key={srv.id} sx={{ borderRadius: 1, border: "1px solid", borderColor: "divider", p: 1.5 }}>
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
+                    {/* Type badge */}
+                    <Box
+                      sx={{
+                        bgcolor: srv.type === "plex" ? "#e5a00d" : "#00a4dc",
+                        color: srv.type === "plex" ? "#000" : "#fff",
+                        fontWeight: 900,
+                        fontSize: "0.65rem",
+                        px: 0.75,
+                        py: 0.2,
+                        borderRadius: 0.75,
+                        letterSpacing: "0.05em",
+                        flexShrink: 0,
+                        mt: 0.3,
+                      }}
+                    >
+                      {srv.type === "plex" ? tms("plexType") : tms("jellyfinType")}
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={700} noWrap>{srv.name}</Typography>
+                      <Typography variant="caption" color="text.disabled" noWrap>{srv.base_url}</Typography>
+                    </Box>
+                    <Button
+                      size="small"
+                      color="error"
+                      variant="outlined"
+                      sx={{ flexShrink: 0 }}
+                      onClick={() => void handleRemoveServer(srv.id)}
+                    >
+                      {tms("disconnect")}
+                    </Button>
+                  </Stack>
+
+                  {/* Sync status */}
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }} sx={{ mt: 1 }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {sync?.error
+                          ? tms("syncError", { error: sync.error })
+                          : sync?.last_synced_at
+                            ? tms("syncStatus", { time: syncTimeAgo(sync.last_synced_at) })
+                            : tms("syncNever")}
+                      </Typography>
+                      {sync?.is_syncing && sync.current_phase && (
+                        <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
+                          · {syncPhaseLabel(sync.current_phase)}
+                        </Typography>
+                      )}
+                      {sync?.item_count != null && sync.item_count > 0 && !sync.is_syncing && (
+                        <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
+                          · {tms("itemCount", { n: sync.item_count })}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      disabled={sync?.is_syncing ?? false}
+                      startIcon={sync?.is_syncing ? <CircularProgress size={14} color="inherit" /> : undefined}
+                      onClick={() => void handleSyncNow(srv.id)}
+                    >
+                      {sync?.is_syncing ? tms("syncing") : tms("syncNow")}
+                    </Button>
+                  </Stack>
+                </Box>
+              );
+            })}
+
+            {servers.length === 0 && !addingServer && (
+              <Typography variant="body2" color="text.secondary">{tms("noServers")}</Typography>
+            )}
+
+            {/* Add server form */}
+            {addingServer && (
+              <Box sx={{ borderRadius: 1, border: "1px dashed", borderColor: "divider", p: 1.5 }}>
+                <Stack spacing={1.5}>
+                  <TextField
+                    label={tms("serverUrl")}
+                    value={detectUrl}
+                    onChange={(e) => { setDetectUrl(e.target.value); setDetected(null); setDetectError(null); }}
+                    placeholder="http://192.168.1.10:32400"
+                    size="small"
+                  />
+                  <TextField
+                    label={tms("serverToken")}
+                    value={detectToken}
+                    onChange={(e) => { setDetectToken(e.target.value); setDetected(null); setDetectError(null); }}
+                    type="password"
+                    size="small"
+                  />
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      disabled={detecting || !detectUrl || !detectToken}
+                      startIcon={detecting ? <CircularProgress size={14} color="inherit" /> : undefined}
+                      onClick={() => void handleDetect()}
+                    >
+                      {detecting ? tms("detecting") : tms("detect")}
+                    </Button>
+                    <Button size="small" color="inherit" onClick={() => { setAddingServer(false); setDetected(null); setDetectError(null); }}>
+                      {tc("cancel")}
+                    </Button>
+                  </Stack>
+                  {detectError && <Alert severity="error">{detectError}</Alert>}
+                  {detected && (
+                    <>
+                      <Alert severity="success">
+                        {tms("detected", { name: `${detected.type === "plex" ? tms("plexType") : tms("jellyfinType")} — ${detected.name}` })}
+                      </Alert>
+                      {detected.type === "plex" && (
+                        <>
+                          <TextField
+                            label={tms("tvLibraries")}
+                            value={addTvLibraries}
+                            onChange={(e) => setAddTvLibraries(e.target.value)}
+                            placeholder="TV Shows"
+                            size="small"
+                            helperText={tms("libraryHint")}
+                          />
+                          <TextField
+                            label={tms("movieLibraries")}
+                            value={addMovieLibraries}
+                            onChange={(e) => setAddMovieLibraries(e.target.value)}
+                            placeholder="Movies"
+                            size="small"
+                          />
+                        </>
+                      )}
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          size="small"
+                          disabled={adding}
+                          startIcon={adding ? <CircularProgress size={14} color="inherit" /> : undefined}
+                          onClick={() => void handleAddServer()}
+                        >
+                          {adding ? tms("adding") : tms("add")}
+                        </Button>
+                      </Stack>
+                      {addError && <Alert severity="error">{addError}</Alert>}
+                    </>
+                  )}
                 </Stack>
-                {plexStatus2 && (
-                  <Alert severity={plexTestOk ? "success" : "info"}>{plexStatus2}</Alert>
-                )}
-              </>
+              </Box>
             )}
           </Stack>
         </Paper>

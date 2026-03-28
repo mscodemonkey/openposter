@@ -32,13 +32,33 @@ Services once running:
 
 Persistent data is in `reference-node/data-*/` directories (SQLite + blob files).
 
+## Resetting for testing
+
+Two reset endpoints wipe all data. Both require `OPENPOSTER_DEV_RESET_TOKEN=dev-reset` (already set in `compose.multi.yml`).
+
+```
+# Wipe node A (posters, themes, settings, blobs, seed.json)
+curl http://localhost:8081/dev/reset?token=dev-reset
+
+# Wipe issuer (users, handles, nodes, url claims)
+curl http://localhost:8085/dev/reset?token=dev-reset
+```
+
+After both resets, restart so node starts clean:
+```bash
+cd reference-node
+docker compose -f compose.multi.yml restart node_a issuer
+```
+
+Then go to `/onboarding` to re-register. Clear the browser localStorage first (or use the Log Out button on the onboarding page). Note: the `data-a/seed.json` file auto-populates sample data on startup if present — the reset deletes it.
+
 ## Web UI stack
 
 - **Next.js 16**, React 19, TypeScript
-- **MUI Material v7** (`@mui/material`) — this is the component library in use. NOT MUI Joy.
-- Emotion for styling
+- **MUI Material v7** (`@mui/material`) — NOT MUI Joy
+- Emotion for styling, next-intl for i18n (single "en" locale at `web/messages/en.json`)
 - `web/src/app/` — Next.js App Router pages
-- `web/src/components/` — shared components (PosterCard, CreatorPicker, RelatedArtworkSection)
+- `web/src/components/` — shared components
 - `web/src/lib/` — config, types, utilities
 - `NEXT_PUBLIC_INDEXER_BASE_URL` and `NEXT_PUBLIC_ISSUER_BASE_URL` are the two key env vars
 
@@ -46,29 +66,64 @@ Key pages:
 - `/browse` — main poster grid with filters
 - `/movie/[collectionTmdbId]/boxset` — movie box set view
 - `/tv/[showTmdbId]/boxset` — TV show box set view
-- `/onboarding` — first-run setup flow
+- `/onboarding` — first-run setup flow (see Onboarding section)
 - `/p/[posterId]` — individual poster page
 - `/creators` — creator listing
 - `/creator/[creatorId]` — public creator page (backdrop hero, themes section, poster grid)
 - `/creator/[creatorId]/themes/[themeId]` — public theme detail page
 - `/library` — user library (subscribed themes "Following" section)
-- `/my-media` — media server integration; browse Plex/Jellyfin library (collections, movies, shows, seasons, episodes) with A–Z rail and missing-thumb detection
-- `/studio` — creator Studio workspace; sidebar-driven: pinned collections, standalone movies, TV shows; per-item detail views; theme management
-- `/studio/upload` — multi-step poster upload form
+- `/my-media` — media server integration; browse Plex/Jellyfin library with A–Z rail and missing-thumb detection
+- `/studio` — creator Studio workspace
+- `/studio/upload` — multi-step poster upload form (legacy; UploadDrawer is preferred in Studio)
+- `/settings` — node connection, media servers, artwork settings
 
 Key shared components:
-- `PosterCard` — standard poster card (image + type chip + title strip); key props: `poster`, `actions`, `aspectRatio` (default "2/3", use "16/9" for episodes), `chip` (override/suppress type chip), `onClick`, `imageFailed` (skip rendering `<img>` when parent knows it 404'd), `onImageError`
-- `CollectionCard` — mosaic/single-image card for movie collections; from `SectionedPosterView`; props include `chip` override, `onImageError`, `onClick`
-- `TVShowCard` — mosaic/single-image card for TV shows; from `SectionedPosterView`; props include `chip` override, `onImageError`, `onClick`
+- `PosterCard` — standard poster card (image + type chip + title strip); key props: `poster`, `actions`, `aspectRatio` (default "2/3", use "16/9" for episodes), `chip` (override/suppress type chip), `onClick`, `imageFailed`, `onImageError`
+- `CollectionCard` — mosaic/single-image card for movie collections; from `SectionedPosterView`
+- `TVShowCard` — mosaic/single-image card for TV shows; from `SectionedPosterView`
+
+## Creator identity & connection
+
+**Creator ID** is the claimed handle (e.g. `mscodemonkey`), established during onboarding and stored in `CreatorConnection.creatorId` in localStorage. It is **never** derived from the first poster — it comes from the issuer.
+
+`CreatorConnection` (in `web/src/lib/storage.ts`):
+```ts
+{ nodeUrl: string; adminToken: string; creatorId: string }
+```
+- `nodeUrl` → localStorage
+- `adminToken` → sessionStorage (higher security)
+- `creatorId` → localStorage
+
+Use `loadCreatorConnection()` / `saveCreatorConnection()` / `clearCreatorConnection()`.
+
+## Onboarding flow (`/onboarding`)
+
+Steps: welcome → account → creator → claim → public_url → done
+
+1. **Account** — login or signup via issuer (`/v1/auth/login`, `/v1/auth/signup`)
+2. **Creator** — claim handle via `/v1/creator/claim_handle` (idempotent — safe to retry). Re-fetches `/v1/me` to persist handle in session
+3. **Claim** — pair with local node using pairing code (`POST /admin/pair`), then register node with issuer (`POST /v1/nodes/claim`). Saves `CreatorConnection` with `creatorId` from issuer handle
+4. **Public URL** — domain verification. Calls `issuerStartUrlClaim` → gets challenge token → pushes token to node (`PUT /v1/admin/claim-token`) so node serves `/.well-known/openposter-claim.txt` → calls `issuerVerifyUrlClaim`
+
+Hydration note: all localStorage reads happen in a `useEffect` (not `useState` initializers) to avoid SSR/client mismatch.
 
 ## Reference node (Python)
 
 - Located at `reference-node/openposter_node/`
-- Python with `uv` for dependency management (`pyproject.toml`)
-- Data stored in `/data/` (SQLite at `db.sqlite`, blobs at `blobs/sha256/<hex>`, signing keys at `keys/`)
-- Key env vars: `OPENPOSTER_BASE_URL`, `OPENPOSTER_NODE_NAME`, `OPENPOSTER_OPERATOR_NAME`, `OPENPOSTER_ADMIN_TOKEN`, `OPENPOSTER_CORS_ORIGINS`
-- Admin: legacy `OPENPOSTER_ADMIN_TOKEN` works; bootstrap-claim flow is the intended approach
-- Node has stable UUID identity (`node_uuid`) stored in `/data/node_uuid.txt`
+- Python with `uv` for dependency management
+- Data: SQLite at `/data/db.sqlite`, blobs at `/data/blobs/sha256/<hex>`, keys at `/data/keys/`
+- Key env vars: `OPENPOSTER_BASE_URL`, `OPENPOSTER_NODE_NAME`, `OPENPOSTER_ADMIN_TOKEN`, `OPENPOSTER_CORS_ORIGINS`, `OPENPOSTER_DEV_RESET_TOKEN`
+- Admin auth: `Authorization: Bearer <token>` header; `x-creator-id` header for creator-scoped endpoints
+- Node has stable UUID identity stored in `/data/node_uuid.txt`
+
+Special endpoints:
+- `GET /dev/reset?token=<token>` — wipes DB + blobs + seed.json (dev only, requires env var)
+- `GET /.well-known/openposter-claim.txt` — serves challenge token for domain verification (set via `PUT /v1/admin/claim-token`)
+- `PUT /v1/admin/claim-token` — stores domain verification challenge in memory
+
+Poster upload (`POST /v1/admin/posters`) is multipart form with **all text fields before file fields** — python-multipart silently drops text fields that appear after file parts.
+
+Seed data: on startup, if `/data/seed.json` exists and the posters table is empty, the node auto-populates sample data. The dev reset deletes this file.
 
 ## Indexer (Python)
 
@@ -81,10 +136,11 @@ Key shared components:
 
 - Located at `issuer/openposter_issuer/`
 - Identity + node registry for the network
-- Auth: `/v1/auth/signup`, `/v1/auth/login`, `/v1/me`
-- Creator handles: `/v1/creator/availability`, `/v1/creator/claim_handle`
-- Nodes: `/v1/nodes/claim`, `/v1/nodes/attach_url`, `/v1/nodes`, `/v1/nodes/by_url`
-- Public URL verification required for non-localhost nodes (DNS TXT or HTTP well-known)
+- `GET /v1/me` — returns `{ user_id, email, display_name, handle: string|null }` (handle included after claiming)
+- `POST /v1/creator/claim_handle` — idempotent: if you already own the handle, succeeds silently
+- `POST /v1/url_claims/start` — generates DNS/HTTP challenge for domain verification
+- `POST /v1/url_claims/verify` — checks DNS TXT or `/.well-known/openposter-claim.txt`
+- `GET /dev/reset?token=<token>` — wipes all issuer DB tables (dev only)
 
 ## Protocol summary (v1)
 
@@ -95,7 +151,6 @@ Core node endpoints:
 - `GET /v1/blobs/{hash}` — immutable blob by SHA-256 (`sha256:<hex>`)
 - `GET /v1/changes` — incremental change feed for indexers
 - `GET /v1/nodes` — node gossip/discovery list
-- `POST /v1/keys/{key_id}:unwrap` — premium key delivery (JWT auth required)
 
 Blobs are content-addressed (SHA-256). Metadata is signed (Ed25519 / JCS). Premium blobs are encrypted (AES-256-GCM), keys delivered via issuer JWT.
 
@@ -103,6 +158,7 @@ Blobs are content-addressed (SHA-256). Metadata is signed (Ed25519 / JCS). Premi
 
 - Web components use **MUI Material** imports from `@mui/material/*` (named imports per component)
 - Pages are "use client" when they need state/effects
+- **Never read localStorage in `useState` initializers** — use `useEffect` to hydrate after mount, otherwise SSR/client hydration mismatches occur
 - The `PosterCard` component is the standard unit for poster display — reuse it rather than duplicating card markup
 - `CollectionCard` and `TVShowCard` (from `SectionedPosterView`) are the canonical cards for collections/shows everywhere — never recreate markup
 - Box set / grouped views use MUI `Grid` + `Accordion` for season groupings
@@ -114,28 +170,37 @@ Blobs are content-addressed (SHA-256). Metadata is signed (Ed25519 / JCS). Premi
 
 The Studio (`/studio`) is a creator workspace built in `web/src/app/studio/StudioWorkspace.tsx`.
 
-**Sidebar**: Three sections — Movies (collections + standalone movies), TV Shows. All pinned items persisted to node via `saveSetting` with keys `studio_pinned_collections`, `studio_pinned_movies`, `studio_pinned_tv_shows`. On load, any poster-derived groups not already pinned are auto-migrated. Overline headers ("Collections" / "Movies") separate the two subsections in the Movies sidebar section.
+**Navigation state**: `{ view: "root" }` | `{ view: "theme"; themeId }` | `{ view: "list"; listType: "collections"|"movies"|"tv"; themeId }` | `{ view: "media"; mediaKey }`
 
-**Adding movies**: The "+" button opens an "Add movie" dialog. User enters a TMDB movie ID. The lookup calls `GET /api/tmdb/movie/{id}`. If `belongs_to_collection` is set → pin the collection (same as before). If standalone → pin just the movie to `studio_pinned_movies`.
+**Sidebar**: Three pinned lists — Collections, Movies, TV Shows — persisted to node via `saveSetting` with keys `studio_pinned_collections`, `studio_pinned_movies`, `studio_pinned_tv_shows`. Items also auto-migrated from existing poster data on load. Creator ID comes from `conn.creatorId` (never derived from posters).
+
+**List views** (upgraded to rich tables):
+- Collections table: status icon | Collection | Movies count | Movie Posters | Collection ✓ | Backdrop ✓ | Square ✓ | Logo ✓
+- Movies table: status icon | Movie | Poster ✓ | Backdrop ✓ | Square ✓ | Logo ✓
+- TV Shows table: status | Show | Seasons (TMDB) | Season Posters | Episode Cards | Show Poster ✓ | Backdrop ✓ | Square ✓ | Logo ✓
 
 **Detail views**:
-- `CollectionDetailView` — shows poster grid for a collection; uses `PlaceholderCard` for missing artwork (dashed border, 0.3 opacity TMDB image, red MISSING chip, upload IconButton)
+- `CollectionDetailView` — poster grid for a collection; `PlaceholderCard` for missing artwork
 - `TvShowDetailView` — season accordion with episode cards; same `PlaceholderCard` pattern
-- `MovieDetailView` — shows poster slot and backdrop slot; same `PlaceholderCard` pattern when no uploads yet
+- `MovieDetailView` — poster slot and backdrop slot; `PlaceholderCard` when no uploads yet
 
-**PlaceholderCard pattern** (used in all detail views): `border: "1px dashed"`, grayscale TMDB image at 0.3 opacity, red MISSING chip top-left, small upload `IconButton` top-right, title strip below. Always reuse this pattern, never invent a different one.
+**PlaceholderCard pattern**: `border: "1px dashed"`, grayscale TMDB image at 0.3 opacity, red MISSING chip top-left, small upload `IconButton` top-right, title strip below. Always reuse this pattern.
+
+**ZIP import** (`ZipImportDialog`): Parses ZIP natively (no npm dep) using browser `DecompressionStream`. Matches filenames to context (collection/show). All text form fields are appended **before** file fields in `uploadItem` — critical for python-multipart compatibility.
+
+**Upload Drawer** (`UploadDrawer`): Side panel for individual poster uploads; pre-fills from context. Uses `conn.creatorId` directly.
 
 ## My Media
 
-`/my-media` (`web/src/app/my-media/MyMediaContent.tsx`) shows the user's media server library (Plex/Jellyfin). It fetches from `web/src/lib/media-server.ts`.
+`/my-media` (`web/src/app/my-media/MyMediaContent.tsx`) shows the user's media server library (Plex/Jellyfin).
 
-**Navigation**: Sidebar with Collections / Movies / TV Shows. Drill-down: collection → children movies; show → seasons; season → episodes (16:9 aspect). A–Z rail on right edge for alphabetical jump.
+**Navigation**: Sidebar with Collections / Movies / TV Shows. Drill-down: collection → movies; show → seasons; season → episodes (16:9 aspect). A–Z rail on right edge.
 
-**Missing thumbnails**: If a media server thumbnail 404s, `onImageError` sets the item ID in `failedThumbs: Set<string>`. Cards then show: grey placeholder (no `<img>` rendered), MISSING chip in red, and a `⋮` "Retry download" menu top-right. Retrying removes from `failedThumbs`; if still 404, `onImageError` fires again and MISSING re-appears.
+**Missing thumbnails**: If a media server thumbnail 404s, `onImageError` sets the item ID in `failedThumbs: Set<string>`. Cards then show: grey placeholder, MISSING chip, and a `⋮` "Retry download" menu.
 
-**Critical pattern — avoid remount flash**: `LetterGroup`, `BackButton`, and `CardRetryMenu` are defined **outside** `MyMediaContent`. If they were inside, every `setFailedThumbs` call would create a new component type, causing full subtree remount and resetting all internal image state (endless flash loop). This is the single most important architectural rule in this file.
+**Critical pattern**: `LetterGroup`, `BackButton`, and `CardRetryMenu` are defined **outside** `MyMediaContent`. If inside, every `setFailedThumbs` call creates a new component type → React unmounts/remounts → endless flash loop.
 
-**Passing failure to mosaic cards**: `CollectionCard` receives `coverUrls: []` and `TVShowCard` receives `coverPreviews: []` when `failedThumbs.has(id)` — this prevents `MosaicBox` from rendering any `<img>` elements at all.
+**Mosaic cards**: `CollectionCard` receives `coverUrls: []` and `TVShowCard` receives `coverPreviews: []` when `failedThumbs.has(id)` — prevents `MosaicBox` rendering any `<img>` elements.
 
 ## Git
 
@@ -144,8 +209,7 @@ The Studio (`/studio`) is a creator workspace built in `web/src/app/studio/Studi
 ## Notes
 
 - Project is early-stage / beta; protocol marked DRAFT
-- This is a local dev environment — no production deployment yet
-- The `MEMORY.md` file has running notes on build status
+- Local dev environment only — no production deployment yet
 
 ---
 
@@ -193,7 +257,6 @@ The Studio (`/studio`) is a creator workspace built in `web/src/app/studio/Studi
 - [ ] Creator dashboard / library page (list, edit, delete own posters)
 - [ ] Bulk upload support
 - [ ] Proper error messages from backend surfaced cleanly in the upload UI
-- [ ] Settings page: connect/disconnect node, change display name
 
 ### 📡 Protocol
 - [ ] Implement `POST /v1/keys/{key_id}:unwrap` on reference-node (premium blob key delivery)

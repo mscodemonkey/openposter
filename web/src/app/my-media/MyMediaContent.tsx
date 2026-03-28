@@ -4,11 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Snackbar from "@mui/material/Snackbar";
 import CircularProgress from "@mui/material/CircularProgress";
-import Divider from "@mui/material/Divider";
+
 
 import { POSTER_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
 import LinearProgress from "@mui/material/LinearProgress";
@@ -23,12 +27,16 @@ import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
+import { alpha } from "@mui/material/styles";
+
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import MovieOutlinedIcon from "@mui/icons-material/MovieOutlined";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 
+import PlexMark from "@/components/PlexMark";
 import ArtworkMetadataTooltip from "@/components/ArtworkMetadataTooltip";
 import type { ArtworkMeta } from "@/components/ArtworkMetadataTooltip";
 import PosterCard from "@/components/PosterCard";
@@ -42,6 +50,8 @@ import type { PosterEntry } from "@/lib/types";
 import { loadCreatorConnection } from "@/lib/storage";
 import { fetchMediaLibrary, fetchMediaChildren, thumbUrl } from "@/lib/media-server";
 import type { MediaItem, MediaLibrary } from "@/lib/media-server";
+import { listMediaServers } from "@/lib/media-servers";
+import type { MediaServerConfig } from "@/lib/media-servers";
 import { applyToPlexPoster } from "@/lib/plex";
 import { fetchPosterFromNode, getTrackedArtwork, runArtworkUpdateCheck, untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork, UpdateProgress } from "@/lib/artwork-tracking";
@@ -54,6 +64,8 @@ import type { ThemeSubscription } from "@/lib/subscriptions";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const RAIL_LETTERS = ["#", ...ALPHABET];
+// Must match scrollMarginTop on az-* anchor elements in LetterGroup
+const AZ_SCROLL_MARGIN = 80;
 
 function sortKey(title: string): string {
   return title.replace(/^(the|a|an)\s+/i, "").trim().toLowerCase();
@@ -112,22 +124,31 @@ function AZRail({
         if (!available.has(letter)) continue;
         const el = document.getElementById(`az-${letter}`);
         if (!el) continue;
-        // A letter is "current" if its anchor has reached within 8px of the container top
-        if (el.getBoundingClientRect().top <= containerTop + 8) {
+        // Active = last anchor whose content (anchor + scrollMarginTop offset) has reached the top
+        if (el.getBoundingClientRect().top <= containerTop + AZ_SCROLL_MARGIN + 8) {
           found = letter;
         }
       }
       setCurrent(found);
     };
 
-    container.addEventListener("scroll", updateCurrent, { passive: true });
+    // Throttle via rAF — one update per animation frame, prevents flicker
+    let rafId: number | null = null;
+    const handleScroll = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => { rafId = null; updateCurrent(); });
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
     updateCurrent();
-    return () => container.removeEventListener("scroll", updateCurrent);
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, [available, scrollContainerRef]);
 
+  // Rule 6 Option A: just scroll — let scroll position drive the highlight, no optimistic state
   function jump(letter: string) {
-    // Optimistically set current so the highlight is immediate on click
-    setCurrent(letter);
     document.getElementById(`az-${letter}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -202,7 +223,9 @@ function makePoster(item: MediaItem, src: string, creatorName = ""): PosterEntry
   };
 }
 
-function makeCollectionGroup(item: MediaItem, src: string, failed = false, creatorName = ""): CollectionGroup {
+function makeCollectionGroup(item: MediaItem, src: string, failed = false, creatorName = "", movieCount?: number): CollectionGroup {
+  const mc = movieCount ?? item.leaf_count ?? 0;
+  const tvShowCount = Math.max(0, (item.leaf_count ?? 0) - mc);
   return {
     key: item.id,
     title: item.title,
@@ -212,7 +235,8 @@ function makeCollectionGroup(item: MediaItem, src: string, failed = false, creat
     creatorName,
     coverUrls: failed ? [] : [src],
     collectionCount: 1,
-    movieCount: item.leaf_count ?? 0,
+    movieCount: mc,
+    tvShowCount: tvShowCount > 0 ? tvShowCount : undefined,
   };
 }
 
@@ -239,7 +263,7 @@ type Nav =
   | { view: "collections" | "movies" | "shows" }
   | { view: "collection" | "show"; id: string; title: string }
   | { view: "season"; showId: string; showTitle: string; showTmdbId: number | null; seasonId: string; seasonIndex: number | null; title: string }
-  | { view: "movie"; item: MediaItem };
+  | { view: "movie"; item: MediaItem; fromCollectionId?: string; fromCollectionTitle?: string };
 
 // ---------------------------------------------------------------------------
 // URL ↔ Nav serialisation (module-level, no hooks)
@@ -270,6 +294,7 @@ function navFromParams(p: RawSearchParams): Nav {
     case "movie": {
       const yearStr = p.get("year");
       const tmdbStr = p.get("tmdbId");
+      const idsStr = p.get("collectionIds");
       return {
         view: "movie",
         item: {
@@ -281,7 +306,10 @@ function navFromParams(p: RawSearchParams): Nav {
           index: null,
           leaf_count: null,
           child_count: null,
+          collection_ids: idsStr ? JSON.parse(idsStr) as string[] : undefined,
         },
+        fromCollectionId: p.get("fromCollectionId") ?? undefined,
+        fromCollectionTitle: p.get("fromCollectionTitle") ?? undefined,
       };
     }
     default: return { view: "movies" };
@@ -317,6 +345,9 @@ function navToSearch(nav: Nav): string {
       p.set("title", nav.item.title);
       if (nav.item.year != null) p.set("year", String(nav.item.year));
       if (nav.item.tmdb_id != null) p.set("tmdbId", String(nav.item.tmdb_id));
+      if (nav.item.collection_ids?.length) p.set("collectionIds", JSON.stringify(nav.item.collection_ids));
+      if (nav.fromCollectionId) p.set("fromCollectionId", nav.fromCollectionId);
+      if (nav.fromCollectionTitle) p.set("fromCollectionTitle", nav.fromCollectionTitle);
       break;
   }
   const str = p.toString();
@@ -339,10 +370,10 @@ function LetterGroup<T extends MediaItem>({
   if (items.length === 0) return <Typography color="text.secondary">{noItemsText}</Typography>;
   return (
     <Stack spacing={1}>
-      {groupByLetter(items).map(([letter, group]) => (
-        <Box key={letter}>
-          <Box id={`az-${letter}`} sx={{ scrollMarginTop: 80 }} />
-          <Typography variant="overline" color="text.disabled" sx={{ fontSize: "0.65rem" }}>{letter}</Typography>
+      {groupByLetter(items).map(([letter, group], idx) => (
+        <Box key={letter} sx={{ pt: idx === 0 ? 0 : "20px" }}>
+          <Box id={`az-${letter}`} sx={{ scrollMarginTop: AZ_SCROLL_MARGIN }} />
+          <Typography variant="overline" color="text.primary" sx={{ fontSize: "1.1rem", fontWeight: 700, lineHeight: 1, display: "block", mb: 2 }}>{letter}</Typography>
           <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
             {group.map((item) => (
               <Box key={item.id}>
@@ -423,6 +454,7 @@ function CardManageMenu({ onReset }: { onReset: () => void }) {
 
 export default function MyMediaContent() {
   const t = useTranslations("myMedia");
+  const tms = useTranslations("mediaServers");
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -437,8 +469,10 @@ export default function MyMediaContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conn, setConn] = useState<{ nodeUrl: string; adminToken: string } | null>(null);
+  const [servers, setServers] = useState<MediaServerConfig[]>([]);
 
   const [children, setChildren] = useState<MediaItem[]>([]);
+  const [childrenForId, setChildrenForId] = useState<string | null>(null);
   const [childrenLoading, setChildrenLoading] = useState(false);
   const [failedThumbs, setFailedThumbs] = useState<Set<string>>(new Set());
   const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
@@ -486,8 +520,10 @@ export default function MyMediaContent() {
     Promise.all([
       fetchMediaLibrary(),
       getTrackedArtwork(connection.nodeUrl, connection.adminToken),
+      listMediaServers(connection.nodeUrl, connection.adminToken).catch(() => [] as typeof servers),
     ])
-      .then(([lib, tracked]) => {
+      .then(([lib, tracked, srvList]) => {
+        setServers(srvList);
         setLibrary(lib);
         const artworkMap = new Map(tracked.map((t) => [t.media_item_id, t]));
         setTrackedArtwork(artworkMap);
@@ -553,14 +589,25 @@ export default function MyMediaContent() {
     const id = itemId;
     setChildrenLoading(true);
     fetchMediaChildren(conn.nodeUrl, conn.adminToken, id)
-      .then(setChildren)
-      .catch(() => setChildren([]))
+      .then((items) => { setChildren(items); setChildrenForId(id); })
+      .catch(() => { setChildren([]); setChildrenForId(id); })
       .finally(() => setChildrenLoading(false));
   }, [nav, conn]);
 
   const sortedMovies = useMemo(() => sortedByTitle(library?.movies ?? []), [library]);
   const sortedShows = useMemo(() => sortedByTitle(library?.shows ?? []), [library]);
   const sortedCollections = useMemo(() => sortedByTitle(library?.collections ?? []), [library]);
+
+  // Per-collection movie count derived from movies' collection_ids arrays.
+  const collectionMovieCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const movie of library?.movies ?? []) {
+      for (const cid of movie.collection_ids ?? []) {
+        counts.set(cid, (counts.get(cid) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [library?.movies]);
   const subs = useMemo(() => getSubscriptions(), []);
   const subThemeNames = useMemo(() => new Map(subs.map((s: ThemeSubscription) => [s.themeId, s.themeName])), [subs]);
 
@@ -590,6 +637,14 @@ export default function MyMediaContent() {
     );
   }
   if (error) return <Alert severity="error" sx={{ m: 3 }}>{error}</Alert>;
+  if (servers.length === 0) {
+    return (
+      <Stack alignItems="center" spacing={2} sx={{ py: 8, px: 3, textAlign: "center" }}>
+        <Typography color="text.secondary">{tms("noServers")}</Typography>
+        <Button variant="outlined" href="/settings">{t("goToSettings")}</Button>
+      </Stack>
+    );
+  }
   if (!library) return <Alert severity="warning" sx={{ m: 3 }}>{t("notConfigured")}</Alert>;
 
   // ---------------------------------------------------------------------------
@@ -639,6 +694,7 @@ export default function MyMediaContent() {
                 );
               }}
             />
+            <Box sx={{ height: "100vh", flexShrink: 0 }} aria-hidden="true" />
           </>
         );
 
@@ -663,6 +719,7 @@ export default function MyMediaContent() {
                 );
               }}
             />
+            <Box sx={{ height: "100vh", flexShrink: 0 }} aria-hidden="true" />
           </>
         );
 
@@ -680,7 +737,7 @@ export default function MyMediaContent() {
                 const meta = makeArtworkMeta(tracked, subThemeNames);
                 return (
                   <CollectionCard
-                    group={makeCollectionGroup(item, src(item), failed, tracked?.creator_display_name ?? undefined)}
+                    group={makeCollectionGroup({ ...item, title: item.title.replace(/\s+Collection$/i, "") }, src(item), failed, tracked?.creator_display_name ?? undefined, collectionMovieCounts.get(item.id))}
                     onClick={() => navigate({ view: "collection", id: item.id, title: item.title })}
                     chip={failed ? missingChip : undefined}
                     managed={!!tracked}
@@ -691,6 +748,7 @@ export default function MyMediaContent() {
                 );
               }}
             />
+            <Box sx={{ height: "100vh", flexShrink: 0 }} aria-hidden="true" />
           </>
         );
 
@@ -699,7 +757,13 @@ export default function MyMediaContent() {
           <MovieMediaDetail
             item={nav.item}
             conn={conn!}
-            onBack={() => navigate({ view: "movies" })}
+            onBack={nav.fromCollectionId
+              ? () => navigate({ view: "collection", id: nav.fromCollectionId!, title: nav.fromCollectionTitle ?? "" })
+              : () => navigate({ view: "movies" })}
+            collections={sortedCollections}
+            onNavigateToCollection={(id, title) => navigate({ view: "collection", id, title })}
+            fromCollectionTitle={nav.fromCollectionTitle}
+            serverName={servers[0]?.name}
           />
         );
 
@@ -711,6 +775,7 @@ export default function MyMediaContent() {
             conn={conn!}
             onBack={() => navigate({ view: "collections" })}
             movies={children}
+            childrenForId={childrenForId}
             childrenLoading={childrenLoading}
             failedThumbs={failedThumbs}
             trackedArtwork={trackedArtwork}
@@ -718,6 +783,8 @@ export default function MyMediaContent() {
             onMarkRetry={markRetry}
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
             onTrack={(id, artwork) => setTrackedArtwork((prev) => new Map(prev).set(id, artwork))}
+            onNavigateToMovie={(movie) => navigate({ view: "movie", item: movie, fromCollectionId: nav.id, fromCollectionTitle: nav.title })}
+            serverName={servers[0]?.name}
           />
         ) : <Typography color="text.secondary">{noItems}</Typography>;
       }
@@ -738,6 +805,7 @@ export default function MyMediaContent() {
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
             onTrack={(id, artwork) => setTrackedArtwork((prev) => new Map(prev).set(id, artwork))}
             onViewEpisodes={(season) => navigate({ view: "season", showId: nav.id, showTitle: nav.title, showTmdbId: showItem.tmdb_id, seasonId: season.id, seasonIndex: season.index, title: season.title })}
+            serverName={servers[0]?.name}
           />
         ) : <Typography color="text.secondary">{noItems}</Typography>;
       }
@@ -749,9 +817,10 @@ export default function MyMediaContent() {
             episodesLoading={childrenLoading}
             seasonTitle={nav.title}
             seasonIndex={nav.seasonIndex}
-            showId={nav.showId}
             showTitle={nav.showTitle}
             showTmdbId={nav.showTmdbId}
+            seasonId={nav.seasonId}
+            showId={nav.showId}
             conn={conn!}
             failedThumbs={failedThumbs}
             trackedArtwork={trackedArtwork}
@@ -760,6 +829,7 @@ export default function MyMediaContent() {
             onMarkRetry={markRetry}
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
             onTrack={(id, artwork) => setTrackedArtwork((prev) => new Map(prev).set(id, artwork))}
+            serverName={servers[0]?.name}
           />
         );
     }
@@ -767,56 +837,111 @@ export default function MyMediaContent() {
 
   return (
     <>
-    <Box sx={{ display: "flex", height: "calc(100vh - 64px)", overflow: "hidden" }}>
-      {/* Sidebar */}
+    <Box sx={{ position: "relative", height: "calc(100vh - 64px)", overflow: "hidden" }}>
+      {/* Sidebar — floats over the content as a frosted glass overlay */}
       <Box
         component="nav"
         sx={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          bottom: 0,
           width: 220,
-          flexShrink: 0,
           display: { xs: "none", md: "block" },
           borderRight: 1,
           borderColor: "divider",
-          pt: 2,
           overflowY: "auto",
+          bgcolor: (theme) => alpha(theme.palette.background.default, 0.45),
+          backdropFilter: "blur(12px)",
+          zIndex: 1,
         }}
       >
-        <Typography variant="overline" sx={{ px: 2, display: "block", color: "text.secondary", letterSpacing: 1.5 }}>
-          {t("byType")}
-        </Typography>
-        <List dense disablePadding>
-          {[
-            { key: "collections", label: t("collections"), icon: <CollectionsOutlinedIcon fontSize="small" /> },
-            { key: "movies",      label: t("movies"),      icon: <MovieOutlinedIcon fontSize="small" /> },
-            { key: "shows",       label: t("tvShows"),     icon: <TvOutlinedIcon fontSize="small" /> },
-          ].map(({ key, label, icon }) => (
-            <ListItem key={key} disablePadding>
-              <ListItemButton
-                selected={sidebarActive === key}
-                onClick={() => navigate({ view: key as "collections" | "movies" | "shows" })}
-              >
-                <ListItemIcon sx={{ minWidth: 36 }}>
-                  {icon}
-                </ListItemIcon>
-                <ListItemText
-                  primary={label}
-                  slotProps={{
-                    primary: {
-                      variant: "body2",
-                      color: sidebarActive === key ? "primary" : "text.primary",
-                      fontWeight: sidebarActive === key ? 600 : 400,
-                    },
-                  }}
-                />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
-        <Divider sx={{ mt: 1 }} />
+        <Box sx={{ pt: "5px" }} />
+        {servers.map((srv) => (
+          <Accordion
+            key={srv.id}
+            defaultExpanded
+            disableGutters
+            elevation={0}
+            square
+            sx={{
+              bgcolor: "transparent",
+              "&:before": { display: "none" },
+              borderBottom: 1,
+              borderColor: "divider",
+            }}
+          >
+            <AccordionSummary
+              expandIcon={<ExpandMoreIcon sx={{ fontSize: "1rem" }} />}
+              sx={{
+                minHeight: 36,
+                pl: 2,
+                pr: 1,
+                "& .MuiAccordionSummary-content": { my: 0.5, alignItems: "center", ml: 0, gap: 0 },
+              }}
+            >
+              {/* minWidth: 36 + justifyContent: center mirrors ListItemIcon exactly */}
+              <Box sx={{ minWidth: 36, display: "flex", alignItems: "center" }}>
+                {srv.type === "plex" ? (
+                  <PlexMark height={20} style={{ marginLeft: 5 }} />
+                ) : (
+                  <Box
+                    sx={{
+                      bgcolor: "#00a4dc",
+                      color: "#fff",
+                      fontWeight: 900,
+                      fontSize: "0.55rem",
+                      px: 0.6,
+                      py: 0.15,
+                      borderRadius: 0.5,
+                      letterSpacing: "0.05em",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    JF
+                  </Box>
+                )}
+              </Box>
+              <Typography noWrap sx={{ fontSize: "0.7rem", fontWeight: 700, color: "text.secondary", letterSpacing: 0.5, textTransform: "uppercase" }}>
+                {srv.name}
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ p: 0 }}>
+              <List dense disablePadding>
+                {[
+                  { key: "collections", label: t("collections"), icon: <CollectionsOutlinedIcon fontSize="small" /> },
+                  { key: "movies",      label: t("movies"),      icon: <MovieOutlinedIcon fontSize="small" /> },
+                  { key: "shows",       label: t("tvShows"),     icon: <TvOutlinedIcon fontSize="small" /> },
+                ].map(({ key, label, icon }) => (
+                  <ListItem key={key} disablePadding>
+                    <ListItemButton
+                      selected={sidebarActive === key}
+                      onClick={() => navigate({ view: key as "collections" | "movies" | "shows" })}
+                    >
+                      <ListItemIcon sx={{ minWidth: 36 }}>
+                        {icon}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={label}
+                        slotProps={{
+                          primary: {
+                            variant: "body2",
+                            color: sidebarActive === key ? "primary" : "text.primary",
+                            fontWeight: sidebarActive === key ? 600 : 400,
+                          },
+                        }}
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </List>
+            </AccordionDetails>
+          </Accordion>
+        ))}
       </Box>
 
-      {/* Main content */}
-      <Box ref={scrollContainerRef} sx={{ flex: 1, p: { xs: 2, md: 3 }, pr: { md: 5 }, overflowY: "auto" }}>
+      {/* Main content — full width, left padding clears the sidebar */}
+      <Box ref={scrollContainerRef} sx={{ height: "100%", overflowY: "auto", p: { xs: 2, md: 3 }, pl: { md: "232px" }, pr: { md: 5 } }}>
         {updateProgress && (
           <Box sx={{ mb: 2 }}>
             <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>

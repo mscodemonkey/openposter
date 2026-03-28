@@ -11,6 +11,7 @@ services:
       - OPENPOSTER_ADMIN_TOKEN=dev-admin
       - OPENPOSTER_ALLOW_PRIVATE_NODES=true
       - OPENPOSTER_CORS_ORIGINS=http://localhost:3000
+      - OPENPOSTER_DEV_RESET_TOKEN=dev-reset
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read(); print('ok')"]
@@ -110,6 +111,7 @@ services:
       - OPENPOSTER_ISSUER_JWT_SECRET=dev-jwt-secret-change-me
       - OPENPOSTER_ISSUER_JWT_ISSUER=openposter-issuer
       - OPENPOSTER_ISSUER_JWT_EXP_SECONDS=31536000
+      - OPENPOSTER_DEV_RESET_TOKEN=dev-reset
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8085/v1/health').read(); print('ok')"]

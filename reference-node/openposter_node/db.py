@@ -61,6 +61,10 @@ class Poster(Base):
     attribution_redistribution: Mapped[str] = mapped_column(String)
     attribution_source_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Artwork kind: "poster" | "background" | "logo" | "square" | "banner" | "thumb"
+    # NULL in existing rows is treated as "poster" by the API.
+    kind: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # Optional creator-authored links (JSON array)
     links_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -126,6 +130,37 @@ class AppliedArtwork(Base):
     auto_update: Mapped[bool] = mapped_column(Boolean, default=False)
     plex_label: Mapped[str | None] = mapped_column(String, nullable=True)  # label we added (for removal)
     creator_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class PlexLibraryItem(Base):
+    """Local mirror of a Plex library item (movie/show/collection/season/episode)."""
+
+    __tablename__ = "plex_library_items"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)        # Plex ratingKey
+    server_id: Mapped[str] = mapped_column(String, index=True, default="default")  # media server config id
+    title: Mapped[str] = mapped_column(String)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    type: Mapped[str] = mapped_column(String, index=True)             # movie|show|collection|season|episode
+    item_index: Mapped[int | None] = mapped_column(Integer, nullable=True)  # season/episode number
+    tmdb_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    leaf_count: Mapped[int | None] = mapped_column(Integer, nullable=True)   # episode count
+    child_count: Mapped[int | None] = mapped_column(Integer, nullable=True)  # season count
+    parent_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)  # parent ratingKey
+    collection_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list of collection ratingKeys
+    synced_at: Mapped[str] = mapped_column(String)                    # RFC3339
+
+
+class PlexSyncState(Base):
+    """One row per media server tracking the state of the most recent sync."""
+
+    __tablename__ = "plex_sync_state"
+
+    server_id: Mapped[str] = mapped_column(String, primary_key=True, default="default")
+    last_synced_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_syncing: Mapped[bool] = mapped_column(Boolean, default=False)
+    current_phase: Mapped[str | None] = mapped_column(String, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Peer(Base):

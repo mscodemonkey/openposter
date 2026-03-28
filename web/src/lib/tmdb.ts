@@ -10,6 +10,7 @@ export type TmdbMovie = {
 
 /** Full movie detail from TMDB — includes belongs_to_collection */
 export type TmdbMovieDetail = TmdbMovie & {
+  backdrop_path?: string | null;
   belongs_to_collection?: {
     id: number;
     name: string;

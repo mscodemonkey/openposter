@@ -7,10 +7,10 @@ import Link from "next/link";
 
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
-import Chip from "@mui/material/Chip";
+import { CardChip } from "@/components/MediaCard";
 import Stack from "@mui/material/Stack";
 
-import { POSTER_GRID_COLS, EPISODE_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
+import { POSTER_GRID_COLS, EPISODE_GRID_COLS, GRID_GAP, CHIP_HEIGHT } from "@/lib/grid-sizes";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
@@ -44,6 +44,7 @@ export type CollectionGroup = {
   coverUrls: string[];
   collectionCount: number;
   movieCount: number;
+  tvShowCount?: number;
 };
 
 export type TVShowGroup = {
@@ -386,32 +387,38 @@ export function CollectionCard({
   group: CollectionGroup;
   onClick?: () => void;
   onImageError?: () => void;
-  chip?: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" };
+  chip?: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" | "info" };
   managed?: boolean;
   menuSlot?: React.ReactNode;
   imageWrapper?: (img: React.ReactElement) => React.ReactElement;
 }) {
   const t = useTranslations("sections");
   const href = `/movie/${group.collectionTmdbId}/boxset`;
-  const chipProps = chip ?? { label: t("movieBoxSet"), color: "primary" as const };
+  const chipProps = chip ?? { label: t("movieBoxSet"), color: "error" as const };
+  const countParts = [
+    group.movieCount > 0 ? t("movieCount", { count: group.movieCount }) : null,
+    (group.tvShowCount ?? 0) > 0 ? t("tvShowCount", { count: group.tvShowCount ?? 0 }) : null,
+  ].filter(Boolean);
   const subtitleParts = [
-    group.movieCount > 0 ? `${group.movieCount} movies` : null,
+    countParts.length > 0 ? countParts.join(", ") : null,
     group.creatorName || null,
   ].filter(Boolean);
   const subtitleLine = subtitleParts.join(" · ");
   const imageBox = (
     <Box sx={{ position: "relative" }}>
       <MosaicBox previews={group.coverUrls} aspectRatio="2 / 3" alt={group.title} onImageError={onImageError} />
-      <Chip label={chipProps.label} size="small" color={chipProps.color} sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none", opacity: 0.9 }} />
+      <Box sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none", opacity: 0.9 }}>
+        <CardChip label={chipProps.label} color={chipProps.color} />
+      </Box>
       {managed && (
-        <Box sx={{ position: "absolute", top: 10, right: 6, pointerEvents: "none" }}>
+        <Box sx={{ position: "absolute", top: 0, right: 6, pointerEvents: "none" }}>
           <OPLogo size={20} />
         </Box>
       )}
     </Box>
   );
   return (
-    <Card sx={{ height: "100%", border: 0, boxShadow: "none", bgcolor: "transparent" }}>
+    <Card sx={{ height: "100%", border: 0, boxShadow: "none", bgcolor: "transparent", backgroundImage: "none" }}>
       <Link href={href} style={{ display: "block" }} aria-label={group.title} onClick={onClick ? (e) => { e.preventDefault(); onClick(); } : undefined}>
         {imageWrapper ? imageWrapper(imageBox) : imageBox}
       </Link>
@@ -434,7 +441,7 @@ export function CollectionCard({
   );
 }
 
-export function TVShowCard({ group, onClick, onImageError, chip, menuSlot }: { group: TVShowGroup; onClick?: () => void; onImageError?: () => void; chip?: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" }; menuSlot?: React.ReactNode }) {
+export function TVShowCard({ group, onClick, onImageError, chip, menuSlot }: { group: TVShowGroup; onClick?: () => void; onImageError?: () => void; chip?: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" | "info" }; menuSlot?: React.ReactNode }) {
   const t = useTranslations("sections");
   const n = group.coverPreviews.length;
   const href = `/tv/${group.showTmdbId}/boxset`;
@@ -447,7 +454,7 @@ export function TVShowCard({ group, onClick, onImageError, chip, menuSlot }: { g
   }
 
   return (
-    <Card sx={{ height: "100%", border: 0, boxShadow: "none", bgcolor: "transparent" }}>
+    <Card sx={{ height: "100%", border: 0, boxShadow: "none", bgcolor: "transparent", backgroundImage: "none" }}>
       <Link href={href} style={{ display: "block" }} aria-label={group.title} onClick={onClick ? (e) => { e.preventDefault(); onClick(); } : undefined}>
         <Box sx={{ position: "relative" }}>
           <Box sx={{ display: "grid", gridTemplateColumns: n >= 2 ? "1fr 1fr" : "1fr", aspectRatio: "2 / 3", overflow: "hidden", bgcolor: "action.hover" }}>
@@ -459,7 +466,9 @@ export function TVShowCard({ group, onClick, onImageError, chip, menuSlot }: { g
               )
             ))}
           </Box>
-          <Chip label={chipProps.label} size="small" color={chipProps.color} sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: "none", opacity: 0.9 }} />
+          <Box sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none", opacity: 0.9 }}>
+            <CardChip label={chipProps.label} color={chipProps.color} />
+          </Box>
           {(group.seasonCount > 0 || group.episodeCount > 0) && (
             <Box sx={{ position: "absolute", bottom: 8, right: 8, display: "flex", flexDirection: "row", alignItems: "center", gap: 0.5, pointerEvents: "none" }}>
               {group.seasonCount > 0 && <CountBadge icon={<TvOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.seasonCount} tooltip={t("seasonPostersIncluded", { count: group.seasonCount })} />}
@@ -496,7 +505,9 @@ function EpisodeSeasonCard({ group }: { group: EpisodeSeasonGroup }) {
         <Box sx={{ position: "relative" }}>
           <MosaicBox previews={group.episodePreviews} aspectRatio="16 / 9" alt={`${group.showTitle || t("unknownShow")} S${String(group.seasonNumber).padStart(2, "0")}`} />
           <Tooltip title={group.seasonTitle ?? ""} placement="right" disableHoverListener={!group.seasonTitle}>
-            <Chip label={t("seasonLabel", { number: String(group.seasonNumber).padStart(2, "0") })} size="small" color="secondary" sx={{ position: "absolute", top: 10, left: 0, fontWeight: 700, fontSize: "0.6rem", height: 20, borderRadius: "0 6px 6px 0", pointerEvents: group.seasonTitle ? "auto" : "none", opacity: 0.9 }} />
+            <Box sx={{ position: "absolute", top: 0, left: 0, pointerEvents: group.seasonTitle ? "auto" : "none", opacity: 0.9 }}>
+              <CardChip label={t("seasonLabel", { number: String(group.seasonNumber).padStart(2, "0") })} color="info" />
+            </Box>
           </Tooltip>
           <Box sx={{ position: "absolute", bottom: 8, right: 8, pointerEvents: "none" }}>
             <CountBadge icon={<DvrOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.episodeCount} tooltip={t("episodeCardsIncluded", { count: group.episodeCount })} />

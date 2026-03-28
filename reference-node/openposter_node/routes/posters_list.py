@@ -32,6 +32,7 @@ async def list_posters(
     limit: int = Query(50, ge=1, le=200),
     cursor: str | None = Query(None),
     creator_id: str | None = Query(None),
+    kind: str | None = Query(None),
 ):
     """List posters on this node.
 
@@ -48,6 +49,8 @@ async def list_posters(
         stmt = select(Poster).where(Poster.deleted_at.is_(None))
         if creator_id:
             stmt = stmt.where(Poster.creator_id == creator_id)
+        if kind:
+            stmt = stmt.where(Poster.kind == kind)
 
         if since_updated_at:
             stmt = stmt.where(
@@ -92,6 +95,7 @@ async def list_posters(
 
         entry = {
             "poster_id": p.poster_id,
+            "kind": p.kind or "poster",
             "published": bool(p.published),
             "media": media,
             "creator": {

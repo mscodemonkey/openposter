@@ -12,6 +12,8 @@ export type CreatorTheme = {
 
 export type PosterEntry = {
   poster_id: string;
+  /** Artwork kind: "poster" | "background" | "logo" | "banner" | "thumb". Defaults to "poster" if absent. */
+  kind?: string;
   /** True = published (visible to indexers/public), false/undefined = draft */
   published?: boolean;
   media: {

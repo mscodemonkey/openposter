@@ -31,6 +31,22 @@ async def health():
     return {"ok": True}
 
 
+@app.get("/dev/reset")
+async def dev_reset(request: Request, token: str = ""):
+    """Wipe all issuer data for local testing. Only works when OPENPOSTER_DEV_RESET_TOKEN is set."""
+    import os
+    from sqlalchemy import text
+    expected = os.environ.get("OPENPOSTER_DEV_RESET_TOKEN", "")
+    if not expected or token != expected:
+        return JSONResponse(status_code=404, content={"error": {"code": "not_found", "message": "not found"}})
+    session = request.app.state.Session
+    async with session() as s:
+        for table in ("url_claims", "node_admins", "node_urls", "nodes", "creator_handles", "users"):
+            await s.execute(text(f"DELETE FROM {table}"))
+        await s.commit()
+    return {"ok": True, "wiped": True}
+
+
 attach_lifecycle(app)
 
 

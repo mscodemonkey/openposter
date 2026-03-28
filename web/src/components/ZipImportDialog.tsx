@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
 
 import Alert from "@mui/material/Alert";
@@ -21,12 +21,19 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
+import Checkbox from "@mui/material/Checkbox";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import UnarchiveOutlinedIcon from "@mui/icons-material/UnarchiveOutlined";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 
 import { generatePreview } from "@/app/studio/UploadDrawer";
+import type { PosterEntry, CreatorTheme } from "@/lib/types";
 
 // ─── Native ZIP parser (no external dependency) ───────────────────────────────
 
@@ -128,7 +135,20 @@ type ImportItem = {
 
 type SkippedItem = { filename: string; reason: string };
 
-type Phase = "select" | "parsing" | "preview" | "importing" | "done";
+type Phase = "select" | "parsing" | "preview" | "confirm" | "importing" | "done";
+
+// Matches the colour scheme used by PosterCard
+const KIND_CHIP: Record<string, { label: string; color: "error" | "success" | "warning" | "info" | "primary" | "default" }> = {
+  collectionPoster:  { label: "COLLECTION",  color: "error" },
+  collectionBackdrop:{ label: "BACKDROP",    color: "warning" },
+  movie:             { label: "MOVIE",        color: "success" },
+  showPoster:        { label: "TV SHOW",      color: "error" },
+  showBackdrop:      { label: "BACKDROP",     color: "warning" },
+  season:            { label: "SEASON",       color: "info" },
+  episode:           { label: "EPISODE",      color: "success" },
+};
+
+type ConflictInfo = { existingThemeId: string; isCrossTheme: boolean };
 
 // ─── Filename parsing ─────────────────────────────────────────────────────────
 
@@ -324,6 +344,29 @@ function mapForShow(
   return { item: null, skip: { filename, reason: "collection/movie content skipped in show context" } };
 }
 
+// ─── Conflict detection ───────────────────────────────────────────────────────
+
+function detectConflict(
+  item: ImportItem,
+  allPosters: PosterEntry[],
+  targetThemeId: string,
+): ConflictInfo | null {
+  const k = item.kind;
+  const match = allPosters.find((p) => {
+    if (k.tag === "collectionPoster") return p.media.type === "collection" && p.media.tmdb_id === k.tmdbId;
+    if (k.tag === "collectionBackdrop") return p.media.type === "backdrop" && p.media.tmdb_id === k.tmdbId;
+    if (k.tag === "movie") return p.media.type === "movie" && p.media.tmdb_id === k.tmdbId;
+    if (k.tag === "showPoster") return p.media.type === "show" && p.media.tmdb_id === k.tmdbId;
+    if (k.tag === "showBackdrop") return p.media.type === "backdrop" && (p.media as { show_tmdb_id?: number }).show_tmdb_id === k.showTmdbId;
+    if (k.tag === "season") return p.media.type === "season" && (p.media as { show_tmdb_id?: number }).show_tmdb_id === k.showTmdbId && p.media.season_number === k.seasonNumber;
+    if (k.tag === "episode") return p.media.type === "episode" && (p.media as { show_tmdb_id?: number }).show_tmdb_id === k.showTmdbId && p.media.season_number === k.seasonNumber && p.media.episode_number === k.episodeNumber;
+    return false;
+  });
+  if (!match) return null;
+  const existingThemeId = match.media.theme_id ?? "";
+  return { existingThemeId, isCrossTheme: existingThemeId !== targetThemeId };
+}
+
 // ─── Upload ───────────────────────────────────────────────────────────────────
 
 const KIND_ORDER = ["collectionPoster", "collectionBackdrop", "showPoster", "showBackdrop", "season", "episode", "movie"];
@@ -332,17 +375,13 @@ async function uploadItem(
   item: ImportItem,
   conn: { nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string },
   themeId?: string,
+  force?: boolean,
 ): Promise<void> {
   const fullFile = new File([item.blob], item.filename, { type: "image/jpeg" });
   const preview = await generatePreview(fullFile);
   const form = new FormData();
-  form.append("creator_id", conn.creatorId);
-  form.append("creator_display_name", conn.creatorDisplayName);
-  form.append("published", "false");
-  if (themeId) form.append("theme_id", themeId);
-  form.append("full", fullFile);
-  form.append("preview", preview);
 
+  // All text fields first, then files (python-multipart drops text fields after file parts)
   const k = item.kind;
   if (k.tag === "collectionPoster") {
     form.append("media_type", "collection");
@@ -368,15 +407,28 @@ async function uploadItem(
     form.append("show_tmdb_id", String(k.showTmdbId));
   } else if (k.tag === "season") {
     form.append("media_type", "season");
-    if (k.tmdbId != null) form.append("tmdb_id", String(k.tmdbId));
+    // Use season TMDB ID if available, else fall back to show ID (backend needs a non-null tmdb_id)
+    form.append("tmdb_id", String(k.tmdbId ?? k.showTmdbId));
     form.append("show_tmdb_id", String(k.showTmdbId));
     form.append("season_number", String(k.seasonNumber));
   } else if (k.tag === "episode") {
     form.append("media_type", "episode");
+    // Episodes don't have their own TMDB ID in this context; use show ID as required placeholder
+    form.append("tmdb_id", String(k.showTmdbId));
     form.append("show_tmdb_id", String(k.showTmdbId));
     form.append("season_number", String(k.seasonNumber));
     form.append("episode_number", String(k.episodeNumber));
   }
+
+  form.append("creator_id", conn.creatorId);
+  form.append("creator_display_name", conn.creatorDisplayName);
+  form.append("published", "false");
+  if (themeId) form.append("theme_id", themeId);
+  if (force) form.append("force", "true");
+
+  // Files last (python-multipart drops text fields that come after file parts)
+  form.append("full", fullFile);
+  form.append("preview", preview);
 
   const res = await fetch(`${conn.nodeUrl}/v1/admin/posters`, {
     method: "POST",
@@ -403,9 +455,11 @@ interface ZipImportDialogProps {
   config: ZipImportConfig;
   conn: { nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string } | null;
   onComplete: () => void;
+  allPosters?: PosterEntry[];
+  themes?: CreatorTheme[];
 }
 
-export default function ZipImportDialog({ open, onClose, config, conn, onComplete }: ZipImportDialogProps) {
+export default function ZipImportDialog({ open, onClose, config, conn, onComplete, allPosters = [], themes = [] }: ZipImportDialogProps) {
   const t = useTranslations("studio");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>("select");
@@ -413,6 +467,50 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
   const [skipped, setSkipped] = useState<SkippedItem[]>([]);
   const [doneCount, setDoneCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
+  const [forceSameTheme, setForceSameTheme] = useState(false);
+  const [activeThemeId, setActiveThemeId] = useState<string>(config.themeId ?? "");
+
+  // Keep activeThemeId in sync if config.themeId changes (e.g. dialog reused for a different context)
+  const prevConfigTheme = useRef(config.themeId);
+  if (config.themeId !== prevConfigTheme.current) {
+    prevConfigTheme.current = config.themeId;
+    setActiveThemeId(config.themeId ?? "");
+  }
+
+  const targetThemeId = activeThemeId;
+  const themeName = (id: string) => themes.find((th) => th.theme_id === id)?.name ?? id;
+
+  // Compute per-item conflicts from allPosters
+  const conflictMap = useMemo(() => {
+    const map = new Map<number, ConflictInfo>();
+    items.forEach((item, idx) => {
+      const c = detectConflict(item, allPosters, targetThemeId);
+      if (c) map.set(idx, c);
+    });
+    return map;
+  }, [items, allPosters, targetThemeId]);
+
+  const crossThemeItems = useMemo(() =>
+    items.filter((_, idx) => conflictMap.get(idx)?.isCrossTheme === true),
+  [items, conflictMap]);
+
+  const sameThemeItems = useMemo(() =>
+    items.filter((_, idx) => {
+      const c = conflictMap.get(idx);
+      return c !== undefined && !c.isCrossTheme;
+    }),
+  [items, conflictMap]);
+
+  // All unique existing-theme names for cross-theme conflicts
+  const crossThemeNames = useMemo(() => {
+    const ids = new Set<string>();
+    items.forEach((_, idx) => {
+      const c = conflictMap.get(idx);
+      if (c?.isCrossTheme) ids.add(c.existingThemeId);
+    });
+    return Array.from(ids).map(themeName);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conflictMap]);
 
   function reset() {
     setPhase("select");
@@ -420,6 +518,7 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
     setSkipped([]);
     setDoneCount(0);
     setErrorCount(0);
+    setForceSameTheme(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -472,7 +571,15 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
     }
   }
 
-  async function handleImport() {
+  function requestImport() {
+    if (crossThemeItems.length > 0) {
+      setPhase("confirm");
+    } else {
+      void executeImport();
+    }
+  }
+
+  async function executeImport() {
     if (!conn) return;
     setPhase("importing");
     let done = 0;
@@ -480,8 +587,11 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
 
     for (let i = 0; i < items.length; i++) {
       setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "uploading" } : it));
+      const conflict = conflictMap.get(i);
+      // Force upload if: cross-theme conflict (confirmed by user) OR same-theme and user opted in
+      const force = conflict?.isCrossTheme || (conflict !== undefined && !conflict.isCrossTheme && forceSameTheme);
       try {
-        await uploadItem(items[i], conn, config.themeId);
+        await uploadItem(items[i], conn, activeThemeId || undefined, force);
         setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "done" } : it));
         done++;
       } catch (e) {
@@ -510,11 +620,39 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
 
   const contextLabel = config.contextType === "collection" ? t("zipImportCollection") : t("zipImportShow");
 
+  const importing = phase === "importing";
+  const contextTypeLabel = config.contextType === "collection" ? t("zipImportCollection") : t("zipImportShow");
+
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <UnarchiveOutlinedIcon fontSize="small" />
-        {t("zipImportTitle")}
+      <DialogTitle component="div" sx={{ display: "flex", alignItems: "center", gap: 1, pr: 2 }}>
+        <UnarchiveOutlinedIcon fontSize="small" sx={{ flexShrink: 0 }} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }} noWrap>
+            {t("zipImportTitle")}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
+            {contextTypeLabel}: <strong>{config.contextTitle}</strong>
+          </Typography>
+        </Box>
+        {themes.length > 0 && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0 }}>
+            <Typography variant="caption" color="text.secondary">{t("zipImportThemeLabel")}</Typography>
+            <Select
+              size="small"
+              value={activeThemeId}
+              onChange={(e) => setActiveThemeId(e.target.value)}
+              disabled={importing}
+              displayEmpty
+              sx={{ fontSize: "0.8rem", minWidth: 130 }}
+              renderValue={(v) => themeName(v as string)}
+            >
+              {themes.map((th) => (
+                <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>
+              ))}
+            </Select>
+          </Box>
+        )}
       </DialogTitle>
 
       <DialogContent dividers>
@@ -544,6 +682,48 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
           </Stack>
         )}
 
+        {/* ── Confirm phase: cross-theme conflict ── */}
+        {phase === "confirm" && (
+          <Stack spacing={2}>
+            <Alert severity="warning" icon={<WarningAmberIcon />}>
+              {t("zipImportConfirmBody", {
+                count: crossThemeItems.length,
+                theme: crossThemeNames.join(", "),
+                targetTheme: themeName(targetThemeId),
+              })}
+            </Alert>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700 }}>{t("zipImportColFile")}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>{t("zipImportColType")}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>{t("zipImportColExistingTheme")}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {crossThemeItems.map((item, i) => {
+                  const origIdx = items.indexOf(item);
+                  const conflict = conflictMap.get(origIdx);
+                  return (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <Typography variant="body2" noWrap sx={{ maxWidth: 260 }}>{item.label}</Typography>
+                        <Typography variant="caption" color="text.disabled" sx={{ display: "block" }} noWrap>{item.filename}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={KIND_CHIP[item.kind.tag]?.label ?? item.kind.tag} color={KIND_CHIP[item.kind.tag]?.color ?? "default"} size="small" sx={{ fontSize: "0.7rem" }} />
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={themeName(conflict?.existingThemeId ?? "")} size="small" color="warning" sx={{ fontSize: "0.7rem" }} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Stack>
+        )}
+
         {(phase === "preview" || phase === "importing" || phase === "done") && (
           <Stack spacing={2}>
             {phase === "importing" && <LinearProgress variant="determinate" value={progressPct} />}
@@ -559,6 +739,16 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
               </Alert>
             )}
 
+            {/* Cross-theme warning banner in preview */}
+            {phase === "preview" && crossThemeItems.length > 0 && (
+              <Alert severity="warning" icon={<WarningAmberIcon />}>
+                {t("zipImportCrossThemeWarning", {
+                  count: crossThemeItems.length,
+                  theme: crossThemeNames.join(", "),
+                })}
+              </Alert>
+            )}
+
             {items.length === 0 && (
               <Alert severity="warning">{t("zipImportNoItems")}</Alert>
             )}
@@ -569,46 +759,64 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
                   <TableRow>
                     <TableCell sx={{ fontWeight: 700 }}>{t("zipImportColFile")}</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>{t("zipImportColType")}</TableCell>
+                    {phase === "preview" && conflictMap.size > 0 && (
+                      <TableCell sx={{ fontWeight: 700, width: 130 }}>{t("zipImportColConflict")}</TableCell>
+                    )}
                     {(phase === "importing" || phase === "done") && (
                       <TableCell sx={{ fontWeight: 700, width: 120 }}>{t("zipImportColStatus")}</TableCell>
                     )}
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {items.map((item, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>
-                        <Typography variant="body2" noWrap sx={{ maxWidth: 300 }}>{item.label}</Typography>
-                        <Typography variant="caption" color="text.disabled" sx={{ display: "block" }} noWrap>{item.filename}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip label={item.kind.tag} size="small" variant="outlined" sx={{ fontSize: "0.7rem" }} />
-                      </TableCell>
-                      {(phase === "importing" || phase === "done") && (
+                  {items.map((item, idx) => {
+                    const conflict = conflictMap.get(idx);
+                    return (
+                      <TableRow key={idx}>
                         <TableCell>
-                          {item.status === "pending" && (
-                            <Typography variant="caption" color="text.disabled">{t("zipImportWaiting")}</Typography>
-                          )}
-                          {item.status === "uploading" && <CircularProgress size={14} />}
-                          {item.status === "done" && (
-                            <CheckCircleOutlineIcon sx={{ fontSize: "1.1rem", color: "success.main" }} />
-                          )}
-                          {item.status === "duplicate" && (
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                              <RemoveCircleOutlineIcon sx={{ fontSize: "1rem", color: "text.disabled" }} />
-                              <Typography variant="caption" color="text.disabled">{t("zipImportDuplicate")}</Typography>
-                            </Box>
-                          )}
-                          {item.status === "error" && (
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                              <ErrorOutlineIcon sx={{ fontSize: "1rem", color: "error.main" }} />
-                              <Typography variant="caption" color="error" noWrap sx={{ maxWidth: 80 }}>{item.error}</Typography>
-                            </Box>
-                          )}
+                          <Typography variant="body2" noWrap sx={{ maxWidth: 300 }}>{item.label}</Typography>
+                          <Typography variant="caption" color="text.disabled" sx={{ display: "block" }} noWrap>{item.filename}</Typography>
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
+                        <TableCell>
+                          <Chip label={KIND_CHIP[item.kind.tag]?.label ?? item.kind.tag} color={KIND_CHIP[item.kind.tag]?.color ?? "default"} size="small" sx={{ fontSize: "0.7rem" }} />
+                        </TableCell>
+                        {phase === "preview" && conflictMap.size > 0 && (
+                          <TableCell>
+                            {conflict && (
+                              <Chip
+                                label={t("zipImportConflictChip", { theme: themeName(conflict.existingThemeId) })}
+                                size="small"
+                                color={conflict.isCrossTheme ? "warning" : "default"}
+                                sx={{ fontSize: "0.7rem" }}
+                              />
+                            )}
+                          </TableCell>
+                        )}
+                        {(phase === "importing" || phase === "done") && (
+                          <TableCell>
+                            {item.status === "pending" && (
+                              <Typography variant="caption" color="text.disabled">{t("zipImportWaiting")}</Typography>
+                            )}
+                            {item.status === "uploading" && <CircularProgress size={14} />}
+                            {item.status === "done" && (
+                              <CheckCircleOutlineIcon sx={{ fontSize: "1.1rem", color: "success.main" }} />
+                            )}
+                            {item.status === "duplicate" && (
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                <RemoveCircleOutlineIcon sx={{ fontSize: "1rem", color: "text.disabled" }} />
+                                <Typography variant="caption" color="text.disabled">{t("zipImportDuplicate")}</Typography>
+                              </Box>
+                            )}
+                            {item.status === "error" && (
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                <ErrorOutlineIcon sx={{ fontSize: "1rem", color: "error.main" }} />
+                                <Typography variant="caption" color="error" noWrap sx={{ maxWidth: 80 }}>{item.error}</Typography>
+                              </Box>
+                            )}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -622,17 +830,33 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
         )}
       </DialogContent>
 
-      <DialogActions>
-        {phase !== "importing" && (
-          <Button onClick={handleClose}>
-            {phase === "done" ? t("zipImportClose") : t("zipImportCancel")}
-          </Button>
-        )}
-        {phase === "preview" && items.length > 0 && conn && (
-          <Button variant="contained" onClick={() => void handleImport()}>
-            {t("zipImportImportButton", { count: items.length })}
-          </Button>
-        )}
+      <DialogActions sx={{ justifyContent: "space-between" }}>
+        <Box sx={{ display: "flex", alignItems: "center" }}>
+          {phase === "preview" && sameThemeItems.length > 0 && (
+            <FormControlLabel
+              sx={{ m: 0 }}
+              control={<Checkbox size="small" checked={forceSameTheme} onChange={(e) => setForceSameTheme(e.target.checked)} />}
+              label={<Typography variant="body2">{t("zipImportForceLabel", { count: sameThemeItems.length })}</Typography>}
+            />
+          )}
+        </Box>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          {phase !== "importing" && (
+            <Button onClick={phase === "confirm" ? () => setPhase("preview") : handleClose}>
+              {phase === "done" ? t("zipImportClose") : t("zipImportCancel")}
+            </Button>
+          )}
+          {phase === "preview" && items.length > 0 && conn && (
+            <Button variant="contained" onClick={requestImport}>
+              {t("zipImportImportButton", { count: items.length - (forceSameTheme ? 0 : sameThemeItems.length) })}
+            </Button>
+          )}
+          {phase === "confirm" && (
+            <Button variant="contained" color="warning" onClick={() => void executeImport()}>
+              {t("zipImportConfirmButton", { theme: themeName(targetThemeId) })}
+            </Button>
+          )}
+        </Box>
       </DialogActions>
     </Dialog>
   );

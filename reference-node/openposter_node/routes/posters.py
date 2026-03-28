@@ -51,6 +51,7 @@ async def get_poster(request: Request, poster_id: str):
 
     entry = {
         "poster_id": p.poster_id,
+        "kind": p.kind or "poster",
         "published": bool(p.published),
         "media": media,
         "creator": {

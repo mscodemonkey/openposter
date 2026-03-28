@@ -233,6 +233,17 @@ async def admin_whoami(request: Request):
     return {"admin": {"node_id": request.app.state.node_uuid}}
 
 
+@router.put("/admin/claim-token")
+async def admin_set_claim_token(request: Request):
+    await _require_admin(request)
+    body = await request.json()
+    token = (body.get("token") or "").strip()
+    if not token:
+        raise http_error(400, "invalid_request", "token required")
+    request.app.state.claim_token = token
+    return {"ok": True}
+
+
 @router.post("/admin/themes")
 async def admin_create_theme(request: Request, body: ThemeCreate):
     await _require_admin(request)
@@ -475,9 +486,11 @@ async def admin_upload_poster(
     creator_display_name: str = Form(...),
     links_json: str | None = Form(None),
     theme_id: str | None = Form(None),
+    kind: str = Form("poster"),
     attribution_license: str = Form("all-rights-reserved"),
     attribution_redistribution: str = Form("mirrors-approved"),
     published: bool = Form(True),
+    force: str = Form(""),
     preview: UploadFile = File(...),
     full: UploadFile = File(...),
 ):
@@ -490,6 +503,9 @@ async def admin_upload_poster(
 
     if media_type not in {"movie", "show", "season", "episode", "collection", "backdrop"}:
         raise http_error(400, "invalid_request", "invalid media_type")
+
+    if kind not in {"poster", "background", "logo", "square", "banner", "thumb"}:
+        raise http_error(400, "invalid_request", "invalid kind; must be one of: poster, background, logo, square, banner, thumb")
 
     if media_type in {"season", "episode"} and show_tmdb_id is None:
         raise http_error(400, "invalid_request", "show_tmdb_id is required for season/episode")
@@ -527,6 +543,8 @@ async def admin_upload_poster(
         except Exception as e:
             raise http_error(400, "invalid_request", f"invalid links_json: {e}")
 
+    force_flag = force.strip().lower() in ("true", "1")
+
     cfg = request.app.state.cfg
     node_id = request.app.state.node_id
 
@@ -536,13 +554,16 @@ async def admin_upload_poster(
     # Local id derived from content + metadata; stable-ish.
     # Include media_type, season_number, episode_number so that e.g. a backdrop
     # and a poster for the same show (same file, tmdb_id, creator) get distinct IDs.
+    # When force=True, add a random salt so a forced duplicate gets its own unique ID.
     id_components = ":".join([
         str(tmdb_id),
         creator_id,
         media_type,
+        kind,
         str(season_number) if season_number is not None else "",
         str(episode_number) if episode_number is not None else "",
         full_hash,
+        os.urandom(4).hex() if force_flag else "",
     ])
     local_id = "pst_" + hashlib.sha256(id_components.encode("utf-8")).hexdigest()[:8]
     poster_id = f"op:v1:{node_id}:{local_id}"
@@ -557,20 +578,21 @@ async def admin_upload_poster(
         # This is robust against ID-formula changes — the old hash-based ID check would
         # produce false conflicts (cross-type uploads with the same file) or miss duplicates
         # (old IDs vs new formula).
-        dup_stmt = _select(Poster).where(
-            Poster.creator_id == creator_id,
-            Poster.media_type == media_type,
-            Poster.tmdb_id == tmdb_id,
-            Poster.full_hash == full_hash,
-            Poster.deleted_at.is_(None),
-        )
-        if season_number is not None:
-            dup_stmt = dup_stmt.where(Poster.season_number == season_number)
-        if episode_number is not None:
-            dup_stmt = dup_stmt.where(Poster.episode_number == episode_number)
-        existing = (await session.execute(dup_stmt)).scalars().first()
-        if existing is not None:
-            raise http_error(409, "invalid_request", "poster_id conflict")
+        if not force_flag:
+            dup_stmt = _select(Poster).where(
+                Poster.creator_id == creator_id,
+                Poster.media_type == media_type,
+                Poster.tmdb_id == tmdb_id,
+                Poster.full_hash == full_hash,
+                Poster.deleted_at.is_(None),
+            )
+            if season_number is not None:
+                dup_stmt = dup_stmt.where(Poster.season_number == season_number)
+            if episode_number is not None:
+                dup_stmt = dup_stmt.where(Poster.episode_number == episode_number)
+            existing = (await session.execute(dup_stmt)).scalars().first()
+            if existing is not None:
+                raise http_error(409, "invalid_request", "poster_id conflict")
 
         # Enforce links point to other posters by same creator.
         if links_value:
@@ -597,6 +619,7 @@ async def admin_upload_poster(
             updated_at=now,
             deleted_at=None,
             media_type=media_type,
+            kind=kind,
             tmdb_id=tmdb_id,
             show_tmdb_id=show_tmdb_id,
             season_number=season_number,

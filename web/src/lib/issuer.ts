@@ -5,6 +5,7 @@ export type IssuerUser = {
   user_id: string;
   email: string;
   display_name: string | null;
+  handle: string | null;
 };
 
 export type SignupResponse = { user: IssuerUser; token: string };

@@ -3,15 +3,81 @@
 import { useState, useRef } from "react";
 
 import Box from "@mui/material/Box";
+
+import { CHIP_HEIGHT } from "@/lib/grid-sizes";
 import ButtonBase from "@mui/material/ButtonBase";
 import CircularProgress from "@mui/material/CircularProgress";
-import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 
-import CloseIcon from "@mui/icons-material/Close";
 import ImageIcon from "@mui/icons-material/Image";
+
+import { useTranslations } from "next-intl";
+
+// =============================================================
+// CardChip
+// =============================================================
+// Plain Box+Typography chip — no MUI Chip internals, no sub-pixel
+// flexbox variance. Every instance renders identically regardless
+// of DOM position or DPR.
+
+type ChipColor = "primary" | "secondary" | "error" | "warning" | "info" | "success" | "default";
+
+const CHIP_BG: Record<ChipColor, string> = {
+  primary:   "#1e3a8a",
+  secondary: "#1e3a8a",
+  error:     "#1e3a8a",
+  warning:   "#1e3a8a",
+  info:      "#1e3a8a",
+  success:   "#1e3a8a",
+  default:   "#1e3a8a",
+};
+
+const CHIP_TEXT: Record<ChipColor, string> = {
+  primary:   "#ffffff",
+  secondary: "#ffffff",
+  error:     "#ffffff",
+  warning:   "#ffffff",
+  info:      "#ffffff",
+  success:   "#ffffff",
+  default:   "#ffffff",
+};
+
+export interface CardChipProps {
+  label: string;
+  color?: ChipColor;
+  /** Default "0 6px 6px 0" — flush-left chip mirroring the card edge. */
+  borderRadius?: string;
+}
+
+export function CardChip({ label, color = "default", borderRadius = "0 6px 6px 0" }: CardChipProps) {
+  return (
+    <Box sx={{
+      display: "inline-flex",
+      alignItems: "center",
+      px: "8px",
+      borderRadius,
+      bgcolor: CHIP_BG[color],
+      flexShrink: 0
+    }}>
+      <Typography sx={{
+        fontSize: "0.6rem",
+        mt: "2px",
+        mb: "1px",
+        fontWeight: 700,
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+        color: CHIP_TEXT[color],
+        whiteSpace: "nowrap",
+        userSelect: "none",
+        pointerEvents: "none",
+      }}>
+        {label}
+      </Typography>
+    </Box>
+  );
+}
 
 // =============================================================
 // ToolbarButton
@@ -19,7 +85,7 @@ import ImageIcon from "@mui/icons-material/Image";
 
 export interface ToolbarButtonProps {
   /** Number of 4-col grid columns this button spans. Default 1. */
-  cols?: 1 | 2;
+  cols?: 1 | 2 | 4;
   icon?: React.ReactNode;
   /** Shown below the icon (or alone for text-only buttons). */
   label?: string;
@@ -62,6 +128,7 @@ export function ToolbarButton({
       disabled={disabled}
       onClick={handleClick}
       focusRipple
+      aria-label={tooltip ?? label}
       title={tooltip && !disabled ? tooltip : undefined}
       sx={{
         gridColumn: `span ${cols}`,
@@ -166,7 +233,7 @@ export function MediaCardOverlay({ title, subtitle, detail, children }: MediaCar
       {title && (
         <Typography
           noWrap
-          sx={{ color: "white", fontWeight: 700, fontSize: "0.95rem", lineHeight: 1.3, mb: 0.6 }}
+          sx={{ color: "white", fontWeight: 700, fontSize: "0.95rem", lineHeight: 1.3, mb: (subtitle || detail) ? 0.6 : 1.2 }}
         >
           {title}
         </Typography>
@@ -174,7 +241,7 @@ export function MediaCardOverlay({ title, subtitle, detail, children }: MediaCar
       {subtitle && (
         <Typography
           noWrap
-          sx={{ color: "white", fontSize: "0.78rem", lineHeight: 1.4, mb: detail ? 0.6 : 2.625, textTransform: "uppercase", letterSpacing: "0.04em" }}
+          sx={{ color: "white", fontSize: "0.78rem", lineHeight: 1.4, mb: detail ? 0.6 : 1.2, textTransform: "uppercase", letterSpacing: "0.04em" }}
         >
           {subtitle}
         </Typography>
@@ -182,7 +249,7 @@ export function MediaCardOverlay({ title, subtitle, detail, children }: MediaCar
       {detail && (
         <Typography
           noWrap
-          sx={{ color: "white", fontSize: "0.72rem", lineHeight: 1.4, mb: 2.625 }}
+          sx={{ color: "white", fontSize: "0.72rem", lineHeight: 1.4, mb: 1.2 }}
         >
           {detail}
         </Typography>
@@ -235,6 +302,22 @@ interface MediaCardProps {
   tooltip?: string;
   /** When true, renders the image in greyscale with a spinner — used during artwork reset. */
   resetting?: boolean;
+  /** When true, renders the image at 20% opacity greyscale — used for TMDB default placeholders. */
+  placeholder?: boolean;
+  /**
+   * Optional label shown as a dark chip at the bottom-left of the card (e.g. movie title for
+   * backdrop cards). Slides DOWN out of view when the overlay appears, and back up when it hides.
+   * Rendered as all-caps white text on a 70%-opacity black pill, matching the top chip style.
+   */
+  bottomLabel?: string;
+  /** Override the background color of the image area (default "action.hover"). Use for transparent art like logos. */
+  imageBgColor?: string;
+  /** Raw CSS `background` value for the image area — supports gradients and patterns. Takes priority over imageBgColor. */
+  imageBackground?: string;
+  /** Chip shown top-left when the overlay is open — slides down into view as the regular chip slides up out. */
+  overlayChip?: React.ReactNode;
+  /** Creator name shown top-right when the overlay is open — slides down mirroring the overlayChip. */
+  creatorName?: string | null;
 }
 
 export default function MediaCard({
@@ -251,7 +334,14 @@ export default function MediaCard({
   onClose,
   tooltip,
   resetting = false,
+  placeholder = false,
+  bottomLabel,
+  imageBgColor,
+  imageBackground,
+  overlayChip,
+  creatorName,
 }: MediaCardProps) {
+  const t = useTranslations("posterCard");
   const [keyboardFocused, setKeyboardFocused] = useState(false);
   const isOverlayVisible = selected || keyboardFocused;
 
@@ -290,6 +380,7 @@ export default function MediaCard({
       tabIndex={onClick ? 0 : undefined}
       role={onClick ? "button" : undefined}
       aria-pressed={onClick ? selected : undefined}
+      aria-label={tooltip ?? alt}
       title={tooltip && !isOverlayVisible ? tooltip : undefined}
       onClick={onClick}
       onMouseDown={handleMouseDown}
@@ -306,6 +397,7 @@ export default function MediaCard({
         // sub-pixel rounding shifts in the card contents.
         willChange: "transform",
         userSelect: "none",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.4)",
         outline: selected ? "3px solid" : "none",
         outlineColor: "primary.main",
         outlineOffset: "-1px",
@@ -313,23 +405,29 @@ export default function MediaCard({
       }}
     >
       {/* Image — always full opacity, never animated */}
-      <Box sx={{ aspectRatio, bgcolor: "action.hover", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Box sx={{ aspectRatio, ...(imageBackground ? { background: imageBackground } : { bgcolor: imageBgColor ?? "action.hover" }), position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
         {!imageFailed && image && (
           <Box
             component="img"
             src={image}
             alt={alt}
+            loading="lazy"
             onError={onImageError}
-            sx={{ width: "100%", height: "100%", objectFit: "contain", display: "block", opacity: resetting ? 0 : 1, transition: resetting ? "opacity 1.2s ease" : "opacity 0.8s ease" }}
+            sx={{ width: "100%", height: "100%", objectFit: "contain", display: "block", opacity: resetting ? 0 : placeholder ? 0.3 : 1, filter: placeholder ? "grayscale(1)" : undefined, transition: resetting ? "opacity 1.2s ease" : "opacity 0.8s ease" }}
           />
         )}
-        {(imageFailed || !image) && (
-          <ImageIcon sx={{ fontSize: "2.5rem", color: "action.disabled", opacity: 0.5 }} />
+        {(imageFailed || !image || placeholder) && (
+          <Box sx={{ position: placeholder ? "absolute" : undefined, inset: placeholder ? 0 : undefined, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0.5, pointerEvents: "none" }}>
+            <ImageIcon sx={{ fontSize: "2.5rem", color: imageBackground ? "rgba(255,255,255,0.6)" : "text.primary", opacity: imageBackground ? 1 : 0.6 }} />
+            <Typography sx={{ fontSize: "0.55rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: imageBackground ? "rgba(255,255,255,0.7)" : "text.primary", opacity: imageBackground ? 1 : 0.7, lineHeight: 1 }}>
+              {t("noArtwork")}
+            </Typography>
+          </Box>
         )}
         {resetting && (
           <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, pointerEvents: "none" }}>
             <CircularProgress size={28} sx={{ color: "white" }} />
-            <Typography sx={{ color: "white", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.1em" }}>RESETTING</Typography>
+            <Typography sx={{ color: "white", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.1em" }}>{t("resetting")}</Typography>
           </Box>
         )}
       </Box>
@@ -341,7 +439,8 @@ export default function MediaCard({
           inset: 0,
           background: "linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,1) 72%, rgba(0,0,0,1) 100%)",
           opacity: isOverlayVisible ? 1 : 0,
-          transition: "opacity 0.22s ease",
+          backdropFilter: isOverlayVisible ? "blur(6px)" : "none",
+          transition: "opacity 0.22s ease, backdrop-filter 0.22s ease",
           pointerEvents: "none",
         }}
       />
@@ -351,7 +450,7 @@ export default function MediaCard({
         <Box
           sx={{
             position: "absolute",
-            top: 10,
+            top: 0,
             left: 0,
             transform: isOverlayVisible ? "translateY(-42px)" : "translateY(0)",
             transition: "transform 0.22s ease",
@@ -367,7 +466,7 @@ export default function MediaCard({
         <Box
           sx={{
             position: "absolute",
-            top: 10,
+            top: 0,
             right: 8,
             transform: isOverlayVisible ? "translateY(-42px)" : "translateY(0)",
             transition: "transform 0.22s ease",
@@ -375,6 +474,39 @@ export default function MediaCard({
           }}
         >
           {badge}
+        </Box>
+      )}
+
+      {/* Bottom label chip — slides DOWN out of view when overlay appears */}
+      {bottomLabel && (
+        <Box
+          sx={{
+            position: "absolute",
+            bottom: 10,
+            left: 0,
+            transform: isOverlayVisible ? "translateY(42px)" : "translateY(0)",
+            transition: "transform 0.22s ease",
+            pointerEvents: "none",
+          }}
+        >
+          <Box
+            sx={{
+              bgcolor: "rgba(0,0,0,0.6)",
+              borderRadius: "0 6px 6px 0",
+              height: CHIP_HEIGHT,
+              display: "flex",
+              alignItems: "center",
+              px: "8px",
+              overflow: "hidden",
+            }}
+          >
+            <Typography
+              noWrap
+              sx={{ color: "white", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", lineHeight: 1 }}
+            >
+              {bottomLabel}
+            </Typography>
+          </Box>
         </Box>
       )}
 
@@ -395,25 +527,49 @@ export default function MediaCard({
         </Box>
       )}
 
-      {/* Close button — slides DOWN into view when overlay appears (opposite of badge/chip) */}
-      {onClose && (
+      {/* Overlay chip — slides DOWN into view top-left when overlay appears, mirroring close button */}
+      {overlayChip && (
         <Box
           sx={{
             position: "absolute",
-            top: 10,
-            right: 8,
+            top: 0,
+            left: 0,
             transform: isOverlayVisible ? "translateY(0)" : "translateY(-42px)",
             transition: "transform 0.22s ease",
             zIndex: 2,
+            pointerEvents: "none",
           }}
         >
-          <IconButton
-            size="small"
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
-            sx={{ color: "white", width: 22, height: 22, p: 0, bgcolor: "rgba(0,0,0,0.45)", "&:hover": { bgcolor: "rgba(0,0,0,0.65)" } }}
+          {overlayChip}
+        </Box>
+      )}
+
+      {/* Creator name — top-right chip, slides DOWN into view alongside the overlayChip */}
+      {creatorName && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: 12,
+            right: 0,
+            transform: isOverlayVisible ? "translateY(0)" : "translateY(-42px)",
+            transition: "transform 0.22s ease",
+            zIndex: 2,
+            pointerEvents: "none",
+            maxWidth: "45%",
+            overflow: "hidden",
+            bgcolor: "rgba(255,255,255,0.3)",
+            borderRadius: "6px 0 0 6px",
+            display: "flex",
+            alignItems: "center",
+            px: "8px",
+          }}
+        >
+          <Typography
+            noWrap
+            sx={{ color: "black", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",  mt: "2px", mb: "1px"}}
           >
-            <CloseIcon sx={{ fontSize: 14 }} />
-          </IconButton>
+            {creatorName}
+          </Typography>
         </Box>
       )}
     </Box>

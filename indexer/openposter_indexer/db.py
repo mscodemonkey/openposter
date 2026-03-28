@@ -33,6 +33,9 @@ class IndexedPoster(Base):
     # Collection grouping
     collection_tmdb_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
 
+    # Artwork kind: "poster" | "background" | "logo" | "banner" | "thumb"
+    kind: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+
     changed_at: Mapped[str] = mapped_column(String, index=True)
 
     poster_json: Mapped[str] = mapped_column(Text)

@@ -14,6 +14,7 @@ async def search(
     request: Request,
     tmdb_id: int = Query(...),
     type: str | None = Query(None),  # noqa: A002 (spec uses `type`)
+    kind: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     cursor: str | None = Query(None),
 ):
@@ -24,6 +25,8 @@ async def search(
         stmt = select(Poster).where(Poster.tmdb_id == tmdb_id).where(Poster.deleted_at.is_(None))
         if type:
             stmt = stmt.where(Poster.media_type == type)
+        if kind:
+            stmt = stmt.where(Poster.kind == kind)
         stmt = stmt.limit(limit)
         posters = (await session.execute(stmt)).scalars().all()
 
@@ -41,6 +44,7 @@ async def search(
 
         entry = {
             "poster_id": p.poster_id,
+            "kind": p.kind or "poster",
             "media": {
                 "type": p.media_type,
                 "tmdb_id": p.tmdb_id,

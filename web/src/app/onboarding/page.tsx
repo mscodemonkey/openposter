@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import {
@@ -11,6 +11,7 @@ import {
   issuerClaimNode,
   issuerHandleAvailability,
   issuerLogin,
+  issuerMe,
   issuerSignup,
   issuerStartUrlClaim,
   issuerVerifyUrlClaim,
@@ -39,20 +40,29 @@ export default function OnboardingPage() {
   const tn = useTranslations("nav");
   const issuer = useMemo(() => ISSUER_BASE_URL, []);
 
-  // issuer session (load from localStorage once)
-  const [token, setToken] = useState<string>(() => loadIssuerToken() || "");
-  const [userEmail, setUserEmail] = useState<string>(() => loadIssuerUser()?.email || "");
+  // issuer session — initialise with safe SSR defaults, then hydrate from
+  // localStorage in a useEffect to avoid server/client mismatch.
+  const [token, setToken] = useState<string>("");
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [step, setStep] = useState<StepKey>("welcome");
 
-  const [step, setStep] = useState<StepKey>(() => {
-    if (loadIssuerToken() && loadIssuerUser()) return "creator";
-    try {
-      const done = window.localStorage.getItem("openposter.onboarded.v1");
-      if (done === "browsing") return "done";
-    } catch {
-      // ignore
+  useEffect(() => {
+    const t = loadIssuerToken() || "";
+    const u = loadIssuerUser();
+    if (t) setToken(t);
+    if (u?.email) setUserEmail(u.email);
+    if (u?.handle) setHandle(u.handle);
+    if (t && u) {
+      setStep(u.handle ? "claim" : "creator");
+      return;
     }
-    return "welcome";
-  });
+    try {
+      if (window.localStorage.getItem("openposter.onboarded.v1") === "browsing") {
+        setStep("done");
+      }
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // account
   const [accountMode, setAccountMode] = useState<"login" | "signup">("login");
@@ -69,7 +79,7 @@ export default function OnboardingPage() {
   const [localUrl, setLocalUrl] = useState("http://localhost:8081");
   const [pairCode, setPairCode] = useState("");
   // stored via saveCreatorConnection; we don't currently show it in the UI
-  const [, setNodeAdminToken] = useState<string>("");
+  const [nodeAdminToken, setNodeAdminToken] = useState<string>("");
   const [claimedNodeId, setClaimedNodeId] = useState<string>("");
 
   // public url attach
@@ -128,6 +138,11 @@ export default function OnboardingPage() {
     if (!token) throw new Error("Not logged in");
     setStatus(t("savingHandle"));
     await issuerClaimHandle(token, handle.trim().toLowerCase());
+    // Re-fetch /v1/me so the handle is included in the stored issuer session
+    const updatedUser = await issuerMe(token).catch(() => null);
+    if (updatedUser) {
+      saveIssuerSession(token, updatedUser);
+    }
     setStatus(null);
     setStep("claim");
   }
@@ -145,7 +160,8 @@ export default function OnboardingPage() {
     setNodeAdminToken(json.admin.token);
 
     // Persist for upload/library/admin tooling.
-    saveCreatorConnection({ nodeUrl: localUrl.replace(/\/+$/, ""), adminToken: json.admin.token });
+    const issuerUser = loadIssuerUser();
+    saveCreatorConnection({ nodeUrl: localUrl.replace(/\/+$/, ""), adminToken: json.admin.token, creatorId: issuerUser?.handle ?? "" });
 
     const out = (await issuerClaimNode(token, { local_url: localUrl, node_admin_token: json.admin.token })) as {
       node: { node_id: string };
@@ -159,10 +175,19 @@ export default function OnboardingPage() {
     setStatus(t("generatingVerification"));
     const info = (await issuerStartUrlClaim(token, publicUrl)) as {
       already_owned?: boolean;
+      challenge?: string;
       dns?: { name?: string; value?: string };
       http?: { url?: string; body?: string };
     };
     setClaimInfo(info);
+    // Push the challenge token to the node so it can serve /.well-known/openposter-claim.txt
+    if (info.challenge && nodeAdminToken && localUrl) {
+      await fetch(`${localUrl.replace(/\/+$/, "")}/v1/admin/claim-token`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: `Bearer ${nodeAdminToken}` },
+        body: JSON.stringify({ token: info.challenge }),
+      }).catch(() => undefined);
+    }
     setStatus(null);
   }
 

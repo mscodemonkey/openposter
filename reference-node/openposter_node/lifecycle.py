@@ -60,6 +60,12 @@ async def init_app_state(app: FastAPI) -> None:
     app.state.Session = make_sessionmaker(engine)
 
     async with engine.begin() as conn:
+        # Pre-migration: drop plex_sync_state if it uses old singleton schema (id INTEGER PK)
+        # so create_all can recreate it with the new per-server schema (server_id TEXT PK).
+        pss_pre_cols = {c[1] for c in (await conn.exec_driver_sql("PRAGMA table_info(plex_sync_state)")).all()}
+        if "id" in pss_pre_cols and "server_id" not in pss_pre_cols:
+            await conn.exec_driver_sql("DROP TABLE plex_sync_state")
+
         await conn.run_sync(Base.metadata.create_all)
 
         await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
@@ -78,6 +84,7 @@ async def init_app_state(app: FastAPI) -> None:
             ("theme_id", "ALTER TABLE posters ADD COLUMN theme_id TEXT"),
             ("collection_tmdb_id", "ALTER TABLE posters ADD COLUMN collection_tmdb_id INTEGER"),
             ("published", "ALTER TABLE posters ADD COLUMN published INTEGER NOT NULL DEFAULT 1"),
+            ("kind", "ALTER TABLE posters ADD COLUMN kind TEXT"),
         ]:
             if name not in col_names:
                 await conn.exec_driver_sql(ddl)
@@ -88,6 +95,10 @@ async def init_app_state(app: FastAPI) -> None:
         now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         await conn.exec_driver_sql("UPDATE posters SET created_at = COALESCE(created_at, ?)", (now,))
         await conn.exec_driver_sql("UPDATE posters SET updated_at = COALESCE(updated_at, ?)", (now,))
+        # Backfill kind for existing backdrop posters
+        await conn.exec_driver_sql(
+            "UPDATE posters SET kind = 'background' WHERE media_type = 'backdrop' AND kind IS NULL"
+        )
 
         # creator_profile and creator_settings tables — created by create_all above, nothing to migrate yet
         _ = CreatorProfile  # ensure the import is used
@@ -114,6 +125,13 @@ async def init_app_state(app: FastAPI) -> None:
         aa_cols = {c[1] for c in (await conn.exec_driver_sql("PRAGMA table_info(applied_artwork)")).all()}
         if "creator_display_name" not in aa_cols:
             await conn.exec_driver_sql("ALTER TABLE applied_artwork ADD COLUMN creator_display_name TEXT")
+
+        # plex_library_items — add server_id column if missing (table may have existed before this migration)
+        pli_cols = {c[1] for c in (await conn.exec_driver_sql("PRAGMA table_info(plex_library_items)")).all()}
+        if "server_id" not in pli_cols and pli_cols:
+            await conn.exec_driver_sql(
+                "ALTER TABLE plex_library_items ADD COLUMN server_id TEXT NOT NULL DEFAULT 'default'"
+            )
 
         # Peers table migrations (table is created by create_all above; add any new columns here)
         peer_cols = (await conn.exec_driver_sql("PRAGMA table_info(peers)")).all()
@@ -196,8 +214,26 @@ async def init_app_state(app: FastAPI) -> None:
         from .gossip import attach_gossip
         attach_gossip(app)
 
+    # Start Plex library sync (initial sync on startup + periodic background loop)
+    from .plex_sync import attach_plex_sync
+    attach_plex_sync(app)
+
+    # Start Plex WebSocket listeners for real-time metadata-refresh events
+    from .plex_ws import attach_plex_ws
+    attach_plex_ws(app)
+
 
 def attach_lifecycle(app: FastAPI) -> None:
     @app.on_event("startup")
     async def _startup():
         await init_app_state(app)
+
+    @app.on_event("shutdown")
+    async def _shutdown():
+        for attr in ("plex_sync_task", "plex_sync_loop_task"):
+            task = getattr(app.state, attr, None)
+            if task and not task.done():
+                task.cancel()
+        for task in getattr(app.state, "plex_ws_tasks", []):
+            if not task.done():
+                task.cancel()

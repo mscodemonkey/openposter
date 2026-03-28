@@ -20,6 +20,8 @@ import Step from "@mui/material/Step";
 import StepLabel from "@mui/material/StepLabel";
 import Stepper from "@mui/material/Stepper";
 import TextField from "@mui/material/TextField";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
@@ -66,6 +68,7 @@ function StudioUploadPageInner() {
 
   const [step, setStep] = useState(0);
   const [mediaType, setMediaType] = useState<string>("");
+  const [artworkKind, setArtworkKind] = useState("poster");
   const [tmdbId, setTmdbId] = useState("");
   const [showTmdbId, setShowTmdbId] = useState("");
   const [collectionTmdbId, setCollectionTmdbId] = useState("");
@@ -73,8 +76,6 @@ function StudioUploadPageInner() {
   const [episodeNumber, setEpisodeNumber] = useState("");
   const [title, setTitle] = useState("");
   const [year, setYear] = useState("");
-  const [creatorId, setCreatorId] = useState("");
-  const [creatorName, setCreatorName] = useState("");
   const [themeId, setThemeId] = useState<string>("");
   const [themes, setThemes] = useState<CreatorTheme[]>([]);
   const [redistribution, setRedistribution] = useState("mirrors-approved");
@@ -95,32 +96,21 @@ function StudioUploadPageInner() {
     const ttl = params.get("title");
     const yr = params.get("year");
     const ctid = params.get("collection_tmdb_id");
+    const knd = params.get("kind");
     if (mt) setMediaType(mt);
     if (tid) setTmdbId(tid);
     if (ttl) setTitle(ttl);
     if (yr) setYear(yr);
     if (ctid) setCollectionTmdbId(ctid);
+    if (knd) setArtworkKind(knd);
     if (tid) setStep(2); // skip ahead to theme step since type+title are already known
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount only
 
-  // Load creator info from first poster on node
+  // Load themes using creator ID from the saved connection
   useEffect(() => {
-    if (!conn) return;
-    void (async () => {
-      const r = await fetch(`${nodeUrl}/v1/posters?limit=1`, {
-        headers: { Authorization: `Bearer ${conn.adminToken}` },
-      });
-      if (!r.ok) return;
-      const json = (await r.json()) as { results: PosterEntry[] };
-      const first = json.results[0];
-      if (first) {
-        setCreatorId(first.creator.creator_id);
-        setCreatorName(first.creator.display_name);
-        const ts = await adminListThemes(nodeUrl, conn.adminToken, first.creator.creator_id).catch(() => []);
-        setThemes(ts);
-      }
-    })();
+    if (!conn?.creatorId) return;
+    adminListThemes(nodeUrl, conn.adminToken, conn.creatorId).then(setThemes).catch(() => undefined);
   }, [conn, nodeUrl]);
 
   // Revoke object URL on unmount
@@ -176,14 +166,15 @@ function StudioUploadPageInner() {
     const fd = new FormData();
     fd.set("tmdb_id", tmdbId);
     fd.set("media_type", mediaType);
+    if (artworkKind && artworkKind !== "poster") fd.set("kind", artworkKind);
     if (showTmdbId.trim()) fd.set("show_tmdb_id", showTmdbId.trim());
     if (collectionTmdbId.trim()) fd.set("collection_tmdb_id", collectionTmdbId.trim());
     if (seasonNumber.trim()) fd.set("season_number", seasonNumber.trim());
     if (episodeNumber.trim()) fd.set("episode_number", episodeNumber.trim());
     if (title.trim()) fd.set("title", title.trim());
     if (year.trim()) fd.set("year", year.trim());
-    fd.set("creator_id", creatorId);
-    fd.set("creator_display_name", creatorName);
+    fd.set("creator_id", conn.creatorId);
+    fd.set("creator_display_name", conn.creatorId);
     if (themeId) fd.set("theme_id", themeId);
     fd.set("attribution_redistribution", redistribution);
     fd.set("attribution_license", license);
@@ -313,6 +304,26 @@ function StudioUploadPageInner() {
               )}
               {(mediaType === "movie" || mediaType === "backdrop") && (
                 <TextField label={t("collectionTmdbId")} value={collectionTmdbId} onChange={(e) => setCollectionTmdbId(e.target.value)} fullWidth placeholder={t("collectionTmdbIdPlaceholder")} />
+              )}
+              {["movie", "show", "collection", "season"].includes(mediaType) && (
+                <Stack spacing={1}>
+                  <Typography variant="body2" fontWeight={700}>{t("artworkKind")}</Typography>
+                  <ToggleButtonGroup
+                    value={artworkKind}
+                    exclusive
+                    onChange={(_, v) => { if (v) setArtworkKind(v); }}
+                    size="small"
+                  >
+                    <ToggleButton value="poster">{t("kindPoster")}</ToggleButton>
+                    <ToggleButton value="background">{t("kindBackground")}</ToggleButton>
+                    {["movie", "show", "collection"].includes(mediaType) && (
+                      <ToggleButton value="square">{t("kindSquare")}</ToggleButton>
+                    )}
+                    {["movie", "show", "collection"].includes(mediaType) && (
+                      <ToggleButton value="logo">{t("kindLogo")}</ToggleButton>
+                    )}
+                  </ToggleButtonGroup>
+                </Stack>
               )}
               <Stack direction="row" spacing={1} justifyContent="flex-end">
                 <Button variant="outlined" onClick={() => setStep(0)}>Back</Button>

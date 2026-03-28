@@ -56,7 +56,7 @@ export default async function CreatorPage({
             component="img"
             src={profile.backdrop_url}
             alt=""
-            sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: "grayscale(0.75)" }}
           />
         )}
         {/* Gradient overlay for readability */}

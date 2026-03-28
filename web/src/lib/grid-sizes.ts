@@ -37,6 +37,9 @@ export const BACKDROP_GRID_COLS = "repeat(auto-fill, var(--op-backdrop-width, 34
 /** MUI spacing gap between cards */
 export const GRID_GAP = 2;
 
+/** Height in px for all card chips and source-badge icons. Odd number intentional — centres the cap-height of the label font. */
+export const CHIP_HEIGHT = 21;
+
 const STORAGE_KEY = "op-poster-size";
 
 export function getPosterSize(): PosterSize {

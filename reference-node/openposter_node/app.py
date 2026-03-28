@@ -17,6 +17,7 @@ from .routes.feed import router as feed_router
 from .routes.applied_artwork import router as applied_artwork_router
 from .routes.plex import router as plex_router
 from .routes.media_server import router as media_server_router
+from .routes.webhooks import router as webhooks_router
 from .routes.posters import router as posters_router
 from .routes.themes import router as themes_router
 from .routes.posters_list import router as posters_list_router
@@ -30,6 +31,42 @@ attach_cors(app)
 async def health():
     return {"ok": True}
 
+
+@app.get("/.well-known/openposter-claim.txt")
+async def well_known_claim(request: Request):
+    from fastapi.responses import PlainTextResponse
+    token = getattr(request.app.state, "claim_token", None)
+    if not token:
+        return JSONResponse(status_code=404, content={"error": {"code": "not_found", "message": "no claim token set"}})
+    return PlainTextResponse(token)
+
+
+@app.get("/dev/reset")
+async def dev_reset(request: Request, token: str = ""):
+    """Wipe all data for local testing. Only works when OPENPOSTER_DEV_RESET_TOKEN is set."""
+    import os
+    import shutil
+    from sqlalchemy import text
+    expected = os.environ.get("OPENPOSTER_DEV_RESET_TOKEN", "")
+    if not expected or token != expected:
+        return JSONResponse(status_code=404, content={"error": {"code": "not_found", "message": "not found"}})
+    session = request.app.state.Session
+    async with session() as s:
+        for table in ("applied_artwork", "plex_library_items", "plex_sync_state", "creator_settings",
+                      "creator_profile", "creator_theme", "posters", "admin_sessions", "peers"):
+            await s.execute(text(f"DELETE FROM {table}"))
+        await s.commit()
+    # Remove blobs and seed data
+    data_dir = request.app.state.cfg.data_dir
+    blobs_dir = data_dir / "blobs"
+    if blobs_dir.exists():
+        shutil.rmtree(blobs_dir)
+        blobs_dir.mkdir(parents=True, exist_ok=True)
+    seed_file = data_dir / "seed.json"
+    if seed_file.exists():
+        seed_file.unlink()
+    return {"ok": True, "wiped": True}
+
 attach_lifecycle(app)
 
 
@@ -39,6 +76,20 @@ async def _shutdown():
         task = getattr(app.state, attr, None)
         if task:
             task.cancel()
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catch-all so unhandled errors return JSON with CORS headers rather than Starlette's plain-text 500."""
+    import logging
+    logging.getLogger(__name__).exception("Unhandled exception on %s %s", request.method, request.url.path)
+    origin = request.headers.get("origin", "")
+    headers = {"access-control-allow-origin": origin} if origin else {}
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"code": "internal", "message": "internal server error"}},
+        headers=headers,
+    )
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -84,4 +135,5 @@ app.include_router(feed_router, prefix="/v1")
 app.include_router(plex_router, prefix="/v1")
 app.include_router(applied_artwork_router, prefix="/v1")
 app.include_router(media_server_router, prefix="/v1")
+app.include_router(webhooks_router, prefix="/v1")
 app.include_router(pair_ui_router)

@@ -44,6 +44,7 @@ function CardOverlay({
   onToggle: () => void;
   plexConnected: boolean;
 }) {
+  const t = useTranslations("tvBoxset");
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
 
   async function handleAddToPlex() {
@@ -89,7 +90,7 @@ function CardOverlay({
           <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
             <MenuItem onClick={() => void handleAddToPlex()}>
               <PlexLogo height={14} />
-              <Typography variant="body2" sx={{ ml: 1 }}>Add to Plex</Typography>
+              <Typography variant="body2" sx={{ ml: 1 }}>{t("addToPlex")}</Typography>
             </MenuItem>
           </Menu>
         </Box>
@@ -256,7 +257,7 @@ export default function TvBoxsetContent({ data }: { data: TvBoxsetResponse }) {
     <>
       {backdropUrl && (
         <Box sx={{ position: "fixed", top: 0, left: 0, right: 0, height: "75vh", zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
-          <Box component="img" src={backdropUrl} alt="" sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.3 }} />
+          <Box component="img" src={backdropUrl} alt="" sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.2, filter: "grayscale(0.75)" }} />
           <Box sx={{ position: "absolute", inset: 0, background: (theme) => `linear-gradient(to bottom, transparent 40%, ${theme.palette.background.default} 95%)` }} />
         </Box>
       )}

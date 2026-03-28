@@ -30,6 +30,8 @@ export type PlexApplyRequest = {
   nodeBase?: string;
   autoUpdate?: boolean;
   isBackdrop?: boolean;
+  isSquare?: boolean;
+  isLogo?: boolean;
 };
 
 function _nodeRequest(nodeUrl: string, adminToken: string, path: string, options?: RequestInit) {
@@ -130,6 +132,8 @@ export async function applyToPlexPoster(
       node_base: req.nodeBase ?? null,
       auto_update: req.autoUpdate ?? false,
       is_backdrop: req.isBackdrop ?? false,
+      is_square: req.isSquare ?? false,
+      is_logo: req.isLogo ?? false,
     }),
   });
   if (!r.ok) {
