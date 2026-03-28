@@ -1,0 +1,639 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import LinearProgress from "@mui/material/LinearProgress";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
+
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
+import UnarchiveOutlinedIcon from "@mui/icons-material/UnarchiveOutlined";
+
+import { generatePreview } from "@/app/studio/UploadDrawer";
+
+// ─── Native ZIP parser (no external dependency) ───────────────────────────────
+
+async function readZip(buffer: ArrayBuffer): Promise<Record<string, Uint8Array>> {
+  const view = new DataView(buffer);
+  const bytes = new Uint8Array(buffer);
+  const decoder = new TextDecoder();
+
+  // Locate End of Central Directory record (signature 0x06054b50)
+  let eocdOffset = -1;
+  for (let i = buffer.byteLength - 22; i >= 0; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocdOffset = i; break; }
+  }
+  if (eocdOffset === -1) throw new Error("Not a valid ZIP file");
+
+  const cdCount  = view.getUint16(eocdOffset + 10, true);
+  const cdOffset = view.getUint32(eocdOffset + 16, true);
+
+  const result: Record<string, Uint8Array> = {};
+  let pos = cdOffset;
+
+  for (let i = 0; i < cdCount; i++) {
+    if (view.getUint32(pos, true) !== 0x02014b50) break;
+    const method         = view.getUint16(pos + 10, true);
+    const compressedSize = view.getUint32(pos + 20, true);
+    const fileNameLen    = view.getUint16(pos + 28, true);
+    const extraLen       = view.getUint16(pos + 30, true);
+    const commentLen     = view.getUint16(pos + 32, true);
+    const lfhOffset      = view.getUint32(pos + 42, true);
+    const fileName       = decoder.decode(bytes.slice(pos + 46, pos + 46 + fileNameLen));
+    pos += 46 + fileNameLen + extraLen + commentLen;
+
+    if (fileName.endsWith("/")) continue; // skip directories
+
+    const lfhFileNameLen = view.getUint16(lfhOffset + 26, true);
+    const lfhExtraLen    = view.getUint16(lfhOffset + 28, true);
+    const dataStart      = lfhOffset + 30 + lfhFileNameLen + lfhExtraLen;
+    const compressed     = bytes.slice(dataStart, dataStart + compressedSize);
+
+    if (method === 0) {
+      result[fileName] = compressed; // STORE — no decompression needed
+    } else if (method === 8) {
+      // DEFLATE via browser-native DecompressionStream
+      const ds = new DecompressionStream("deflate-raw");
+      const writer = ds.writable.getWriter();
+      const reader = ds.readable.getReader();
+      void writer.write(compressed).then(() => writer.close());
+      const chunks: Uint8Array[] = [];
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+      let off = 0;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      result[fileName] = out;
+    }
+  }
+  return result;
+}
+
+// ─── Public types ─────────────────────────────────────────────────────────────
+
+export type ZipImportConfig = {
+  contextType: "collection" | "show";
+  contextTmdbId: number;
+  /** TMDB name of the show or collection, used for filename matching. */
+  contextTitle: string;
+  /** First-air year for shows (used in filename matching). */
+  contextYear?: number;
+  /** For collection context: parts list from TMDB for movie TMDB-ID lookup. */
+  collectionParts?: Array<{ id: number; title: string; release_date?: string | null }>;
+  /** For show context: season list from TMDB for season TMDB-ID lookup. */
+  showSeasons?: Array<{ id: number; season_number: number }>;
+  /** Theme to attach all imported posters to. */
+  themeId?: string;
+};
+
+// ─── Internal types ───────────────────────────────────────────────────────────
+
+type ItemKind =
+  | { tag: "showPoster"; tmdbId: number; title: string; year: number }
+  | { tag: "showBackdrop"; tmdbId: number; showTmdbId: number }
+  | { tag: "season"; tmdbId: number | null; showTmdbId: number; seasonNumber: number }
+  | { tag: "episode"; showTmdbId: number; seasonNumber: number; episodeNumber: number }
+  | { tag: "collectionPoster"; tmdbId: number }
+  | { tag: "collectionBackdrop"; tmdbId: number; collectionTmdbId: number }
+  | { tag: "movie"; tmdbId: number; title: string; year: number; collectionTmdbId: number };
+
+type ImportItem = {
+  filename: string;
+  blob: Blob;
+  label: string;
+  kind: ItemKind;
+  status: "pending" | "uploading" | "done" | "error" | "duplicate";
+  error?: string;
+};
+
+type SkippedItem = { filename: string; reason: string };
+
+type Phase = "select" | "parsing" | "preview" | "importing" | "done";
+
+// ─── Filename parsing ─────────────────────────────────────────────────────────
+
+function isImage(name: string): boolean {
+  return /\.(jpg|jpeg|png)$/i.test(name);
+}
+
+function normalize(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function titlesMatch(a: string, b: string): boolean {
+  return normalize(a) === normalize(b);
+}
+
+type Parsed =
+  | { type: "collectionBackdrop"; title: string }
+  | { type: "showBackdrop"; baseName: string; year: number }
+  | { type: "season"; baseName: string; year: number; seasonNumber: number }
+  | { type: "episode"; baseName: string; year: number; seasonNumber: number; episodeNumber: number }
+  | { type: "movie"; title: string; year: number }
+  | { type: "collectionPoster"; title: string }
+  | { type: "showPoster"; baseName: string; year: number };
+
+function parseFilename(filename: string): Parsed | null {
+  const name = (filename.split("/").pop() ?? filename).trim();
+  if (!isImage(name)) return null;
+
+  // 1. Collection backdrop — 2+ spaces before "- Backdrop"
+  //    e.g. "James Bond Collection  - Backdrop.jpg"
+  const collBgM = name.match(/^(.+?)\s{2,}-\s*Backdrop\.(jpg|jpeg|png)$/i);
+  if (collBgM) return { type: "collectionBackdrop", title: collBgM[1].trim() };
+
+  // 2. Show/season backdrop — "(year) - Backdrop"
+  //    e.g. "ted (2024) - Backdrop.jpg"
+  const showBgM = name.match(/^(.+?)\s+\((\d{4})\)\s+-\s*Backdrop\.(jpg|jpeg|png)$/i);
+  if (showBgM) return { type: "showBackdrop", baseName: showBgM[1].trim(), year: parseInt(showBgM[2]) };
+
+  // 3. Season poster — "(year) - Season N"
+  //    e.g. "ted (2024) - Season 1.jpg"
+  const seasonM = name.match(/^(.+?)\s+\((\d{4})\)\s+-\s*Season\s+(\d+)\.(jpg|jpeg|png)$/i);
+  if (seasonM) return { type: "season", baseName: seasonM[1].trim(), year: parseInt(seasonM[2]), seasonNumber: parseInt(seasonM[3]) };
+
+  // 4. Episode card — "(year) - SN EN"
+  //    e.g. "ted (2024) - S1 E3.jpg"
+  const epM = name.match(/^(.+?)\s+\((\d{4})\)\s+-\s*S(\d+)\s+E(\d+)\.(jpg|jpeg|png)$/i);
+  if (epM) return { type: "episode", baseName: epM[1].trim(), year: parseInt(epM[2]), seasonNumber: parseInt(epM[3]), episodeNumber: parseInt(epM[4]) };
+
+  // 5. Movie poster — "(year) .ext"  (trailing space before dot)
+  //    e.g. "Dr. No (1962) .jpg"
+  const movieM = name.match(/^(.+?)\s+\((\d{4})\)\s+\.(jpg|jpeg|png)$/i);
+  if (movieM) return { type: "movie", title: movieM[1].trim(), year: parseInt(movieM[2]) };
+
+  // 6. Collection poster — no year, trailing space before .ext
+  //    e.g. "James Bond Collection .jpg"
+  if (!/\(\d{4}\)/.test(name)) {
+    const collPM = name.match(/^(.+?)\s+\.(jpg|jpeg|png)$/i);
+    if (collPM) return { type: "collectionPoster", title: collPM[1].trim() };
+  }
+
+  // 7. Show poster — "(year).ext"  (no trailing space)
+  //    e.g. "ted (2024).jpg"
+  const showPM = name.match(/^(.+?)\s+\((\d{4})\)\.(jpg|jpeg|png)$/i);
+  if (showPM) return { type: "showPoster", baseName: showPM[1].trim(), year: parseInt(showPM[2]) };
+
+  return null;
+}
+
+// ─── Context-aware mapping ────────────────────────────────────────────────────
+
+function mapForCollection(
+  path: string,
+  blob: Blob,
+  cfg: ZipImportConfig,
+): { item: ImportItem | null; skip: SkippedItem | null } {
+  const filename = (path.split("/").pop() ?? path).trim();
+  const parsed = parseFilename(filename);
+  const { contextTmdbId, contextTitle, collectionParts = [] } = cfg;
+
+  if (!parsed) return { item: null, skip: { filename, reason: "unrecognized filename format" } };
+
+  if (parsed.type === "collectionPoster") {
+    if (!titlesMatch(parsed.title, contextTitle)) {
+      return { item: null, skip: { filename, reason: `collection name "${parsed.title}" doesn't match "${contextTitle}"` } };
+    }
+    return {
+      item: { filename, blob, label: "Collection poster", status: "pending", kind: { tag: "collectionPoster", tmdbId: contextTmdbId } },
+      skip: null,
+    };
+  }
+
+  if (parsed.type === "collectionBackdrop") {
+    return {
+      item: { filename, blob, label: "Collection backdrop", status: "pending", kind: { tag: "collectionBackdrop", tmdbId: contextTmdbId, collectionTmdbId: contextTmdbId } },
+      skip: null,
+    };
+  }
+
+  if (parsed.type === "movie") {
+    const part = collectionParts.find((p) => {
+      const py = p.release_date ? parseInt(p.release_date.slice(0, 4)) : null;
+      return titlesMatch(p.title, parsed.title) && (py === null || py === parsed.year);
+    });
+    if (!part) {
+      return { item: null, skip: { filename, reason: `no TMDB match for "${parsed.title} (${parsed.year})" in collection` } };
+    }
+    return {
+      item: {
+        filename, blob,
+        label: `${parsed.title} (${parsed.year})`,
+        status: "pending",
+        kind: { tag: "movie", tmdbId: part.id, title: parsed.title, year: parsed.year, collectionTmdbId: contextTmdbId },
+      },
+      skip: null,
+    };
+  }
+
+  // Show/season/episode items not relevant in collection context
+  return { item: null, skip: { filename, reason: "show/season/episode content skipped in collection context" } };
+}
+
+function mapForShow(
+  path: string,
+  blob: Blob,
+  cfg: ZipImportConfig,
+): { item: ImportItem | null; skip: SkippedItem | null } {
+  const filename = (path.split("/").pop() ?? path).trim();
+  const parsed = parseFilename(filename);
+  const { contextTmdbId, contextTitle, showSeasons = [] } = cfg;
+
+  if (!parsed) return { item: null, skip: { filename, reason: "unrecognized filename format" } };
+
+  if (parsed.type === "showPoster") {
+    if (!titlesMatch(parsed.baseName, contextTitle)) {
+      return { item: null, skip: { filename, reason: `title "${parsed.baseName}" doesn't match "${contextTitle}"` } };
+    }
+    return {
+      item: {
+        filename, blob,
+        label: "Show poster",
+        status: "pending",
+        kind: { tag: "showPoster", tmdbId: contextTmdbId, title: contextTitle, year: parsed.year },
+      },
+      skip: null,
+    };
+  }
+
+  if (parsed.type === "showBackdrop") {
+    if (!titlesMatch(parsed.baseName, contextTitle)) {
+      return { item: null, skip: { filename, reason: `title "${parsed.baseName}" doesn't match "${contextTitle}"` } };
+    }
+    return {
+      item: {
+        filename, blob, label: "Show backdrop", status: "pending",
+        kind: { tag: "showBackdrop", tmdbId: contextTmdbId, showTmdbId: contextTmdbId },
+      },
+      skip: null,
+    };
+  }
+
+  if (parsed.type === "season") {
+    if (!titlesMatch(parsed.baseName, contextTitle)) {
+      return { item: null, skip: { filename, reason: `title "${parsed.baseName}" doesn't match "${contextTitle}"` } };
+    }
+    const season = showSeasons.find((s) => s.season_number === parsed.seasonNumber);
+    return {
+      item: {
+        filename, blob,
+        label: `Season ${parsed.seasonNumber} poster`,
+        status: "pending",
+        kind: { tag: "season", tmdbId: season?.id ?? null, showTmdbId: contextTmdbId, seasonNumber: parsed.seasonNumber },
+      },
+      skip: null,
+    };
+  }
+
+  if (parsed.type === "episode") {
+    if (!titlesMatch(parsed.baseName, contextTitle)) {
+      return { item: null, skip: { filename, reason: `title "${parsed.baseName}" doesn't match "${contextTitle}"` } };
+    }
+    return {
+      item: {
+        filename, blob,
+        label: `S${String(parsed.seasonNumber).padStart(2, "0")}E${String(parsed.episodeNumber).padStart(2, "0")}`,
+        status: "pending",
+        kind: { tag: "episode", showTmdbId: contextTmdbId, seasonNumber: parsed.seasonNumber, episodeNumber: parsed.episodeNumber },
+      },
+      skip: null,
+    };
+  }
+
+  // Collection/movie items not relevant in show context
+  return { item: null, skip: { filename, reason: "collection/movie content skipped in show context" } };
+}
+
+// ─── Upload ───────────────────────────────────────────────────────────────────
+
+const KIND_ORDER = ["collectionPoster", "collectionBackdrop", "showPoster", "showBackdrop", "season", "episode", "movie"];
+
+async function uploadItem(
+  item: ImportItem,
+  conn: { nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string },
+  themeId?: string,
+): Promise<void> {
+  const fullFile = new File([item.blob], item.filename, { type: "image/jpeg" });
+  const preview = await generatePreview(fullFile);
+  const form = new FormData();
+  form.append("creator_id", conn.creatorId);
+  form.append("creator_display_name", conn.creatorDisplayName);
+  form.append("published", "false");
+  if (themeId) form.append("theme_id", themeId);
+  form.append("full", fullFile);
+  form.append("preview", preview);
+
+  const k = item.kind;
+  if (k.tag === "collectionPoster") {
+    form.append("media_type", "collection");
+    form.append("tmdb_id", String(k.tmdbId));
+  } else if (k.tag === "collectionBackdrop") {
+    form.append("media_type", "backdrop");
+    form.append("tmdb_id", String(k.tmdbId));
+    form.append("collection_tmdb_id", String(k.collectionTmdbId));
+  } else if (k.tag === "movie") {
+    form.append("media_type", "movie");
+    form.append("tmdb_id", String(k.tmdbId));
+    form.append("title", k.title);
+    form.append("year", String(k.year));
+    form.append("collection_tmdb_id", String(k.collectionTmdbId));
+  } else if (k.tag === "showPoster") {
+    form.append("media_type", "show");
+    form.append("tmdb_id", String(k.tmdbId));
+    form.append("title", k.title);
+    form.append("year", String(k.year));
+  } else if (k.tag === "showBackdrop") {
+    form.append("media_type", "backdrop");
+    form.append("tmdb_id", String(k.tmdbId));
+    form.append("show_tmdb_id", String(k.showTmdbId));
+  } else if (k.tag === "season") {
+    form.append("media_type", "season");
+    if (k.tmdbId != null) form.append("tmdb_id", String(k.tmdbId));
+    form.append("show_tmdb_id", String(k.showTmdbId));
+    form.append("season_number", String(k.seasonNumber));
+  } else if (k.tag === "episode") {
+    form.append("media_type", "episode");
+    form.append("show_tmdb_id", String(k.showTmdbId));
+    form.append("season_number", String(k.seasonNumber));
+    form.append("episode_number", String(k.episodeNumber));
+  }
+
+  const res = await fetch(`${conn.nodeUrl}/v1/admin/posters`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${conn.adminToken}` },
+    body: form,
+  });
+
+  if (res.status === 409) {
+    const err = new Error("duplicate");
+    (err as Error & { isDuplicate: boolean }).isDuplicate = true;
+    throw err;
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(data.error?.message ?? `HTTP ${res.status}`);
+  }
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+interface ZipImportDialogProps {
+  open: boolean;
+  onClose: () => void;
+  config: ZipImportConfig;
+  conn: { nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string } | null;
+  onComplete: () => void;
+}
+
+export default function ZipImportDialog({ open, onClose, config, conn, onComplete }: ZipImportDialogProps) {
+  const t = useTranslations("studio");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [phase, setPhase] = useState<Phase>("select");
+  const [items, setItems] = useState<ImportItem[]>([]);
+  const [skipped, setSkipped] = useState<SkippedItem[]>([]);
+  const [doneCount, setDoneCount] = useState(0);
+  const [errorCount, setErrorCount] = useState(0);
+
+  function reset() {
+    setPhase("select");
+    setItems([]);
+    setSkipped([]);
+    setDoneCount(0);
+    setErrorCount(0);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function handleClose() {
+    if (phase === "importing") return;
+    const wasImporting = phase === "done";
+    reset();
+    onClose();
+    if (wasImporting) onComplete();
+  }
+
+  async function handleFile(file: File) {
+    setPhase("parsing");
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const entries = await readZip(arrayBuffer);
+
+      const recognized: ImportItem[] = [];
+      const unrecognized: SkippedItem[] = [];
+
+      for (const [path, data] of Object.entries(entries)) {
+        const basename = (path.split("/").pop() ?? path).trim();
+        if (!isImage(basename)) continue;
+        const blob = new Blob([data as Uint8Array<ArrayBuffer>], { type: "image/jpeg" });
+        const result = config.contextType === "collection"
+          ? mapForCollection(path, blob, config)
+          : mapForShow(path, blob, config);
+        if (result.item) recognized.push(result.item);
+        if (result.skip) unrecognized.push(result.skip);
+      }
+
+      recognized.sort((a, b) => {
+        const ai = KIND_ORDER.indexOf(a.kind.tag);
+        const bi = KIND_ORDER.indexOf(b.kind.tag);
+        if (ai !== bi) return ai - bi;
+        if (a.kind.tag === "episode" && b.kind.tag === "episode") {
+          const sa = a.kind.seasonNumber * 1000 + a.kind.episodeNumber;
+          const sb = b.kind.seasonNumber * 1000 + b.kind.episodeNumber;
+          return sa - sb;
+        }
+        if (a.kind.tag === "season" && b.kind.tag === "season") return a.kind.seasonNumber - b.kind.seasonNumber;
+        return a.filename.localeCompare(b.filename);
+      });
+
+      setItems(recognized);
+      setSkipped(unrecognized);
+      setPhase("preview");
+    } catch {
+      setPhase("select");
+    }
+  }
+
+  async function handleImport() {
+    if (!conn) return;
+    setPhase("importing");
+    let done = 0;
+    let errors = 0;
+
+    for (let i = 0; i < items.length; i++) {
+      setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "uploading" } : it));
+      try {
+        await uploadItem(items[i], conn, config.themeId);
+        setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "done" } : it));
+        done++;
+      } catch (e) {
+        const isDup = e instanceof Error && (e as Error & { isDuplicate?: boolean }).isDuplicate;
+        if (isDup) {
+          setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "duplicate" } : it));
+        } else {
+          const msg = e instanceof Error ? e.message : "upload failed";
+          setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "error", error: msg } : it));
+          errors++;
+        }
+      }
+      setDoneCount(done);
+      setErrorCount(errors);
+    }
+
+    void onComplete();
+    setPhase("done");
+  }
+
+  const nonDuplicates = items.filter((it) => it.status !== "duplicate");
+  const progressPct = items.length > 0
+    ? (items.filter((it) => ["done", "error", "duplicate"].includes(it.status)).length / items.length) * 100
+    : 0;
+  const dupCount = items.filter((it) => it.status === "duplicate").length;
+
+  const contextLabel = config.contextType === "collection" ? t("zipImportCollection") : t("zipImportShow");
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <UnarchiveOutlinedIcon fontSize="small" />
+        {t("zipImportTitle")}
+      </DialogTitle>
+
+      <DialogContent dividers>
+        {phase === "select" && (
+          <Stack spacing={2} alignItems="center" sx={{ py: 4 }}>
+            <UnarchiveOutlinedIcon sx={{ fontSize: "3rem", color: "text.disabled" }} />
+            <Typography color="text.secondary" variant="body2" textAlign="center">
+              {t("zipImportSelectPrompt", { contextType: contextLabel })}
+            </Typography>
+            <Button variant="contained" onClick={() => fileInputRef.current?.click()}>
+              {t("zipImportSelectButton")}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".zip"
+              style={{ display: "none" }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); }}
+            />
+          </Stack>
+        )}
+
+        {phase === "parsing" && (
+          <Stack spacing={2} alignItems="center" sx={{ py: 4 }}>
+            <CircularProgress />
+            <Typography color="text.secondary">{t("zipImportParsing")}</Typography>
+          </Stack>
+        )}
+
+        {(phase === "preview" || phase === "importing" || phase === "done") && (
+          <Stack spacing={2}>
+            {phase === "importing" && <LinearProgress variant="determinate" value={progressPct} />}
+
+            {phase === "done" && (
+              <Alert severity={errorCount > 0 ? "warning" : "success"}>
+                {t("zipImportDone", {
+                  done: doneCount,
+                  total: nonDuplicates.length,
+                  dups: dupCount,
+                  errors: errorCount,
+                })}
+              </Alert>
+            )}
+
+            {items.length === 0 && (
+              <Alert severity="warning">{t("zipImportNoItems")}</Alert>
+            )}
+
+            {items.length > 0 && (
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>{t("zipImportColFile")}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t("zipImportColType")}</TableCell>
+                    {(phase === "importing" || phase === "done") && (
+                      <TableCell sx={{ fontWeight: 700, width: 120 }}>{t("zipImportColStatus")}</TableCell>
+                    )}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {items.map((item, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>
+                        <Typography variant="body2" noWrap sx={{ maxWidth: 300 }}>{item.label}</Typography>
+                        <Typography variant="caption" color="text.disabled" sx={{ display: "block" }} noWrap>{item.filename}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={item.kind.tag} size="small" variant="outlined" sx={{ fontSize: "0.7rem" }} />
+                      </TableCell>
+                      {(phase === "importing" || phase === "done") && (
+                        <TableCell>
+                          {item.status === "pending" && (
+                            <Typography variant="caption" color="text.disabled">{t("zipImportWaiting")}</Typography>
+                          )}
+                          {item.status === "uploading" && <CircularProgress size={14} />}
+                          {item.status === "done" && (
+                            <CheckCircleOutlineIcon sx={{ fontSize: "1.1rem", color: "success.main" }} />
+                          )}
+                          {item.status === "duplicate" && (
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                              <RemoveCircleOutlineIcon sx={{ fontSize: "1rem", color: "text.disabled" }} />
+                              <Typography variant="caption" color="text.disabled">{t("zipImportDuplicate")}</Typography>
+                            </Box>
+                          )}
+                          {item.status === "error" && (
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                              <ErrorOutlineIcon sx={{ fontSize: "1rem", color: "error.main" }} />
+                              <Typography variant="caption" color="error" noWrap sx={{ maxWidth: 80 }}>{item.error}</Typography>
+                            </Box>
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+
+            {skipped.length > 0 && phase === "preview" && (
+              <Typography variant="caption" color="text.disabled">
+                {t("zipImportSkippedNote", { count: skipped.length })}
+              </Typography>
+            )}
+          </Stack>
+        )}
+      </DialogContent>
+
+      <DialogActions>
+        {phase !== "importing" && (
+          <Button onClick={handleClose}>
+            {phase === "done" ? t("zipImportClose") : t("zipImportCancel")}
+          </Button>
+        )}
+        {phase === "preview" && items.length > 0 && conn && (
+          <Button variant="contained" onClick={() => void handleImport()}>
+            {t("zipImportImportButton", { count: items.length })}
+          </Button>
+        )}
+      </DialogActions>
+    </Dialog>
+  );
+}

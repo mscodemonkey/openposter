@@ -15,7 +15,6 @@
     "@mui/joy": "^5.0.0-beta.52",
     "@mui/material": "^7.3.9",
     "@mui/material-nextjs": "^7.3.9",
-    "fflate": "^0.8.2",
     "jszip": "^3.10.1",
     "next": "16.1.6",
     "next-intl": "^4.8.3",
