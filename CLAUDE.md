@@ -146,7 +146,7 @@ Seed data: on startup, if `/data/seed.json` exists and the posters table is empt
 
 Core node endpoints:
 - `GET /.well-known/openposter-node` — node descriptor (id, keys, features, trusted_issuers)
-- `GET /v1/search` — search by tmdb_id, imdb_id, q, type, kind, orientation, text
+- `GET /v1/search` — search by tmdb_id, imdb_id, q, type, kind, orientation, text, language
 - `GET /v1/posters/{poster_id}` — full poster record with signature
 - `GET /v1/blobs/{hash}` — immutable blob by SHA-256 (`sha256:<hex>`)
 - `GET /v1/changes` — incremental change feed for indexers

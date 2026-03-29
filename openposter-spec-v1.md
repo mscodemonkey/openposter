@@ -108,7 +108,7 @@ Nodes MUST return JSON with at least:
 ### 2.3 Semantics
 
 - `node_id` MUST be stable over time (e.g., random ID stored in node config). It SHOULD NOT be a domain name.
-- `signing_keys` lists public keys used to sign poster metadata (see §4.3.9). Nodes with `features.signed_metadata=true` MUST publish at least one signing key.
+- `signing_keys` lists public keys used to sign poster metadata (see §4.3.10). Nodes with `features.signed_metadata=true` MUST publish at least one signing key.
 - `trusted_issuers` declares which issuers the node will accept bearer tokens from for premium operations.
 - Nodes MAY include themselves as an issuer (self-issued model) by hosting a `jwks_url`.
 
@@ -169,6 +169,7 @@ Query params (v1 core):
 
 Query params (v1 recommended filters):
 - `kind` = `poster|background|logo|square|banner|thumb` (optional) — filters by artwork kind (see §4.3.3)
+- `language` = BCP-47 tag (optional) — filters by artwork language (e.g. `en`, `ja`); omit to return all languages
 - `orientation` = `portrait|landscape|square` (optional)
 - `text` = `text|textless|unknown` (optional)
 - `season_number` (optional; meaningful when `type=season|episode`)
@@ -183,6 +184,8 @@ Search responses MUST include `next_cursor` when pagination is possible. If ther
   "results": [
     {
       "poster_id": "pst_8fa2c",
+      "kind": "poster",
+      "language": "en",
       "media": {
         "type": "movie",
         "tmdb_id": 603,
@@ -199,7 +202,8 @@ Search responses MUST include `next_cursor` when pagination is possible. If ther
           "hash": "sha256:...",
           "url": "https://posters.example.com/v1/blobs/sha256:...",
           "bytes": 245123,
-          "mime": "image/jpeg"
+          "mime": "image/jpeg",
+          "language": "en"
         },
         "full": {
           "access": "premium",
@@ -207,6 +211,7 @@ Search responses MUST include `next_cursor` when pagination is possible. If ther
           "url": "https://mirror1.example.org/v1/blobs/sha256:...",
           "bytes": 5123123,
           "mime": "image/jpeg",
+          "language": "en",
           "encryption": {
             "alg": "aes-256-gcm",
             "key_id": "key_7d2b...",
@@ -247,6 +252,10 @@ Poster Entry MUST include:
 - `assets.preview` (object)
 - `assets.full` (object)
 - `attribution.license` and `attribution.redistribution`
+
+Poster Entry SHOULD include:
+- `kind` (string; see §4.3.3) — artwork type; defaults to `"poster"` when absent
+- `language` (BCP-47 string or `null`) — language of the artwork text; `null` means language-neutral (textless or language-agnostic). MUST also be present on `assets.preview` and `assets.full` when set.
 
 #### 4.3.2 Media object
 
@@ -308,7 +317,7 @@ The top-level `kind` field identifies **what type of artwork** this poster recor
 - `profile_url` (URL)
 - `avatar` (asset reference)
 
-#### 4.3.4 Asset object
+#### 4.3.5 Asset object
 
 Each asset (`assets.preview`, `assets.full`, and any variants) MUST include:
 - `hash` (content hash of the served bytes)
@@ -317,7 +326,7 @@ Each asset (`assets.preview`, `assets.full`, and any variants) MUST include:
 - `mime` (`image/jpeg|image/png`)
 
 Assets MAY include:
-- `sources` (array of approved sources; see §4.3.8.1)
+- `sources` (array of approved sources; see §4.3.9.1)
 
 Assets SHOULD include:
 - `width` / `height` (integers)
@@ -330,7 +339,7 @@ Assets SHOULD include:
 - 400–800px on the short edge
 - <= ~500KB if possible
 
-#### 4.3.5 Full asset access and encryption
+#### 4.3.6 Full asset access and encryption
 
 `assets.full` MUST include:
 - `access`: `public|premium`
@@ -340,7 +349,7 @@ If `access = "premium"`, `assets.full.encryption` MUST be present:
 - `key_id`: string (used with `/v1/keys/{key_id}:unwrap`)
 - `nonce`: base64 string (algorithm-specific)
 
-#### 4.3.6 Variants (recommended)
+#### 4.3.7 Variants (recommended)
 
 Nodes SHOULD expose variants to reduce client work and bandwidth. Two patterns are allowed:
 
@@ -366,7 +375,7 @@ Nodes SHOULD expose variants to reduce client work and bandwidth. Two patterns a
 
 **Pattern B: multiple posters per media** (e.g., separate records for poster/background). This is allowed but Pattern A is preferred.
 
-#### 4.3.7 Descriptive fields (recommended)
+#### 4.3.8 Descriptive fields (recommended)
 
 Poster Entry SHOULD include:
 - `title` (string; creator-provided name for the artwork, distinct from media title)
@@ -376,7 +385,7 @@ Poster Entry SHOULD include:
 - `created_at` / `updated_at` (RFC3339 timestamps)
 - `checksum` fields are covered by `hash` (do not add extra hashes unless needed)
 
-#### 4.3.8 Attribution / redistribution
+#### 4.3.9 Attribution / redistribution
 
 `attribution` MUST include:
 - `license`: `all-rights-reserved|cc-by|cc-by-sa|cc0|custom`
@@ -391,7 +400,7 @@ Redistribution semantics:
 - `mirrors-approved`: only mirrors explicitly approved by the creator SHOULD be used/advertised.
 - `none`: clients SHOULD fetch blobs only from URLs hosted by the creator node (or creator-controlled infrastructure).
 
-#### 4.3.8.1 Approved mirrors (v1)
+#### 4.3.9.1 Approved mirrors (v1)
 
 To make `redistribution=mirrors-approved` work without a separate central approval registry, v1 defines **approved mirrors by signed advertisement**:
 
@@ -423,7 +432,7 @@ Rules:
 
 Future extension (non-normative): creator-issued mirror grants (tokens) for automated mirror syncing.
 
-#### 4.3.9 Signed metadata (REQUIRED for v1)
+#### 4.3.10 Signed metadata (REQUIRED for v1)
 
 To prevent spoofing/impersonation, Poster Entry metadata MUST be signed by the creator node.
 
