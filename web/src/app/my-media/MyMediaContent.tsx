@@ -1,15 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import Accordion from "@mui/material/Accordion";
+import PageHeader from "@/components/PageHeader";
+import type { PageCrumb } from "@/components/PageHeader";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Container from "@mui/material/Container";
 import Snackbar from "@mui/material/Snackbar";
 import CircularProgress from "@mui/material/CircularProgress";
 
@@ -29,9 +33,10 @@ import Typography from "@mui/material/Typography";
 
 import { alpha } from "@mui/material/styles";
 
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
+import HomeIcon from "@mui/icons-material/Home";
+import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import MovieOutlinedIcon from "@mui/icons-material/MovieOutlined";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
@@ -387,18 +392,6 @@ function LetterGroup<T extends MediaItem>({
   );
 }
 
-function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
-      <IconButton size="small" onClick={onClick} aria-label={label}>
-        <ArrowBackIcon fontSize="small" />
-      </IconButton>
-      <Typography variant="body2" color="text.secondary" sx={{ cursor: "pointer" }} onClick={onClick}>
-        {label}
-      </Typography>
-    </Stack>
-  );
-}
 
 /** "⋮" menu rendered in a card's title strip when its thumbnail has failed. */
 function CardRetryMenu({ onRetry }: { onRetry: () => void }) {
@@ -449,12 +442,36 @@ function CardManageMenu({ onReset }: { onReset: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
+// No-servers welcome page
+// ---------------------------------------------------------------------------
+
+function NoMediaServersPage() {
+  const t = useTranslations("myMedia");
+  return (
+    <Container maxWidth="sm">
+      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", py: 12, gap: 3 }}>
+        <StorageOutlinedIcon sx={{ fontSize: "5rem", color: "text.disabled" }} />
+        <Box>
+          <Typography variant="h4" fontWeight={900} gutterBottom>{t("noServersTitle")}</Typography>
+          <Typography variant="h6" color="text.secondary" fontWeight={400} sx={{ maxWidth: 480, mx: "auto", mb: 4 }}>
+            {t("noServersDescription")}
+          </Typography>
+          <Button variant="contained" size="large" component={Link} href="/settings">
+            {t("goToSettings")}
+          </Button>
+        </Box>
+      </Box>
+    </Container>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
 export default function MyMediaContent() {
   const t = useTranslations("myMedia");
-  const tms = useTranslations("mediaServers");
+
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -482,6 +499,9 @@ export default function MyMediaContent() {
   const [snack, setSnack] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
     open: false, message: "", severity: "success",
   });
+
+  const [activeLibrary, setActiveLibrary] = useState<string | null>(null);
+  const [collMenuAnchor, setCollMenuAnchor] = useState<null | HTMLElement>(null);
 
   function markFailed(id: string) {
     setFailedThumbs((prev) => prev.has(id) ? prev : new Set([...prev, id]));
@@ -598,6 +618,47 @@ export default function MyMediaContent() {
   const sortedShows = useMemo(() => sortedByTitle(library?.shows ?? []), [library]);
   const sortedCollections = useMemo(() => sortedByTitle(library?.collections ?? []), [library]);
 
+  type SidebarLibrary = { name: string; type: "movie" | "show"; hasCollections: boolean };
+
+  const sidebarLibraries = useMemo((): SidebarLibrary[] => {
+    const srv = servers[0];
+    if (!srv || !library) return [];
+    // Movie libraries: has collections if any movie in that library has collection_ids.
+    // This is reliable even before library_title is populated on collection items.
+    const movieLibsWithCollections = new Set<string>();
+    for (const movie of library.movies) {
+      if (movie.library_title && (movie.collection_ids?.length ?? 0) > 0) {
+        movieLibsWithCollections.add(movie.library_title);
+      }
+    }
+    // TV libraries: has collections if any collection item has a matching library_title.
+    const tvCollectionLibs = new Set(
+      library.collections.map((c) => c.library_title).filter(Boolean) as string[]
+    );
+    return [
+      ...srv.movie_libraries.map((name) => ({
+        name,
+        type: "movie" as const,
+        hasCollections: movieLibsWithCollections.has(name),
+      })),
+      ...srv.tv_libraries.map((name) => ({
+        name,
+        type: "show" as const,
+        hasCollections: tvCollectionLibs.has(name),
+      })),
+    ];
+  }, [servers, library]);
+
+  const visibleMovies = useMemo(() =>
+    activeLibrary ? sortedMovies.filter((m) => m.library_title === activeLibrary) : sortedMovies,
+  [sortedMovies, activeLibrary]);
+  const visibleShows = useMemo(() =>
+    activeLibrary ? sortedShows.filter((s) => s.library_title === activeLibrary) : sortedShows,
+  [sortedShows, activeLibrary]);
+  const visibleCollections = useMemo(() =>
+    activeLibrary ? sortedCollections.filter((c) => c.library_title === activeLibrary) : sortedCollections,
+  [sortedCollections, activeLibrary]);
+
   // Per-collection movie count derived from movies' collection_ids arrays.
   const collectionMovieCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -613,17 +674,23 @@ export default function MyMediaContent() {
 
   const activeLetters = useMemo((): Set<string> => {
     const items =
-      nav.view === "movies" ? sortedMovies :
-      nav.view === "shows" ? sortedShows :
-      nav.view === "collections" ? sortedCollections : [];
+      nav.view === "movies" ? visibleMovies :
+      nav.view === "shows" ? visibleShows :
+      nav.view === "collections" ? visibleCollections : [];
     return new Set(items.map((i) => firstLetter(i.title)));
-  }, [nav.view, sortedMovies, sortedShows, sortedCollections]);
+  }, [nav.view, visibleMovies, visibleShows, visibleCollections]);
 
   const showAZRail = nav.view === "movies" || nav.view === "shows" || nav.view === "collections";
 
-  const sidebarActive =
-    nav.view === "collections" || nav.view === "collection" ? "collections" :
-    nav.view === "movies" || nav.view === "movie" ? "movies" : "shows";
+  function goToLibrary(lib: SidebarLibrary) {
+    setActiveLibrary(lib.name);
+    navigate({ view: lib.type === "movie" ? "movies" : "shows" });
+  }
+
+  function goToLibraryCollections(lib: SidebarLibrary) {
+    setActiveLibrary(lib.name);
+    navigate({ view: "collections" });
+  }
 
   if (!conn) {
     return <Alert severity="info" sx={{ m: 3 }}>{t("noConnection")}</Alert>;
@@ -638,12 +705,7 @@ export default function MyMediaContent() {
   }
   if (error) return <Alert severity="error" sx={{ m: 3 }}>{error}</Alert>;
   if (servers.length === 0) {
-    return (
-      <Stack alignItems="center" spacing={2} sx={{ py: 8, px: 3, textAlign: "center" }}>
-        <Typography color="text.secondary">{tms("noServers")}</Typography>
-        <Button variant="outlined" href="/settings">{t("goToSettings")}</Button>
-      </Stack>
-    );
+    return <NoMediaServersPage />;
   }
   if (!library) return <Alert severity="warning" sx={{ m: 3 }}>{t("notConfigured")}</Alert>;
 
@@ -656,6 +718,132 @@ export default function MyMediaContent() {
   }
 
   const noItems = t("noItems");
+
+  // ---------------------------------------------------------------------------
+  // Breadcrumbs + page title
+  // ---------------------------------------------------------------------------
+
+  const homePageCrumb: PageCrumb = {
+    label: <HomeIcon sx={{ fontSize: "1rem", verticalAlign: "text-bottom" }} />,
+    onClick: () => { setActiveLibrary(null); navigate({ view: "movies" }); },
+  };
+
+  const mediaBreadcrumbs: PageCrumb[] = (() => {
+    const lib = activeLibrary;
+    const moviesLabel = lib ?? t("movies");
+    const showsLabel = lib ?? t("tvShows");
+    const moviesBack: PageCrumb = { label: moviesLabel, onClick: () => navigate({ view: "movies" }) };
+    const showsBack: PageCrumb = { label: showsLabel, onClick: () => navigate({ view: "shows" }) };
+    const collectionsBack: PageCrumb = { label: t("collections"), onClick: () => navigate({ view: "collections" }) };
+
+    switch (nav.view) {
+      case "movies":      return [homePageCrumb, { label: moviesLabel }];
+      case "shows":       return [homePageCrumb, { label: showsLabel }];
+      case "collections": return lib
+        ? [homePageCrumb, { label: lib, onClick: () => navigate({ view: "movies" }) }, { label: t("collections") }]
+        : [homePageCrumb, { label: t("collections") }];
+      case "collection":  return lib
+        ? [homePageCrumb, { label: lib, onClick: () => navigate({ view: "movies" }) }, collectionsBack, { label: nav.title }]
+        : [homePageCrumb, collectionsBack, { label: nav.title }];
+      case "show":        return [homePageCrumb, showsBack, { label: nav.title }];
+      case "season":      return [
+        homePageCrumb,
+        showsBack,
+        { label: nav.showTitle, onClick: () => navigate({ view: "show", id: nav.showId, title: nav.showTitle }) },
+        { label: nav.title },
+      ];
+      case "movie":       return nav.fromCollectionId
+        ? [homePageCrumb, moviesBack, collectionsBack, { label: nav.fromCollectionTitle ?? "", onClick: () => navigate({ view: "collection", id: nav.fromCollectionId!, title: nav.fromCollectionTitle ?? "" }) }, { label: nav.item.title }]
+        : [homePageCrumb, moviesBack, { label: nav.item.title }];
+      default:            return [homePageCrumb];
+    }
+  })();
+
+  const mediaPageTitle = (() => {
+    switch (nav.view) {
+      case "movies":      return activeLibrary ?? t("movies");
+      case "shows":       return activeLibrary ?? t("tvShows");
+      case "collections": return t("collections");
+      case "collection":  return nav.title;
+      case "show": {
+        const s = library?.shows.find((s) => s.id === nav.id);
+        return s ? `${s.title}${s.year ? ` (${s.year})` : ""}` : nav.title;
+      }
+      case "season": {
+        const { seasonIndex, title: seasonTitle } = nav;
+        return seasonIndex != null
+          ? (seasonTitle && !/^season\s+0*\d+$/i.test(seasonTitle.trim())
+            ? `Season ${String(seasonIndex).padStart(2, "0")} · ${seasonTitle}`
+            : `Season ${String(seasonIndex).padStart(2, "0")}`)
+          : (seasonTitle ?? "");
+      }
+      case "movie":       return `${nav.item.title}${nav.item.year ? ` (${nav.item.year})` : ""}`;
+      default:            return null;
+    }
+  })();
+
+  // Subtitle rendered by PageHeader — keeps subtitle/spacing logic out of detail components.
+  const mediaSubtitle = (() => {
+    if (nav.view === "movie" && library) {
+      const memberColls = (nav.item.collection_ids ?? [])
+        .map((id) => sortedCollections.find((c) => c.id === id))
+        .filter((c): c is MediaItem => c != null);
+
+      const captionSx = { letterSpacing: "0.05em", textTransform: "uppercase" as const };
+      const btnSx = { fontSize: "0.6rem", py: 0.25, lineHeight: 1.5 };
+
+      if (memberColls.length === 0) {
+        return <Typography variant="caption" color="text.disabled" sx={captionSx}>{t("movieNotAMember")}</Typography>;
+      }
+      if (memberColls.length === 1) {
+        return (
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="caption" color="text.secondary" sx={captionSx}>
+              {t("movieMemberOf", { title: memberColls[0].title })}
+            </Typography>
+            <Button size="small" variant="outlined" sx={btnSx}
+              onClick={() => navigate({ view: "collection", id: memberColls[0].id, title: memberColls[0].title })}>
+              {nav.fromCollectionTitle ? t("movieBackToCollection") : t("movieViewCollection")}
+            </Button>
+          </Stack>
+        );
+      }
+      return (
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Typography variant="caption" color="text.secondary" sx={captionSx}>
+            {t("movieMemberOfMany", { n: memberColls.length })}
+          </Typography>
+          <Button size="small" variant="outlined" endIcon={<ArrowDropDownIcon />} sx={btnSx}
+            onClick={(e) => setCollMenuAnchor(e.currentTarget)}>
+            {nav.fromCollectionTitle ? t("movieBackToCollection") : t("movieViewCollection")}
+          </Button>
+          <Menu anchorEl={collMenuAnchor} open={Boolean(collMenuAnchor)} onClose={() => setCollMenuAnchor(null)}>
+            {memberColls.map((c) => (
+              <MenuItem key={c.id} dense onClick={() => { setCollMenuAnchor(null); navigate({ view: "collection", id: c.id, title: c.title }); }}>
+                {c.title}
+              </MenuItem>
+            ))}
+          </Menu>
+        </Stack>
+      );
+    }
+
+    if (nav.view === "show" && library) {
+      const showItem = library.shows.find((s) => s.id === nav.id);
+      if (!showItem || (showItem.child_count == null && showItem.leaf_count == null)) return null;
+      return (
+        <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+          {t("showLibrarySubheading", {
+            seasons: showItem.child_count ?? 0,
+            episodes: showItem.leaf_count ?? 0,
+            server: servers[0]?.name ?? "",
+          })}
+        </Typography>
+      );
+    }
+
+    return null;
+  })();
 
   // ---------------------------------------------------------------------------
   // Main views
@@ -671,11 +859,9 @@ export default function MyMediaContent() {
       case "movies":
         return (
           <>
-            <Typography variant="h5" gutterBottom>{t("movies")}</Typography>
             <LetterGroup
-              items={sortedMovies}
+              items={visibleMovies}
               noItemsText={noItems}
-
               renderItem={(item) => {
                 const failed = failedThumbs.has(item.id);
                 const tracked = trackedArtwork.get(item.id);
@@ -701,11 +887,9 @@ export default function MyMediaContent() {
       case "shows":
         return (
           <>
-            <Typography variant="h5" gutterBottom>{t("tvShows")}</Typography>
             <LetterGroup
-              items={sortedShows}
+              items={visibleShows}
               noItemsText={noItems}
-
               renderItem={(item) => {
                 const failed = failedThumbs.has(item.id);
                 return (
@@ -726,9 +910,8 @@ export default function MyMediaContent() {
       case "collections":
         return (
           <>
-            <Typography variant="h5" gutterBottom>{t("collections")}</Typography>
             <LetterGroup
-              items={sortedCollections}
+              items={visibleCollections}
               noItemsText={noItems}
 
               renderItem={(item) => {
@@ -757,12 +940,6 @@ export default function MyMediaContent() {
           <MovieMediaDetail
             item={nav.item}
             conn={conn!}
-            onBack={nav.fromCollectionId
-              ? () => navigate({ view: "collection", id: nav.fromCollectionId!, title: nav.fromCollectionTitle ?? "" })
-              : () => navigate({ view: "movies" })}
-            collections={sortedCollections}
-            onNavigateToCollection={(id, title) => navigate({ view: "collection", id, title })}
-            fromCollectionTitle={nav.fromCollectionTitle}
             serverName={servers[0]?.name}
           />
         );
@@ -773,7 +950,6 @@ export default function MyMediaContent() {
           <CollectionMediaDetail
             item={collectionItem}
             conn={conn!}
-            onBack={() => navigate({ view: "collections" })}
             movies={children}
             childrenForId={childrenForId}
             childrenLoading={childrenLoading}
@@ -799,7 +975,6 @@ export default function MyMediaContent() {
             conn={conn!}
             failedThumbs={failedThumbs}
             trackedArtwork={trackedArtwork}
-            onBack={() => navigate({ view: "shows" })}
             onMarkFailed={markFailed}
             onMarkRetry={markRetry}
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
@@ -824,7 +999,6 @@ export default function MyMediaContent() {
             conn={conn!}
             failedThumbs={failedThumbs}
             trackedArtwork={trackedArtwork}
-            onBack={() => navigate({ view: "show", id: nav.showId, title: nav.showTitle })}
             onMarkFailed={markFailed}
             onMarkRetry={markRetry}
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
@@ -908,32 +1082,57 @@ export default function MyMediaContent() {
             </AccordionSummary>
             <AccordionDetails sx={{ p: 0 }}>
               <List dense disablePadding>
-                {[
-                  { key: "collections", label: t("collections"), icon: <CollectionsOutlinedIcon fontSize="small" /> },
-                  { key: "movies",      label: t("movies"),      icon: <MovieOutlinedIcon fontSize="small" /> },
-                  { key: "shows",       label: t("tvShows"),     icon: <TvOutlinedIcon fontSize="small" /> },
-                ].map(({ key, label, icon }) => (
-                  <ListItem key={key} disablePadding>
-                    <ListItemButton
-                      selected={sidebarActive === key}
-                      onClick={() => navigate({ view: key as "collections" | "movies" | "shows" })}
-                    >
-                      <ListItemIcon sx={{ minWidth: 36 }}>
-                        {icon}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={label}
-                        slotProps={{
-                          primary: {
-                            variant: "body2",
-                            color: sidebarActive === key ? "primary" : "text.primary",
-                            fontWeight: sidebarActive === key ? 600 : 400,
-                          },
-                        }}
-                      />
-                    </ListItemButton>
-                  </ListItem>
-                ))}
+                {sidebarLibraries.map((lib) => {
+                  const isActive = activeLibrary === lib.name;
+                  const isItemsView = nav.view === "movies" || nav.view === "shows";
+                  const icon = lib.type === "movie"
+                    ? <MovieOutlinedIcon fontSize="small" />
+                    : <TvOutlinedIcon fontSize="small" />;
+                  return (
+                    <Fragment key={lib.name}>
+                      <ListItem disablePadding>
+                        <ListItemButton
+                          selected={isActive && !lib.hasCollections}
+                          onClick={() => goToLibrary(lib)}
+                        >
+                          <ListItemIcon sx={{ minWidth: 36 }}>{icon}</ListItemIcon>
+                          <ListItemText
+                            primary={lib.name}
+                            slotProps={{ primary: { variant: "body2", color: isActive ? "primary" : "text.primary", fontWeight: isActive ? 600 : 400 } }}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                      {lib.hasCollections && (
+                        <>
+                          <ListItem disablePadding>
+                            <ListItemButton
+                              selected={isActive && isItemsView}
+                              onClick={() => goToLibrary(lib)}
+                              sx={{ pl: 6.5 }}
+                            >
+                              <ListItemText
+                                primary={t("library")}
+                                slotProps={{ primary: { variant: "body2", color: isActive && isItemsView ? "primary" : "text.secondary", fontWeight: isActive && isItemsView ? 600 : 400 } }}
+                              />
+                            </ListItemButton>
+                          </ListItem>
+                          <ListItem disablePadding>
+                            <ListItemButton
+                              selected={isActive && nav.view === "collections"}
+                              onClick={() => goToLibraryCollections(lib)}
+                              sx={{ pl: 6.5 }}
+                            >
+                              <ListItemText
+                                primary={t("collections")}
+                                slotProps={{ primary: { variant: "body2", color: isActive && nav.view === "collections" ? "primary" : "text.secondary", fontWeight: isActive && nav.view === "collections" ? 600 : 400 } }}
+                              />
+                            </ListItemButton>
+                          </ListItem>
+                        </>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </List>
             </AccordionDetails>
           </Accordion>
@@ -942,6 +1141,13 @@ export default function MyMediaContent() {
 
       {/* Main content — full width, left padding clears the sidebar */}
       <Box ref={scrollContainerRef} sx={{ height: "100%", overflowY: "auto", p: { xs: 2, md: 3 }, pl: { md: "232px" }, pr: { md: 5 } }}>
+        <PageHeader
+          crumbs={mediaBreadcrumbs}
+          title={mediaPageTitle ?? undefined}
+          subtitle={mediaSubtitle ?? undefined}
+          compact={nav.view === "collection" || nav.view === "season"}
+        />
+
         {updateProgress && (
           <Box sx={{ mb: 2 }}>
             <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>

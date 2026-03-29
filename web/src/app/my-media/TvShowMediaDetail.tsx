@@ -20,7 +20,6 @@ import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ReplayIcon from "@mui/icons-material/Replay";
@@ -130,7 +129,6 @@ interface TvShowMediaDetailProps {
   conn: { nodeUrl: string; adminToken: string };
   failedThumbs: Set<string>;
   trackedArtwork: Map<string, TrackedArtwork>;
-  onBack: () => void;
   onMarkFailed: (id: string) => void;
   onMarkRetry: (id: string) => void;
   onUntrack: (id: string) => void;
@@ -146,7 +144,6 @@ export default function TvShowMediaDetail({
   conn,
   failedThumbs,
   trackedArtwork,
-  onBack,
   onMarkFailed,
   onMarkRetry,
   onUntrack,
@@ -476,29 +473,29 @@ export default function TvShowMediaDetail({
     const showPoster = (showResults.results ?? []).find((p) => p.creator.creator_id === appliedCreatorId);
     const showAlreadyTracked = trackedItem?.creator_id === appliedCreatorId;
     if (showPoster && item.id !== justAppliedRatingKey && !showAlreadyTracked) {
-      jobs.push({ label: "TV show poster", imageUrl: showPoster.assets.full.url, plexRatingKey: item.id, mediaType: "show", isBackdrop: false, poster: showPoster, season: null, previewUrl: showPoster.assets.preview.url });
+      jobs.push({ label: t("poster"), imageUrl: showPoster.assets.full.url, plexRatingKey: item.id, mediaType: "show", isBackdrop: false, poster: showPoster, season: null, previewUrl: showPoster.assets.preview.url });
     }
 
     // Show backdrop
     const showBackdrop = (backdropResults.results ?? []).find((p) => p.creator.creator_id === appliedCreatorId && !p.media.season_number);
     if (showBackdrop) {
-      jobs.push({ label: "TV show backdrop", imageUrl: showBackdrop.assets.full.url, plexRatingKey: item.id, mediaType: "show", isBackdrop: true, poster: showBackdrop, season: null, previewUrl: showBackdrop.assets.preview.url });
+      jobs.push({ label: t("backdrop"), imageUrl: showBackdrop.assets.full.url, plexRatingKey: item.id, mediaType: "show", isBackdrop: true, poster: showBackdrop, season: null, previewUrl: showBackdrop.assets.preview.url });
     }
 
     // Season posters and backdrops
     for (const season of seasons) {
       if (season.index == null) continue;
-      const label = `Season ${fmt(season.index)}`;
+      const label = t("drawerThisSeason", { number: fmt(season.index) });
 
       const seasonPoster = (seasonResults.results ?? []).find((p) => p.creator.creator_id === appliedCreatorId && p.media.season_number === season.index);
       const seasonAlreadyTracked = trackedArtwork.get(season.id)?.creator_id === appliedCreatorId;
       if (seasonPoster && season.id !== justAppliedRatingKey && !seasonAlreadyTracked) {
-        jobs.push({ label: `${label} poster`, imageUrl: seasonPoster.assets.full.url, plexRatingKey: season.id, mediaType: "season", isBackdrop: false, poster: seasonPoster, season, previewUrl: seasonPoster.assets.preview.url });
+        jobs.push({ label: `${label} ${t("poster")}`, imageUrl: seasonPoster.assets.full.url, plexRatingKey: season.id, mediaType: "season", isBackdrop: false, poster: seasonPoster, season, previewUrl: seasonPoster.assets.preview.url });
       }
 
       const seasonBackdrop = (backdropResults.results ?? []).find((p) => p.creator.creator_id === appliedCreatorId && p.media.season_number === season.index);
       if (seasonBackdrop) {
-        jobs.push({ label: `${label} backdrop`, imageUrl: seasonBackdrop.assets.full.url, plexRatingKey: season.id, mediaType: "season", isBackdrop: true, poster: seasonBackdrop, season, previewUrl: seasonBackdrop.assets.preview.url });
+        jobs.push({ label: `${label} ${t("backdrop")}`, imageUrl: seasonBackdrop.assets.full.url, plexRatingKey: season.id, mediaType: "season", isBackdrop: true, poster: seasonBackdrop, season, previewUrl: seasonBackdrop.assets.preview.url });
       }
     }
 
@@ -517,7 +514,7 @@ export default function TvShowMediaDetail({
             if (trackedArtwork.get(episode.id)?.creator_id === appliedCreatorId) continue;
             const epPoster = creatorEpisodePosters.find((p) => p.media.season_number === seasonNum && p.media.episode_number === episode.index);
             if (epPoster) {
-              jobs.push({ label: `Season ${fmt(seasonNum)}, Episode ${fmt(episode.index)}`, imageUrl: epPoster.assets.full.url, plexRatingKey: episode.id, mediaType: "episode", isBackdrop: false, poster: epPoster, season, previewUrl: epPoster.assets.preview.url });
+              jobs.push({ label: `${t("drawerThisSeason", { number: fmt(seasonNum) })}, ${t("poster")}`, imageUrl: epPoster.assets.full.url, plexRatingKey: episode.id, mediaType: "episode", isBackdrop: false, poster: epPoster, season, previewUrl: epPoster.assets.preview.url });
             }
           }
         } catch { /* skip this season's episodes if fetch fails */ }
@@ -744,10 +741,10 @@ export default function TvShowMediaDetail({
   const showAltSpinner = altLoading || altLoadedForKey !== selectedKey;
   const drawerSeason = seasons.find((s) => s.id === drawerSeasonId) ?? null;
   const drawerSubtitle = drawerKind === "show"
-    ? "This Show"
+    ? t("drawerThisShow")
     : drawerSeason?.index != null
-      ? `Season ${String(drawerSeason.index).padStart(2, "0")}`
-      : "This show";
+      ? t("drawerThisSeason", { number: String(drawerSeason.index).padStart(2, "0") })
+      : t("drawerThisShow");
   const drawerChip = drawerIsLogo || drawerIsSquare
     ? { label: "TV SHOW", color: "error" as const }
     : drawerIsBackdrop
@@ -789,8 +786,8 @@ export default function TvShowMediaDetail({
   const showCardEpisodeCount = item.leaf_count ?? 0;
   const [posterSize] = useState(() => getPosterSize());
   const showCardSubtitle = posterSize === "large"
-    ? `${showCardSeasonCount} season${showCardSeasonCount !== 1 ? "s" : ""} · ${showCardEpisodeCount} episode${showCardEpisodeCount !== 1 ? "s" : ""}`
-    : `${showCardSeasonCount} season${showCardSeasonCount !== 1 ? "s" : ""}`;
+    ? t("showLibrarySubheading", { seasons: showCardSeasonCount, episodes: showCardEpisodeCount, server: serverName })
+    : t("showSeasonCount", { count: showCardSeasonCount });
 
   const isShowResetting = resettingIds.has(item.id);
 
@@ -813,26 +810,6 @@ export default function TvShowMediaDetail({
       {/* Page content above hero */}
       <Box sx={{ position: "relative", zIndex: 1 }}>
 
-      {/* Back */}
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
-        <IconButton size="small" onClick={onBack} aria-label={t("backToShows")}>
-          <ArrowBackIcon fontSize="small" />
-        </IconButton>
-        <Typography variant="body2" color="text.secondary" sx={{ cursor: "pointer" }} onClick={onBack}>
-          {t("backToShows")}
-        </Typography>
-      </Stack>
-
-      <Typography variant="h5" gutterBottom>{item.title}{item.year ? ` (${item.year})` : ""}</Typography>
-      {(item.child_count != null || item.leaf_count != null) && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 3, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-          {t("showLibrarySubheading", {
-            seasons: item.child_count ?? seasons.length,
-            episodes: item.leaf_count ?? 0,
-            server: serverName,
-          })}
-        </Typography>
-      )}
 
       {/* All cards — wrapped in seasonsGridRef for click-outside detection */}
       <Box ref={seasonsGridRef}>
@@ -852,7 +829,7 @@ export default function TvShowMediaDetail({
               onImageError={() => setFailedThumb(true)}
               onClick={() => { setSelectedShowCard(true); setSelectedSeasonId(null); setSelectedBackdropId(null); }}
               onClose={() => setSelectedShowCard(false)}
-              tooltip="View alternate artwork and other options"
+              tooltip={t("tooltipViewAltArtwork")}
               creatorName={trackedItem?.creator_display_name}
               badge={<ArtworkSourceBadge source={trackedItem ? "openposter" : failedThumb ? null : "plex"} creatorName={trackedItem?.creator_display_name} />}
               chip={<CardChip label="TV SHOW" color="error" />}
@@ -865,9 +842,9 @@ export default function TvShowMediaDetail({
                         icon={isShowCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                         disabled={!trackedItem}
                         active={isShowCreatorSubscribed}
-                        tooltip={isShowCreatorSubscribed ? "Subscribed" : "Subscribe to creator"}
+                        tooltip={isShowCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
                         menuItems={trackedItem?.creator_id ? [
-                          { label: isShowCreatorSubscribed ? "Unsubscribe" : "Subscribe", onClick: () => { handleShowCreatorSubscribe(); setTimeout(() => setSelectedShowCard(false), 500); } },
+                          { label: isShowCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"), onClick: () => { handleShowCreatorSubscribe(); setTimeout(() => setSelectedShowCard(false), 500); } },
                         ] : undefined}
                       />
                     </Box>
@@ -875,21 +852,21 @@ export default function TvShowMediaDetail({
                       <ToolbarButton
                         icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                         disabled={!trackedItem}
-                        tooltip="Reset to default"
+                        tooltip={t("tooltipResetToDefault")}
                         onClick={(e) => { e.stopPropagation(); handleReset(item.id, "show"); setSelectedShowCard(false); }}
                       />
                     </Box>
                     <Box sx={{ flex: 1 }}>
                       <ToolbarButton
                         icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />}
-                        tooltip="Upload your own poster"
+                        tooltip={t("tooltipUploadOwnPoster")}
                         onClick={(e) => { e.stopPropagation(); setSelectedShowCard(false); }}
                       />
                     </Box>
                     <Box sx={{ flex: 1 }}>
                       <ToolbarButton
                         icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                        tooltip="Select a new poster from an OpenPoster creator"
+                        tooltip={t("tooltipSelectPoster")}
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedShowCard(false);
@@ -932,7 +909,7 @@ export default function TvShowMediaDetail({
               const isCreatorSubscribed = tracked?.creator_id ? creatorSubs.has(tracked.creator_id) : false;
               const epCount = season.leaf_count ?? 0;
               const seasonNum = season.index != null
-                ? `Season ${String(season.index).padStart(2, "0")}`
+                ? t("drawerThisSeason", { number: String(season.index).padStart(2, "0") })
                 : (season.title ?? "");
               const seasonSubtitle = [seasonNum, season.year ? String(season.year) : null].filter(Boolean).join(" · ");
 
@@ -964,7 +941,7 @@ export default function TvShowMediaDetail({
                   onImageError={() => onMarkFailed(season.id)}
                   onClick={() => { setSelectedKind("season"); setSelectedSeasonId(season.id); setSelectedBackdropId(null); }}
                   onClose={() => { setSelectedKind("show"); setSelectedSeasonId(null); }}
-                  tooltip="View alternate artwork and other options"
+                  tooltip={t("tooltipViewAltArtwork")}
                   creatorName={tracked?.creator_display_name}
                   badge={<ArtworkSourceBadge source={tracked ? "openposter" : failed ? null : "plex"} creatorName={tracked?.creator_display_name} />}
                   chip={<CardChip label={seasonNum} color="info" />}
@@ -975,16 +952,16 @@ export default function TvShowMediaDetail({
                       <ToolbarButton
                         cols={4}
                         size="sm"
-                        label={epCount === 1 ? "SHOW 1 EPISODE" : `SHOW ${epCount} EPISODES`}
+                        label={epCount === 1 ? t("showEpisodesOne") : t("showEpisodesMany", { count: epCount })}
                         disabled={epCount === 0}
-                        tooltip="Show episode cards"
+                        tooltip={t("tooltipShowEpisodes")}
                         onClick={(e) => { e.stopPropagation(); onViewEpisodes?.(season); closeOverlay(); }}
                       />
                       {/* 4-icon row */}
                       {failed ? (
                         <ToolbarButton
                           icon={<RefreshIcon sx={{ fontSize: "1.1rem" }} />}
-                          tooltip="Retry download"
+                          tooltip={t("menuRetryDownload")}
                           onClick={(e) => { e.stopPropagation(); onMarkRetry(season.id); closeOverlay(); }}
                         />
                       ) : (
@@ -992,22 +969,22 @@ export default function TvShowMediaDetail({
                           icon={isCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                           disabled={!tracked}
                           active={isCreatorSubscribed}
-                          tooltip={isCreatorSubscribed ? "Subscribed" : "Subscribe to creator"}
+                          tooltip={isCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
                           menuItems={tracked?.creator_id ? [
-                            { label: isCreatorSubscribed ? "Unsubscribe" : "Subscribe", onClick: () => { handleCreatorSubscribe(); setTimeout(closeOverlay, 500); } },
+                            { label: isCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"), onClick: () => { handleCreatorSubscribe(); setTimeout(closeOverlay, 500); } },
                           ] : undefined}
                         />
                       )}
                       <ToolbarButton
                         icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                         disabled={!tracked}
-                        tooltip="Reset to default"
+                        tooltip={t("tooltipResetToDefault")}
                         onClick={(e) => { e.stopPropagation(); handleReset(season.id, "season", season.index); closeOverlay(); }}
                       />
-                      <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own poster" onClick={(e) => { e.stopPropagation(); closeOverlay(); }} />
+                      <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnPoster")} onClick={(e) => { e.stopPropagation(); closeOverlay(); }} />
                       <ToolbarButton
                           icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                          tooltip="Select a new poster from an OpenPoster creator"
+                          tooltip={t("tooltipSelectPoster")}
                           onClick={(e) => {
                             e.stopPropagation();
                             closeOverlay();
@@ -1056,7 +1033,7 @@ export default function TvShowMediaDetail({
             selected={selectedBackdropId === item.id}
             onClick={() => { setSelectedBackdropId(item.id); setSelectedKind("show"); setSelectedSeasonId(null); }}
             onClose={() => setSelectedBackdropId(null)}
-            tooltip="View backdrop options"
+            tooltip={t("tooltipViewBackdropOptions")}
             creatorName={trackedArtwork.get(item.id + ":bg")?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedArtwork.get(item.id + ":bg") || opAppliedKeys.has(item.id + ":bg")) ? "openposter" : failedShowBg ? null : "plex"} creatorName={trackedArtwork.get(item.id + ":bg")?.creator_display_name} />}
             chip={<CardChip label="TV SHOW" color="error" />}
@@ -1071,9 +1048,9 @@ export default function TvShowMediaDetail({
                       icon={isBgSubbed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                       disabled={!trackedBg}
                       active={isBgSubbed}
-                      tooltip={isBgSubbed ? "Subscribed" : "Subscribe to creator"}
+                      tooltip={isBgSubbed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
                       menuItems={trackedBg?.creator_id ? [{
-                        label: isBgSubbed ? "Unsubscribe" : "Subscribe",
+                        label: isBgSubbed ? t("menuUnsubscribe") : t("menuSubscribe"),
                         onClick: () => {
                           if (isBgSubbed) { unsubscribeCreator(trackedBg.creator_id!); setCreatorSubs((p) => { const s = new Set(p); s.delete(trackedBg.creator_id!); return s; }); }
                           else { subscribeCreator({ creatorId: trackedBg.creator_id!, creatorDisplayName: trackedBg.creator_display_name ?? trackedBg.creator_id!, nodeBase: trackedBg.node_base ?? "" }); setCreatorSubs((p) => new Set([...p, trackedBg.creator_id!])); }
@@ -1086,13 +1063,13 @@ export default function TvShowMediaDetail({
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedArtwork.get(item.id + ":bg")}
-                  tooltip="Reset to default backdrop"
+                  tooltip={t("tooltipResetToDefaultBackdrop")}
                   onClick={(e) => { e.stopPropagation(); setSelectedBackdropId(null); handleResetBackdrop(item.id, "show"); }}
                 />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own backdrop" onClick={(e) => e.stopPropagation()} />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnBackdrop")} onClick={(e) => e.stopPropagation()} />
                 <ToolbarButton
                   icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                  tooltip="Select a backdrop from an OpenPoster creator"
+                  tooltip={t("tooltipSelectBackdrop")}
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedBackdropId(null);
@@ -1127,7 +1104,7 @@ export default function TvShowMediaDetail({
             : seasons.map((season) => {
             const failedBg = failedThumbs.has(season.id + ":bg");
             const seasonNum = season.index != null
-              ? `Season ${String(season.index).padStart(2, "0")}`
+              ? t("drawerThisSeason", { number: String(season.index).padStart(2, "0") })
               : (season.title ?? "");
             const seasonSubtitle = [seasonNum, season.year ? String(season.year) : null].filter(Boolean).join(" · ");
 
@@ -1143,7 +1120,7 @@ export default function TvShowMediaDetail({
                 selected={selectedBackdropId === season.id}
                 onClick={() => { setSelectedBackdropId(season.id); setSelectedKind("show"); setSelectedSeasonId(null); }}
                 onClose={() => setSelectedBackdropId(null)}
-                tooltip="View backdrop options"
+                tooltip={t("tooltipViewBackdropOptions")}
                 creatorName={trackedArtwork.get(season.id + ":bg")?.creator_display_name}
                 badge={<ArtworkSourceBadge source={(trackedArtwork.get(season.id + ":bg") || opAppliedKeys.has(season.id + ":bg")) ? "openposter" : null} creatorName={trackedArtwork.get(season.id + ":bg")?.creator_display_name} />}
                 chip={<CardChip label={seasonNum} color="info" />}
@@ -1158,9 +1135,9 @@ export default function TvShowMediaDetail({
                           icon={isBgSubbed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                           disabled={!trackedBg}
                           active={isBgSubbed}
-                          tooltip={isBgSubbed ? "Subscribed" : "Subscribe to creator"}
+                          tooltip={isBgSubbed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
                           menuItems={trackedBg?.creator_id ? [{
-                            label: isBgSubbed ? "Unsubscribe" : "Subscribe",
+                            label: isBgSubbed ? t("menuUnsubscribe") : t("menuSubscribe"),
                             onClick: () => {
                               if (isBgSubbed) { unsubscribeCreator(trackedBg.creator_id!); setCreatorSubs((p) => { const s = new Set(p); s.delete(trackedBg.creator_id!); return s; }); }
                               else { subscribeCreator({ creatorId: trackedBg.creator_id!, creatorDisplayName: trackedBg.creator_display_name ?? trackedBg.creator_id!, nodeBase: trackedBg.node_base ?? "" }); setCreatorSubs((p) => new Set([...p, trackedBg.creator_id!])); }
@@ -1173,13 +1150,13 @@ export default function TvShowMediaDetail({
                     <ToolbarButton
                       icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                       disabled={!trackedArtwork.get(season.id + ":bg")}
-                      tooltip="Reset to default backdrop"
+                      tooltip={t("tooltipResetToDefaultBackdrop")}
                       onClick={(e) => { e.stopPropagation(); setSelectedBackdropId(null); handleResetBackdrop(season.id, "season"); }}
                     />
-                    <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own backdrop" onClick={(e) => e.stopPropagation()} />
+                    <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnBackdrop")} onClick={(e) => e.stopPropagation()} />
                     <ToolbarButton
                       icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                      tooltip="Select a backdrop from an OpenPoster creator"
+                      tooltip={t("tooltipSelectBackdrop")}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedBackdropId(null);
@@ -1224,7 +1201,7 @@ export default function TvShowMediaDetail({
             onImageError={() => setFailedShowSquare(true)}
             onClick={() => { setSelectedBackdropId(item.id + ":square"); setSelectedKind("show"); setSelectedSeasonId(null); }}
             onClose={() => setSelectedBackdropId(null)}
-            tooltip="View square artwork options"
+            tooltip={t("tooltipViewSquareOptions")}
             imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
             creatorName={trackedArtwork.get(item.id + ":square")?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedArtwork.get(item.id + ":square") || opAppliedKeys.has(item.id + ":square")) ? "openposter" : failedShowSquare ? null : "plex"} creatorName={trackedArtwork.get(item.id + ":square")?.creator_display_name} />}
@@ -1235,13 +1212,13 @@ export default function TvShowMediaDetail({
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedArtwork.get(item.id + ":square")}
-                  tooltip="Reset to default square artwork"
+                  tooltip={t("tooltipResetSquare")}
                   onClick={(e) => { e.stopPropagation(); setSelectedBackdropId(null); handleResetShowSquare(); }}
                 />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own square artwork" onClick={(e) => e.stopPropagation()} />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnSquare")} onClick={(e) => e.stopPropagation()} />
                 <ToolbarButton
                   icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                  tooltip="Select square artwork from an OpenPoster creator"
+                  tooltip={t("tooltipSelectSquare")}
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedBackdropId(null);
@@ -1283,7 +1260,7 @@ export default function TvShowMediaDetail({
             onImageError={() => setFailedShowLogo(true)}
             onClick={() => { setSelectedBackdropId(item.id + ":logo"); setSelectedKind("show"); setSelectedSeasonId(null); }}
             onClose={() => setSelectedBackdropId(null)}
-            tooltip="View logo options"
+            tooltip={t("tooltipViewLogoOptions")}
             imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
             creatorName={trackedArtwork.get(item.id + ":logo")?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedArtwork.get(item.id + ":logo") || opAppliedKeys.has(item.id + ":logo")) ? "openposter" : failedShowLogo ? null : "plex"} creatorName={trackedArtwork.get(item.id + ":logo")?.creator_display_name} />}
@@ -1294,13 +1271,13 @@ export default function TvShowMediaDetail({
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedArtwork.get(item.id + ":logo")}
-                  tooltip="Reset to default logo"
+                  tooltip={t("tooltipResetLogo")}
                   onClick={(e) => { e.stopPropagation(); setSelectedBackdropId(null); handleResetShowLogo(); }}
                 />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own logo" onClick={(e) => e.stopPropagation()} />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnLogo")} onClick={(e) => e.stopPropagation()} />
                 <ToolbarButton
                   icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                  tooltip="Select a logo from an OpenPoster creator"
+                  tooltip={t("tooltipSelectLogo")}
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedBackdropId(null);
@@ -1347,12 +1324,12 @@ export default function TvShowMediaDetail({
         applyingId={applyingId}
         othersLabel={
           drawerIsLogo
-            ? "Other logos for this show"
+            ? t("othersLabelLogosShow")
             : drawerIsSquare
-            ? "Other square artwork for this show"
+            ? t("othersLabelSquareShow")
             : drawerIsBackdrop
-            ? (drawerKind === "show" ? "Other backdrops for this show" : "Other backdrops for this season")
-            : (drawerKind === "show" ? "Other posters for this show" : "Other posters for this season")
+            ? (drawerKind === "show" ? t("othersLabelBackdropsShow") : t("othersLabelBackdropsSeason"))
+            : (drawerKind === "show" ? t("othersLabelPostersShow") : t("othersLabelPostersForSeason"))
         }
         onApply={(p) => handleApply(p, drawerKind === "season" ? (drawerSeason ?? undefined) : undefined, drawerIsBackdrop, drawerIsLogo, drawerIsSquare)}
       />
@@ -1363,7 +1340,7 @@ export default function TvShowMediaDetail({
           {applyingAll && applyProgress ? (
             <Box>
               <Typography variant="body2" sx={{ mb: 1.5 }}>
-                Applying <strong>{applyProgress.current}</strong>…
+                {t("applyingItem", { item: applyProgress.current })}
               </Typography>
               <LinearProgress
                 variant="determinate"
@@ -1371,7 +1348,7 @@ export default function TvShowMediaDetail({
                 sx={{ mb: 1, borderRadius: 1, height: 6 }}
               />
               <Typography variant="caption" color="text.secondary">
-                {applyProgress.done} of {applyProgress.total}
+                {t("applyProgressCount", { done: applyProgress.done, total: applyProgress.total })}
               </Typography>
             </Box>
           ) : (() => {
@@ -1380,14 +1357,13 @@ export default function TvShowMediaDetail({
             const backdropCount = jobs.filter((j) => j.isBackdrop).length;
             const episodeCount = jobs.filter((j) => j.mediaType === "episode").length;
             const parts = [
-              posterCount > 0 && `${posterCount} poster${posterCount !== 1 ? "s" : ""}`,
-              backdropCount > 0 && `${backdropCount} backdrop${backdropCount !== 1 ? "s" : ""}`,
-              episodeCount > 0 && `${episodeCount} episode card${episodeCount !== 1 ? "s" : ""}`,
+              posterCount > 0 && `${posterCount} ${t("poster")}${posterCount !== 1 ? "s" : ""}`,
+              backdropCount > 0 && `${backdropCount} ${t("backdrop")}${backdropCount !== 1 ? "s" : ""}`,
+              episodeCount > 0 && `${episodeCount} ${t("useThumbnail").toLowerCase()}${episodeCount !== 1 ? "s" : ""}`,
             ].filter(Boolean).join(", ");
             return (
               <Typography>
-                <strong>{suggestion?.creatorName}</strong> has matching artwork for this show:
-                {" "}<strong>{parts}</strong>. Would you like to apply them all?
+                {t("suggestionTvBody", { creatorName: suggestion?.creatorName ?? "", parts })}
               </Typography>
             );
           })()}

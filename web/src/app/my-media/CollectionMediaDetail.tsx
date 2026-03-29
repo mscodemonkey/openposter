@@ -21,7 +21,6 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
@@ -106,6 +105,7 @@ function TmdbConfirmCard({
   onConfirm: (tmdbId: number, tmdbName: string) => void;
   onNeverAgain: () => void;
 }) {
+  const t = useTranslations("myMedia");
   const [mode, setMode] = useState<"confirm" | "search">(initialMode);
   const [query, setQuery] = useState(collectionTitle);
   const [results, setResults] = useState<TmdbSearchResult[]>([]);
@@ -132,7 +132,7 @@ function TmdbConfirmCard({
     return (
       <Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          We found a possible TMDB match: <strong>{tmdbName}</strong>
+          {t("tmdbFoundMatch", { name: tmdbName })}
         </Typography>
         <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mb: 2.5 }}>
           {posterPath && (
@@ -147,15 +147,15 @@ function TmdbConfirmCard({
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           <Button size="small" variant="contained"
             onClick={() => onConfirm(tmdbId, tmdbName)}>
-            Yes, that&apos;s the one
+            {t("tmdbYesThatOne")}
           </Button>
           <Button size="small" variant="outlined"
             onClick={() => { setMode("search"); }}>
-            Search TMDB
+            {t("tmdbSearchTmdb")}
           </Button>
           <Button size="small" variant="outlined" color="warning"
             onClick={onNeverAgain}>
-            No, don&apos;t try again
+            {t("tmdbDontTryAgain")}
           </Button>
         </Stack>
       </Box>
@@ -169,20 +169,20 @@ function TmdbConfirmCard({
         <TextField
           size="small"
           fullWidth
-          placeholder="Search TMDB collections…"
+          placeholder={t("tmdbSearchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") doSearch(); }}
           slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
         />
         <Button variant="contained" size="small" onClick={doSearch} disabled={searching || !query.trim()}>
-          {searching ? <CircularProgress size={16} /> : "Search"}
+          {searching ? <CircularProgress size={16} /> : t("tmdbSearchButton")}
         </Button>
       </Stack>
 
       {searched && results.length === 0 && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          No TMDB collections found for &ldquo;{query}&rdquo;.
+          {t("tmdbNoResultsFor", { query })}
         </Typography>
       )}
 
@@ -214,7 +214,7 @@ function TmdbConfirmCard({
       )}
 
       <Button size="small" variant="outlined" color="warning" onClick={onNeverAgain}>
-        Don&apos;t try again
+        {t("tmdbDontTryAgain")}
       </Button>
     </Box>
   );
@@ -225,7 +225,6 @@ function TmdbConfirmCard({
 interface CollectionMediaDetailProps {
   item: MediaItem;
   conn: { nodeUrl: string; adminToken: string };
-  onBack: () => void;
   movies: MediaItem[];
   /** The item.id that the current `movies` array was loaded for. Null while loading. */
   childrenForId: string | null;
@@ -248,7 +247,6 @@ interface CollectionMediaDetailProps {
 export default function CollectionMediaDetail({
   item,
   conn,
-  onBack,
   movies,
   childrenForId,
   childrenLoading,
@@ -492,12 +490,12 @@ export default function CollectionMediaDetail({
     ? (tmdbRes.status === "confirmed" || tmdbRes.status === "text-search" || item.tmdb_id != null)
     : !!(drawerMovie?.tmdb_id);
   const drawerOthersLabel = drawerIsLogo
-    ? (drawerKind === "collection" ? "Other logos for this collection" : "Other logos for this movie")
+    ? (drawerKind === "collection" ? t("othersLabelLogosCollection") : t("othersLabelLogos"))
     : drawerIsSquare
-    ? (drawerKind === "collection" ? "Other squares for this collection" : "Other squares for this movie")
+    ? (drawerKind === "collection" ? t("othersLabelSquareCollection") : t("othersLabelSquare"))
     : drawerIsBackdrop
-    ? (drawerKind === "collection" ? "Other backdrops for this collection" : "Other backdrops for this movie")
-    : (drawerKind === "collection" ? "Other posters for this collection" : "Other posters for this movie");
+    ? (drawerKind === "collection" ? t("othersLabelBackdropsCollection") : t("othersLabelBackdrops"))
+    : (drawerKind === "collection" ? t("othersLabelPostersCollection") : t("othersLabelPosters"));
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -984,23 +982,12 @@ export default function CollectionMediaDetail({
       {/* Page content above hero */}
       <Box sx={{ position: "relative", zIndex: 1 }}>
 
-        {/* Back */}
-        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
-          <IconButton size="small" onClick={onBack} aria-label={t("backToCollections")}>
-            <ArrowBackIcon fontSize="small" />
-          </IconButton>
-          <Typography variant="body2" color="text.secondary" sx={{ cursor: "pointer" }} onClick={onBack}>
-            {t("backToCollections")}
-          </Typography>
-        </Stack>
-
-        <Typography variant="h5" gutterBottom>{item.title}</Typography>
 
         {tmdbRes.status === "resolving" && (
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
             <CircularProgress size="1.375rem" sx={{ flexShrink: 0 }} />
             <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
-              Searching for collection in TMDB
+              {t("tmdbSearchingCollection")}
             </Typography>
           </Stack>
         )}
@@ -1033,18 +1020,18 @@ export default function CollectionMediaDetail({
                     saveTmdbMapEntry(item.id, { tmdbId: cTmdbId, tmdbName: cTmdbName, source: "confirmed" });
                     setTmdbRes({ status: "confirmed", tmdbId: cTmdbId, tmdbName: cTmdbName, source: "confirmed" });
                   }}>
-                    Confirm match
+                    {t("tmdbConfirmMatch")}
                   </MenuItem>
                 )}
                 <MenuItem onClick={() => {
                   setAutoMatchMenuAnchor(null);
                   setTmdbRes({ status: "pending-confirm", itemId: item.id, tmdbId: cTmdbId, tmdbName: cTmdbName, posterPath: null, movieThumbs: [], openInSearch: true });
                 }}>
-                  Incorrect match, try again
+                  {t("tmdbIncorrectMatch")}
                 </MenuItem>
               </Menu>
               <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                {`${isAuto ? "Auto-matched with" : "Matched with"} ${cTmdbName} · TMDB ${cTmdbId}`}
+                {isAuto ? t("tmdbAutoMatched", { name: cTmdbName, id: cTmdbId }) : t("tmdbMatched", { name: cTmdbName, id: cTmdbId })}
               </Typography>
               <Button
                 component="a"
@@ -1057,7 +1044,7 @@ export default function CollectionMediaDetail({
                 endIcon={<OpenInNewIcon sx={{ fontSize: "0.75rem !important" }} />}
                 sx={{ fontSize: "0.65rem", py: 0.25, px: 0.75, minWidth: 0, whiteSpace: "nowrap", flexShrink: 0 }}
               >
-                View in TMDB
+                {t("tmdbViewInTmdb")}
               </Button>
             </Stack>
           );
@@ -1073,11 +1060,11 @@ export default function CollectionMediaDetail({
                 setNotMatchedMenuAnchor(null);
                 setTmdbRes({ status: "pending-confirm", itemId: item.id, tmdbId: 0, tmdbName: "", posterPath: null, movieThumbs: [], openInSearch: true });
               }}>
-                Search TMDB
+                {t("tmdbSearchTmdb")}
               </MenuItem>
             </Menu>
             <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
-              Not matched with a collection in TMDB
+              {t("tmdbNotMatched")}
             </Typography>
           </Stack>
         )}
@@ -1099,7 +1086,7 @@ export default function CollectionMediaDetail({
             onImageError={() => setFailedThumb(true)}
             onClick={() => setOpenCardKey("coll-poster")}
             onClose={() => setOpenCardKey(null)}
-            tooltip="View alternate artwork and other options"
+            tooltip={t("tooltipViewAltArtwork")}
             creatorName={trackedItem?.creator_display_name}
             badge={<ArtworkSourceBadge source={trackedItem ? "openposter" : failedThumb ? null : "plex"} creatorName={trackedItem?.creator_display_name} mediaServer={serverName} />}
             chip={<CardChip label="COLLECTION" color="error" />}
@@ -1112,9 +1099,9 @@ export default function CollectionMediaDetail({
                       icon={isCollCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                       disabled={!trackedItem}
                       active={isCollCreatorSubscribed}
-                      tooltip={isCollCreatorSubscribed ? "Subscribed" : "Subscribe to creator"}
+                      tooltip={isCollCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
                       menuItems={trackedItem?.creator_id ? [
-                        { label: isCollCreatorSubscribed ? "Unsubscribe" : "Subscribe", onClick: () => { handleCollectionCreatorSubscribe(); setTimeout(() => setOpenCardKey(null), 500); } },
+                        { label: isCollCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"), onClick: () => { handleCollectionCreatorSubscribe(); setTimeout(() => setOpenCardKey(null), 500); } },
                       ] : undefined}
                     />
                   </Box>
@@ -1122,14 +1109,14 @@ export default function CollectionMediaDetail({
                     <ToolbarButton
                       icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                       disabled={!trackedItem}
-                      tooltip="Reset to default"
+                      tooltip={t("tooltipResetToDefault")}
                       onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetCollectionPoster(); }}
                     />
                   </Box>
                   <Box sx={{ flex: 1 }}>
                     <ToolbarButton
                       icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />}
-                      tooltip="Upload your own poster"
+                      tooltip={t("tooltipUploadOwnPoster")}
                       onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }}
                     />
                   </Box>
@@ -1139,10 +1126,10 @@ export default function CollectionMediaDetail({
                       disabled={tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm" || tmdbRes.status === "text-search" || tmdbRes.status === "idle"}
                       tooltip={
                         tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm"
-                          ? "Resolving TMDB ID…"
+                          ? t("tooltipResolvingTmdb")
                           : (tmdbRes.status === "text-search" || tmdbRes.status === "idle")
-                          ? "No TMDB match — cannot search for artwork"
-                          : "Select a new poster from an OpenPoster creator"
+                          ? t("tooltipNoTmdbMatch")
+                          : t("tooltipSelectPosterCollection")
                       }
                       onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("collection", null, false); }}
                     />
@@ -1185,7 +1172,7 @@ export default function CollectionMediaDetail({
                     onImageError={() => onMarkFailed(movie.id)}
                     onClick={() => setOpenCardKey(cardKey)}
                     onClose={() => setOpenCardKey(null)}
-                    tooltip={failed ? "Retry failed download" : "View alternate artwork and other options"}
+                    tooltip={failed ? t("tooltipRetryFailedDownload") : t("tooltipViewAltArtwork")}
                     creatorName={tracked?.creator_display_name}
                     badge={<ArtworkSourceBadge source={tracked ? "openposter" : failed ? null : "plex"} creatorName={tracked?.creator_display_name} mediaServer={serverName} />}
                     chip={
@@ -1199,14 +1186,14 @@ export default function CollectionMediaDetail({
                         <ToolbarButton
                           cols={4}
                           size="sm"
-                          label="GO TO MOVIE"
-                          tooltip="View movie detail page"
+                          label={t("goToMovieLabel")}
+                          tooltip={t("tooltipViewMovieDetail")}
                           onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); onNavigateToMovie(movie); }}
                         />
                         {failed ? (
                           <ToolbarButton
                             icon={<RefreshIcon sx={{ fontSize: "1.1rem" }} />}
-                            tooltip="Retry download"
+                            tooltip={t("tooltipRetryDownload")}
                             onClick={(e) => { e.stopPropagation(); onMarkRetry(movie.id); setOpenCardKey(null); }}
                           />
                         ) : (
@@ -1214,27 +1201,27 @@ export default function CollectionMediaDetail({
                             icon={isCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                             disabled={!tracked}
                             active={isCreatorSubscribed}
-                            tooltip={isCreatorSubscribed ? "Subscribed" : "Subscribe to creator"}
+                            tooltip={isCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
                             menuItems={tracked?.creator_id ? [
-                              { label: isCreatorSubscribed ? "Unsubscribe" : "Subscribe", onClick: () => { handleCreatorSubscribe(); setTimeout(() => setOpenCardKey(null), 500); } },
+                              { label: isCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"), onClick: () => { handleCreatorSubscribe(); setTimeout(() => setOpenCardKey(null), 500); } },
                             ] : undefined}
                           />
                         )}
                         <ToolbarButton
                           icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                           disabled={failed || !tracked}
-                          tooltip="Reset to default"
+                          tooltip={t("tooltipResetToDefault")}
                           onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetMoviePoster(movie); }}
                         />
                         <ToolbarButton
                           icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />}
-                          tooltip="Upload your own poster"
+                          tooltip={t("tooltipUploadOwnPoster")}
                           onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }}
                         />
                         <ToolbarButton
                           icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
                           disabled={!movie.tmdb_id}
-                          tooltip={movie.tmdb_id ? "Select a new poster from an OpenPoster creator" : "No TMDB ID — cannot search for artwork"}
+                          tooltip={movie.tmdb_id ? t("tooltipSelectPosterCollection") : t("tooltipNoTmdbIdArtwork")}
                           onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("movie", movie.id, false); }}
                         />
                       </MediaCardOverlay>
@@ -1261,7 +1248,7 @@ export default function CollectionMediaDetail({
             onImageError={() => setFailedShowBg(true)}
             onClick={() => setOpenCardKey("coll-backdrop")}
             onClose={() => setOpenCardKey(null)}
-            tooltip="View alternate backdrops and other options"
+            tooltip={t("tooltipViewAltBackdrops")}
             creatorName={trackedBackdrop?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedBackdrop || opAppliedKeys.has(item.id + ":bg")) ? "openposter" : failedShowBg ? null : "plex"} creatorName={trackedBackdrop?.creator_display_name} mediaServer={serverName} />}
             chip={<CardChip label="COLLECTION" color="error" />}
@@ -1275,9 +1262,9 @@ export default function CollectionMediaDetail({
                       icon={isBgSubbed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                       disabled={!trackedBackdrop}
                       active={isBgSubbed}
-                      tooltip={isBgSubbed ? "Subscribed" : "Subscribe to creator"}
+                      tooltip={isBgSubbed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
                       menuItems={trackedBackdrop?.creator_id ? [{
-                        label: isBgSubbed ? "Unsubscribe" : "Subscribe",
+                        label: isBgSubbed ? t("menuUnsubscribe") : t("menuSubscribe"),
                         onClick: () => {
                           const cid = trackedBackdrop.creator_id!;
                           if (isBgSubbed) { unsubscribeCreator(cid); setCreatorSubs((p) => { const s = new Set(p); s.delete(cid); return s; }); }
@@ -1291,19 +1278,19 @@ export default function CollectionMediaDetail({
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedBackdrop}
-                  tooltip="Reset to default backdrop"
+                  tooltip={t("tooltipResetToDefaultBackdrop")}
                   onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetCollectionBackdrop(); }}
                 />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own backdrop" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnBackdrop")} onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
                 <ToolbarButton
                   icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm" || tmdbRes.status === "text-search" || tmdbRes.status === "idle"}
                   tooltip={
                     tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm"
-                      ? "Resolving TMDB ID…"
+                      ? t("tooltipResolvingTmdb")
                       : (tmdbRes.status === "text-search" || tmdbRes.status === "idle")
-                      ? "No TMDB match — cannot search for artwork"
-                      : "Select a backdrop from an OpenPoster creator"
+                      ? t("tooltipNoTmdbMatch")
+                      : t("tooltipSelectBackdropCollection")
                   }
                   onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("collection", null, true); }}
                 />
@@ -1334,7 +1321,7 @@ export default function CollectionMediaDetail({
                     onClick={() => setOpenCardKey(backdropCardKey)}
                     onClose={() => setOpenCardKey(null)}
                     onImageError={() => setFailedMovieBgs((prev) => new Set(prev).add(movie.id))}
-                    tooltip="View alternate backdrops and other options"
+                    tooltip={t("tooltipViewAltBackdrops")}
                     creatorName={trackedBg?.creator_display_name}
                     badge={<ArtworkSourceBadge source={(trackedBg || opAppliedKeys.has(bgKey)) ? "openposter" : failedMovieBgs.has(movie.id) ? null : "plex"} creatorName={trackedBg?.creator_display_name} mediaServer={serverName} />}
                     chip={<CardChip label="MOVIE" color="success" />}
@@ -1348,9 +1335,9 @@ export default function CollectionMediaDetail({
                               icon={isBgSubbed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                               disabled={!trackedBg}
                               active={isBgSubbed}
-                              tooltip={isBgSubbed ? "Subscribed" : "Subscribe to creator"}
+                              tooltip={isBgSubbed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
                               menuItems={trackedBg?.creator_id ? [{
-                                label: isBgSubbed ? "Unsubscribe" : "Subscribe",
+                                label: isBgSubbed ? t("menuUnsubscribe") : t("menuSubscribe"),
                                 onClick: () => {
                                   const cid = trackedBg.creator_id!;
                                   if (isBgSubbed) { unsubscribeCreator(cid); setCreatorSubs((p) => { const s = new Set(p); s.delete(cid); return s; }); }
@@ -1364,14 +1351,14 @@ export default function CollectionMediaDetail({
                         <ToolbarButton
                           icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                           disabled={!trackedBg}
-                          tooltip="Reset to default backdrop"
+                          tooltip={t("tooltipResetToDefaultBackdrop")}
                           onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetMovieBackdrop(movie); }}
                         />
-                        <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own backdrop" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                        <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnBackdrop")} onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
                         <ToolbarButton
                           icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
                           disabled={!movie.tmdb_id}
-                          tooltip={movie.tmdb_id ? "Select a backdrop from an OpenPoster creator" : "No TMDB ID — cannot search for artwork"}
+                          tooltip={movie.tmdb_id ? t("tooltipSelectBackdropCollection") : t("tooltipNoTmdbIdArtwork")}
                           onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("movie", movie.id, true); }}
                         />
                       </MediaCardOverlay>
@@ -1397,7 +1384,7 @@ export default function CollectionMediaDetail({
             onImageError={() => setFailedSquare(true)}
             onClick={() => setOpenCardKey("coll-square")}
             onClose={() => setOpenCardKey(null)}
-            tooltip="View alternate square artwork and other options"
+            tooltip={t("tooltipViewAltSquare")}
             imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
             creatorName={trackedSquare?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedSquare || opAppliedKeys.has(item.id + ":square")) ? "openposter" : failedSquare ? null : "plex"} creatorName={trackedSquare?.creator_display_name} mediaServer={serverName} />}
@@ -1408,19 +1395,19 @@ export default function CollectionMediaDetail({
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedSquare}
-                  tooltip="Reset to default square"
+                  tooltip={t("tooltipResetSquare")}
                   onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetCollectionSquare(); }}
                 />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own square" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnSquare")} onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
                 <ToolbarButton
                   icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm" || tmdbRes.status === "text-search" || tmdbRes.status === "idle"}
                   tooltip={
                     tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm"
-                      ? "Resolving TMDB ID…"
+                      ? t("tooltipResolvingTmdb")
                       : (tmdbRes.status === "text-search" || tmdbRes.status === "idle")
-                      ? "No TMDB match — cannot search for artwork"
-                      : "Select a square from an OpenPoster creator"
+                      ? t("tooltipNoTmdbMatch")
+                      : t("tooltipSelectSquare")
                   }
                   onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("collection", null, false, false, true); }}
                 />
@@ -1452,7 +1439,7 @@ export default function CollectionMediaDetail({
                     onImageError={() => setFailedMovieSquares((prev) => new Set(prev).add(movie.id))}
                     onClick={() => setOpenCardKey(squareCardKey)}
                     onClose={() => setOpenCardKey(null)}
-                    tooltip="View alternate square artwork and other options"
+                    tooltip={t("tooltipViewAltSquare")}
                     imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
                     creatorName={trackedMovieSquare?.creator_display_name}
                     badge={<ArtworkSourceBadge source={(trackedMovieSquare || opAppliedKeys.has(squareKey)) ? "openposter" : failedMovieSquares.has(movie.id) ? null : "plex"} creatorName={trackedMovieSquare?.creator_display_name} mediaServer={serverName} />}
@@ -1463,14 +1450,14 @@ export default function CollectionMediaDetail({
                         <ToolbarButton
                           icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                           disabled={!trackedMovieSquare}
-                          tooltip="Reset to default square"
+                          tooltip={t("tooltipResetSquare")}
                           onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetMovieSquare(movie); }}
                         />
-                        <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own square" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                        <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnSquare")} onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
                         <ToolbarButton
                           icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
                           disabled={!movie.tmdb_id}
-                          tooltip={movie.tmdb_id ? "Select a square from an OpenPoster creator" : "No TMDB ID — cannot search for artwork"}
+                          tooltip={movie.tmdb_id ? t("tooltipSelectSquare") : t("tooltipNoTmdbIdArtwork")}
                           onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("movie", movie.id, false, false, true); }}
                         />
                       </MediaCardOverlay>
@@ -1496,7 +1483,7 @@ export default function CollectionMediaDetail({
             onImageError={() => setFailedLogo(true)}
             onClick={() => setOpenCardKey("coll-logo")}
             onClose={() => setOpenCardKey(null)}
-            tooltip="View alternate logos and other options"
+            tooltip={t("tooltipViewAltLogos")}
             imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
             creatorName={trackedLogo?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedLogo || opAppliedKeys.has(item.id + ":logo")) ? "openposter" : failedLogo ? null : "plex"} creatorName={trackedLogo?.creator_display_name} mediaServer={serverName} />}
@@ -1507,19 +1494,19 @@ export default function CollectionMediaDetail({
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedLogo}
-                  tooltip="Reset to default logo"
+                  tooltip={t("tooltipResetLogo")}
                   onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetCollectionLogo(); }}
                 />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own logo" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnLogo")} onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
                 <ToolbarButton
                   icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm" || tmdbRes.status === "text-search" || tmdbRes.status === "idle"}
                   tooltip={
                     tmdbRes.status === "resolving" || tmdbRes.status === "pending-confirm"
-                      ? "Resolving TMDB ID…"
+                      ? t("tooltipResolvingTmdb")
                       : (tmdbRes.status === "text-search" || tmdbRes.status === "idle")
-                      ? "No TMDB match — cannot search for artwork"
-                      : "Select a logo from an OpenPoster creator"
+                      ? t("tooltipNoTmdbMatch")
+                      : t("tooltipSelectLogo")
                   }
                   onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("collection", null, false, true); }}
                 />
@@ -1551,7 +1538,7 @@ export default function CollectionMediaDetail({
                     onImageError={() => setFailedMovieLogos((prev) => new Set(prev).add(movie.id))}
                     onClick={() => setOpenCardKey(logoCardKey)}
                     onClose={() => setOpenCardKey(null)}
-                    tooltip="View alternate logos and other options"
+                    tooltip={t("tooltipViewAltLogos")}
                     imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
                     creatorName={trackedMovieLogo?.creator_display_name}
                     badge={<ArtworkSourceBadge source={(trackedMovieLogo || opAppliedKeys.has(logoKey)) ? "openposter" : failedMovieLogos.has(movie.id) ? null : "plex"} creatorName={trackedMovieLogo?.creator_display_name} mediaServer={serverName} />}
@@ -1562,14 +1549,14 @@ export default function CollectionMediaDetail({
                         <ToolbarButton
                           icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                           disabled={!trackedMovieLogo}
-                          tooltip="Reset to default logo"
+                          tooltip={t("tooltipResetLogo")}
                           onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); handleResetMovieLogo(movie); }}
                         />
-                        <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own logo" onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
+                        <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnLogo")} onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); }} />
                         <ToolbarButton
                           icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
                           disabled={!movie.tmdb_id}
-                          tooltip={movie.tmdb_id ? "Select a logo from an OpenPoster creator" : "No TMDB ID — cannot search for artwork"}
+                          tooltip={movie.tmdb_id ? t("tooltipSelectLogo") : t("tooltipNoTmdbIdArtwork")}
                           onClick={(e) => { e.stopPropagation(); setOpenCardKey(null); openDrawer("movie", movie.id, false, true); }}
                         />
                       </MediaCardOverlay>
@@ -1609,7 +1596,7 @@ export default function CollectionMediaDetail({
         fullWidth
         disableRestoreFocus
       >
-        <DialogTitle>Confirm TMDB Collection</DialogTitle>
+        <DialogTitle>{t("tmdbConfirmDialogTitle")}</DialogTitle>
         <DialogContent>
           {tmdbRes.status === "pending-confirm" && (
             <TmdbConfirmCard
@@ -1650,11 +1637,7 @@ export default function CollectionMediaDetail({
         <DialogTitle>{t("suggestionTitle")}</DialogTitle>
         <DialogContent>
           <Typography>
-            There {suggestion?.items.length === 1 ? "is" : "are"}{" "}
-            <strong>{suggestion?.items.length}</strong> other poster
-            {suggestion?.items.length !== 1 ? "s" : ""} by{" "}
-            <strong>{suggestion?.creatorName}</strong> for this collection.
-            Would you like to use them?
+            {t("suggestionCollectionBody", { isAre: suggestion?.items.length === 1 ? "is" : "are", count: suggestion?.items.length ?? 0, creatorName: suggestion?.creatorName ?? "" })}
           </Typography>
         </DialogContent>
         <DialogActions>

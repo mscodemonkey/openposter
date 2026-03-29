@@ -5,17 +5,9 @@ import { useTranslations } from "next-intl";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
 import Snackbar from "@mui/material/Snackbar";
-import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
 import ReplayIcon from "@mui/icons-material/Replay";
 import StarIcon from "@mui/icons-material/Star";
@@ -39,14 +31,10 @@ import { POSTER_GRID_COLS, BACKDROP_GRID_COLS, CHIP_HEIGHT } from "@/lib/grid-si
 interface MovieMediaDetailProps {
   item: MediaItem;
   conn: { nodeUrl: string; adminToken: string };
-  onBack: () => void;
-  collections: MediaItem[];
-  onNavigateToCollection: (id: string, title: string) => void;
-  fromCollectionTitle?: string;
   serverName?: string;
 }
 
-export default function MovieMediaDetail({ item, conn, onBack, collections, onNavigateToCollection, fromCollectionTitle, serverName }: MovieMediaDetailProps) {
+export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaDetailProps) {
   const t = useTranslations("myMedia");
 
   // ── Drawer ────────────────────────────────────────────────────────────────
@@ -79,9 +67,6 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
   const [backdropSelected, setBackdropSelected] = useState(false);
   const [squareSelected, setSquareSelected] = useState(false);
   const [logoSelected, setLogoSelected] = useState(false);
-
-  // ── Collection membership menu (for movies in multiple collections) ────────
-  const [collMenuAnchor, setCollMenuAnchor] = useState<HTMLElement | null>(null);
 
   // ── Subscriptions ─────────────────────────────────────────────────────────
   const [creatorSubs, setCreatorSubs] = useState<Set<string>>(
@@ -136,13 +121,6 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const subs = useMemo(() => getSubscriptions(), []);
-
-  const memberCollections = useMemo(() => {
-    if (!item.collection_ids?.length) return [];
-    return item.collection_ids
-      .map((id) => collections.find((c) => c.id === id))
-      .filter((c): c is MediaItem => c != null);
-  }, [item.collection_ids, collections]);
 
   const trackedItem = trackedArtwork.get(item.id) ?? null;
   const trackedBackdrop = trackedArtwork.get(item.id + ":bg") ?? null;
@@ -411,63 +389,6 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
       {/* Page content above hero */}
       <Box sx={{ position: "relative", zIndex: 1 }}>
 
-        {/* Back button */}
-        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
-          <IconButton size="small" onClick={onBack} aria-label={fromCollectionTitle ?? t("backToMovies")}>
-            <ArrowBackIcon fontSize="small" />
-          </IconButton>
-          <Typography variant="body2" color="text.secondary" sx={{ cursor: "pointer" }} onClick={onBack}>
-            {fromCollectionTitle ?? t("backToMovies")}
-          </Typography>
-        </Stack>
-
-        {/* Title */}
-        <Typography variant="h5" gutterBottom>
-          {item.title}{item.year ? ` (${item.year})` : ""}
-        </Typography>
-
-        {/* Collection membership subtitle */}
-        {memberCollections.length === 0 ? (
-          <Typography variant="caption" color="text.disabled" sx={{ letterSpacing: "0.05em", textTransform: "uppercase", mb: 3, display: "block" }}>
-            {t("movieNotAMember")}
-          </Typography>
-        ) : memberCollections.length === 1 ? (
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
-              {t("movieMemberOf", { title: memberCollections[0].title })}
-            </Typography>
-            <Button
-              size="small"
-              variant="outlined"
-              sx={{ fontSize: "0.6rem", py: 0.25, lineHeight: 1.5 }}
-              onClick={() => onNavigateToCollection(memberCollections[0].id, memberCollections[0].title)}
-            >
-              {fromCollectionTitle ? t("movieBackToCollection") : t("movieViewCollection")}
-            </Button>
-          </Stack>
-        ) : (
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
-              {t("movieMemberOfMany", { n: memberCollections.length })}
-            </Typography>
-            <Button
-              size="small"
-              variant="outlined"
-              endIcon={<ArrowDropDownIcon />}
-              sx={{ fontSize: "0.6rem", py: 0.25, lineHeight: 1.5 }}
-              onClick={(e) => setCollMenuAnchor(e.currentTarget)}
-            >
-              {fromCollectionTitle ? t("movieBackToCollection") : t("movieViewCollection")}
-            </Button>
-            <Menu anchorEl={collMenuAnchor} open={Boolean(collMenuAnchor)} onClose={() => setCollMenuAnchor(null)}>
-              {memberCollections.map((c) => (
-                <MenuItem key={c.id} dense onClick={() => { setCollMenuAnchor(null); onNavigateToCollection(c.id, c.title); }}>
-                  {c.title}
-                </MenuItem>
-              ))}
-            </Menu>
-          </Stack>
-        )}
 
         {/* ── Posters section ──────────────────────────────────────────── */}
         <Typography variant="h6" sx={{ mb: 2 }}>
@@ -485,7 +406,7 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
             onImageError={() => setFailedThumb(true)}
             onClick={() => { setPosterSelected(true); setBackdropSelected(false); }}
             onClose={() => setPosterSelected(false)}
-            tooltip="View alternate artwork and other options"
+            tooltip={t("tooltipViewAltArtwork")}
             creatorName={trackedItem?.creator_display_name}
             badge={<ArtworkSourceBadge source={trackedItem ? "openposter" : failedThumb ? null : "plex"} creatorName={trackedItem?.creator_display_name} mediaServer={serverName} />}
             chip={<CardChip label="MOVIE" color="success" />}
@@ -496,10 +417,10 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
                   icon={isPosterCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedItem}
                   active={isPosterCreatorSubscribed}
-                  tooltip={isPosterCreatorSubscribed ? "Subscribed" : "Subscribe to creator"}
+                  tooltip={isPosterCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
                   menuItems={trackedItem?.creator_id ? [
                     {
-                      label: isPosterCreatorSubscribed ? "Unsubscribe" : "Subscribe",
+                      label: isPosterCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"),
                       onClick: () => { handlePosterCreatorSubscribe(); setTimeout(() => setPosterSelected(false), 500); },
                     },
                   ] : undefined}
@@ -507,17 +428,17 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedItem}
-                  tooltip="Reset to default"
+                  tooltip={t("tooltipResetToDefault")}
                   onClick={(e) => { e.stopPropagation(); setPosterSelected(false); handleReset(); }}
                 />
                 <ToolbarButton
                   icon={<UploadIcon fontSize="small" />}
-                  tooltip="Upload your own poster"
+                  tooltip={t("tooltipUploadOwnPoster")}
                   onClick={(e) => { e.stopPropagation(); setPosterSelected(false); }}
                 />
                 <ToolbarButton
                   icon={<PhotoLibraryIcon fontSize="small" />}
-                  tooltip="Select a new poster from an OpenPoster creator"
+                  tooltip={t("tooltipSelectPoster")}
                   onClick={(e) => { e.stopPropagation(); setPosterSelected(false); openDrawer("poster"); }}
                 />
               </MediaCardOverlay>
@@ -541,7 +462,7 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
             onImageError={() => setFailedShowBg(true)}
             onClick={() => { setBackdropSelected(true); setPosterSelected(false); }}
             onClose={() => setBackdropSelected(false)}
-            tooltip="View alternate backdrops and other options"
+            tooltip={t("tooltipViewAltBackdrops")}
             creatorName={trackedBackdrop?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedBackdrop || opAppliedKeys.has(item.id + ":bg")) ? "openposter" : failedShowBg ? null : "plex"} creatorName={trackedBackdrop?.creator_display_name} mediaServer={serverName} />}
             chip={<CardChip label="MOVIE" color="success" />}
@@ -552,19 +473,19 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
                   icon={isBackdropCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedBackdrop}
                   active={isBackdropCreatorSubscribed}
-                  tooltip={isBackdropCreatorSubscribed ? "Subscribed" : "Subscribe to creator"}
-                  menuItems={trackedBackdrop?.creator_id ? [{ label: isBackdropCreatorSubscribed ? "Unsubscribe" : "Subscribe", onClick: () => { handleBackdropCreatorSubscribe(); setBackdropSelected(false); } }] : undefined}
+                  tooltip={isBackdropCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
+                  menuItems={trackedBackdrop?.creator_id ? [{ label: isBackdropCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"), onClick: () => { handleBackdropCreatorSubscribe(); setBackdropSelected(false); } }] : undefined}
                 />
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedBackdrop}
-                  tooltip="Reset to default backdrop"
+                  tooltip={t("tooltipResetToDefaultBackdrop")}
                   onClick={(e) => { e.stopPropagation(); setBackdropSelected(false); handleResetBackdrop(); }}
                 />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own backdrop" onClick={(e) => { e.stopPropagation(); setBackdropSelected(false); }} />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnBackdrop")} onClick={(e) => { e.stopPropagation(); setBackdropSelected(false); }} />
                 <ToolbarButton
                   icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                  tooltip="Select a backdrop from an OpenPoster creator"
+                  tooltip={t("tooltipSelectBackdrop")}
                   onClick={(e) => { e.stopPropagation(); setBackdropSelected(false); openDrawer("backdrop"); }}
                 />
               </MediaCardOverlay>
@@ -588,7 +509,7 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
             onImageError={() => setFailedSquare(true)}
             onClick={() => { setSquareSelected(true); setPosterSelected(false); setBackdropSelected(false); setLogoSelected(false); }}
             onClose={() => setSquareSelected(false)}
-            tooltip="View alternate square artwork and other options"
+            tooltip={t("tooltipViewAltSquare")}
             imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
             creatorName={trackedSquare?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedSquare || opAppliedKeys.has(item.id + ":square")) ? "openposter" : failedSquare ? null : "plex"} creatorName={trackedSquare?.creator_display_name} mediaServer={serverName} />}
@@ -599,13 +520,13 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedSquare}
-                  tooltip="Reset to default square artwork"
+                  tooltip={t("tooltipResetSquare")}
                   onClick={(e) => { e.stopPropagation(); setSquareSelected(false); handleResetSquare(); }}
                 />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own square artwork" onClick={(e) => { e.stopPropagation(); setSquareSelected(false); }} />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnSquare")} onClick={(e) => { e.stopPropagation(); setSquareSelected(false); }} />
                 <ToolbarButton
                   icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                  tooltip="Select square artwork from an OpenPoster creator"
+                  tooltip={t("tooltipSelectSquare")}
                   onClick={(e) => { e.stopPropagation(); setSquareSelected(false); openDrawer("square"); }}
                 />
               </MediaCardOverlay>
@@ -629,7 +550,7 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
             onImageError={() => setFailedLogo(true)}
             onClick={() => { setLogoSelected(true); setPosterSelected(false); setBackdropSelected(false); setSquareSelected(false); }}
             onClose={() => setLogoSelected(false)}
-            tooltip="View alternate logos and other options"
+            tooltip={t("tooltipViewAltLogos")}
             imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
             creatorName={trackedLogo?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedLogo || opAppliedKeys.has(item.id + ":logo")) ? "openposter" : failedLogo ? null : "plex"} creatorName={trackedLogo?.creator_display_name} mediaServer={serverName} />}
@@ -640,13 +561,13 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedLogo}
-                  tooltip="Reset to default logo"
+                  tooltip={t("tooltipResetLogo")}
                   onClick={(e) => { e.stopPropagation(); setLogoSelected(false); handleResetLogo(); }}
                 />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip="Upload your own logo" onClick={(e) => { e.stopPropagation(); setLogoSelected(false); }} />
+                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnLogo")} onClick={(e) => { e.stopPropagation(); setLogoSelected(false); }} />
                 <ToolbarButton
                   icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                  tooltip="Select a logo from an OpenPoster creator"
+                  tooltip={t("tooltipSelectLogo")}
                   onClick={(e) => { e.stopPropagation(); setLogoSelected(false); openDrawer("logo"); }}
                 />
               </MediaCardOverlay>
@@ -672,7 +593,7 @@ export default function MovieMediaDetail({ item, conn, onBack, collections, onNa
         subs={subs}
         appliedIds={appliedIds}
         applyingId={applyingId}
-        othersLabel={drawerMode === "backdrop" ? "Other backdrops for this movie" : drawerMode === "square" ? "Other square artwork for this movie" : drawerMode === "logo" ? "Other logos for this movie" : "Other posters for this movie"}
+        othersLabel={drawerMode === "backdrop" ? t("othersLabelBackdrops") : drawerMode === "square" ? t("othersLabelSquare") : drawerMode === "logo" ? t("othersLabelLogos") : t("othersLabelPosters")}
         onApply={handleApply}
       />
 

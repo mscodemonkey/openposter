@@ -11,13 +11,11 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
-import IconButton from "@mui/material/IconButton";
 import LinearProgress from "@mui/material/LinearProgress";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
 import ReplayIcon from "@mui/icons-material/Replay";
@@ -41,10 +39,11 @@ import { BACKDROP_GRID_COLS, GRID_GAP, CHIP_HEIGHT } from "@/lib/grid-sizes";
 
 /** Placeholder card for an episode that exists in TMDB but is not present on the media server. */
 function MissingEpisodeCard({ episodeNumber, airDate }: { episodeNumber: number; airDate: string | null }) {
+  const t = useTranslations("myMedia");
   const label = `EPISODE ${String(episodeNumber).padStart(2, "0")}`;
 
   const { statusLabel, statusColor } = (() => {
-    if (!airDate) return { statusLabel: "Not yet broadcast", statusColor: "text.disabled" as const };
+    if (!airDate) return { statusLabel: t("episodeStatusNotBroadcast"), statusColor: "text.disabled" as const };
     const aired = new Date(airDate);
     const now = new Date();
     const daysDiff = (now.getTime() - aired.getTime()) / (1000 * 60 * 60 * 24);
@@ -53,10 +52,10 @@ function MissingEpisodeCard({ episodeNumber, airDate }: { episodeNumber: number;
         day: "numeric", month: "short",
         ...(aired.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
       });
-      return { statusLabel: `Coming ${formatted}`, statusColor: "text.disabled" as const };
+      return { statusLabel: t("episodeStatusComing", { date: formatted }), statusColor: "text.disabled" as const };
     }
-    if (daysDiff < 2) return { statusLabel: "Expected soon", statusColor: "warning.main" as const };
-    return { statusLabel: "Episode missing", statusColor: "error.main" as const };
+    if (daysDiff < 2) return { statusLabel: t("episodeStatusExpectedSoon"), statusColor: "warning.main" as const };
+    return { statusLabel: t("episodeStatusMissing"), statusColor: "error.main" as const };
   })();
 
   return (
@@ -90,7 +89,6 @@ interface EpisodeMediaDetailProps {
   conn: { nodeUrl: string; adminToken: string };
   failedThumbs: Set<string>;
   trackedArtwork: Map<string, TrackedArtwork>;
-  onBack: () => void;
   onMarkFailed: (id: string) => void;
   onMarkRetry: (id: string) => void;
   onUntrack: (id: string) => void;
@@ -110,7 +108,6 @@ export default function EpisodeMediaDetail({
   conn,
   failedThumbs,
   trackedArtwork,
-  onBack,
   onMarkFailed,
   onMarkRetry,
   onUntrack,
@@ -463,32 +460,16 @@ export default function EpisodeMediaDetail({
       {/* Page content above hero */}
       <Box sx={{ position: "relative", zIndex: 1 }}>
 
-      {/* Back */}
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
-        <IconButton size="small" onClick={onBack} aria-label={t("backToShow", { title: showTitle })}>
-          <ArrowBackIcon fontSize="small" />
-        </IconButton>
-        <Typography variant="body2" color="text.secondary" sx={{ cursor: "pointer" }} onClick={onBack}>
-          {t("backToShow", { title: showTitle })}
-        </Typography>
-      </Stack>
 
-      <Typography variant="h5" gutterBottom>
-        {seasonIndex != null
-          ? (seasonTitle && !/^season\s+0*\d+$/i.test(seasonTitle.trim())
-            ? `Season ${String(seasonIndex).padStart(2, "0")} · ${seasonTitle}`
-            : `Season ${String(seasonIndex).padStart(2, "0")}`)
-          : seasonTitle}
-      </Typography>
       {!episodesLoading && episodes.length > 0 && (
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
           {tmdbEpisodeCountLoading
-            ? <><CircularProgress size={12} /><Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>Checking episode count</Typography></>
+            ? <><CircularProgress size={12} /><Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>{t("checkingEpisodeCount")}</Typography></>
             : tmdbEpisodeCount != null
               ? <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
                   {episodes.length >= tmdbEpisodeCount
-                    ? `All available episodes are on ${serverName ?? "your media server"}`
-                    : `${episodes.length} of ${tmdbEpisodeCount} episodes are available on ${serverName ?? "your media server"}`}
+                    ? t("allEpisodesAvailable", { server: serverName ?? "your media server" })
+                    : t("episodesAvailableCount", { count: episodes.length, total: tmdbEpisodeCount, server: serverName ?? "your media server" })}
                 </Typography>
               : null}
         </Stack>
@@ -564,9 +545,9 @@ export default function EpisodeMediaDetail({
                             icon={isCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                             disabled={!tracked}
                             active={isCreatorSubscribed}
-                            tooltip={isCreatorSubscribed ? "Subscribed" : "Subscribe to creator"}
+                            tooltip={isCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
                             menuItems={tracked?.creator_id ? [
-                              { label: isCreatorSubscribed ? "Unsubscribe" : "Subscribe", onClick: () => { handleCreatorSubscribe(); setTimeout(() => setSelectedEpisodeId(null), 500); } },
+                              { label: isCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"), onClick: () => { handleCreatorSubscribe(); setTimeout(() => setSelectedEpisodeId(null), 500); } },
                             ] : undefined}
                           />
                         </Box>
@@ -574,21 +555,21 @@ export default function EpisodeMediaDetail({
                           <ToolbarButton
                             icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                             disabled={!tracked}
-                            tooltip="Reset to default"
+                            tooltip={t("tooltipResetToDefault")}
                             onClick={(e) => { e.stopPropagation(); handleReset(episode); setSelectedEpisodeId(null); }}
                           />
                         </Box>
                         <Box sx={{ flex: 1 }}>
                           <ToolbarButton
                             icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />}
-                            tooltip="Upload your own episode card"
+                            tooltip={t("tooltipUploadOwnEpisodeCard")}
                             onClick={(e) => { e.stopPropagation(); setSelectedEpisodeId(null); }}
                           />
                         </Box>
                         <Box sx={{ flex: 1 }}>
                           <ToolbarButton
                             icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                            tooltip="Select an episode card from an OpenPoster creator"
+                            tooltip={t("tooltipSelectEpisodeCard")}
                             onClick={(e) => { e.stopPropagation(); setSelectedEpisodeId(null); openDrawer(episode); }}
                           />
                         </Box>
@@ -621,7 +602,7 @@ export default function EpisodeMediaDetail({
         subs={subs}
         appliedIds={appliedIds}
         applyingId={applyingId}
-        othersLabel="Other episode cards for this episode"
+        othersLabel={t("othersLabelEpisodeCards")}
         buttonLabel={t("useThumbnail")}
         onApply={(poster) => drawerEpisode ? handleApply(poster, drawerEpisode) : undefined}
       />
@@ -632,7 +613,7 @@ export default function EpisodeMediaDetail({
           {applyingAll && applyProgress ? (
             <Box>
               <Typography variant="body2" sx={{ mb: 1.5 }}>
-                Applying <strong>{applyProgress.current}</strong>…
+                {t("applyingItem", { item: applyProgress.current })}
               </Typography>
               <LinearProgress
                 variant="determinate"
@@ -640,14 +621,12 @@ export default function EpisodeMediaDetail({
                 sx={{ mb: 1, borderRadius: 1, height: 6 }}
               />
               <Typography variant="caption" color="text.secondary">
-                {applyProgress.done} of {applyProgress.total}
+                {t("applyProgressCount", { done: applyProgress.done, total: applyProgress.total })}
               </Typography>
             </Box>
           ) : (
             <Typography>
-              <strong>{suggestion?.creatorName}</strong> has created cards for{" "}
-              <strong>{suggestion?.jobs.length} more {suggestion?.jobs.length === 1 ? "episode" : "episodes"}</strong>{" "}
-              in this season. Would you like to apply them all?
+              {t("episodeSuggestionBody", { creatorName: suggestion?.creatorName ?? "", count: suggestion?.jobs.length ?? 0 })}
             </Typography>
           )}
         </DialogContent>

@@ -393,14 +393,10 @@ async function uploadItem(
   } else if (k.tag === "movie") {
     form.append("media_type", "movie");
     form.append("tmdb_id", String(k.tmdbId));
-    form.append("title", k.title);
-    form.append("year", String(k.year));
     form.append("collection_tmdb_id", String(k.collectionTmdbId));
   } else if (k.tag === "showPoster") {
     form.append("media_type", "show");
     form.append("tmdb_id", String(k.tmdbId));
-    form.append("title", k.title);
-    form.append("year", String(k.year));
   } else if (k.tag === "showBackdrop") {
     form.append("media_type", "backdrop");
     form.append("tmdb_id", String(k.tmdbId));

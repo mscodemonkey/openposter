@@ -10,6 +10,8 @@ import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import PageHeader from "@/components/PageHeader";
+import type { PageCrumb } from "@/components/PageHeader";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardMedia from "@mui/material/CardMedia";
@@ -19,6 +21,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Checkbox from "@mui/material/Checkbox";
 import Container from "@mui/material/Container";
+import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
@@ -39,6 +42,7 @@ import Typography from "@mui/material/Typography";
 
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import HomeIcon from "@mui/icons-material/Home";
 import CheckIcon from "@mui/icons-material/Check";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
@@ -48,12 +52,15 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 import ImageIcon from "@mui/icons-material/Image";
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import MovieOutlinedIcon from "@mui/icons-material/MovieOutlined";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 import UnarchiveOutlinedIcon from "@mui/icons-material/UnarchiveOutlined";
 
 import { POSTER_GRID_COLS, EPISODE_GRID_COLS, BACKDROP_GRID_COLS, GRID_GAP, CHIP_HEIGHT } from "@/lib/grid-sizes";
-import { loadCreatorConnection } from "@/lib/storage";
+import { loadCreatorConnection, saveCreatorConnection, clearCreatorConnection } from "@/lib/storage";
+import { loadIssuerUser, loadIssuerToken, saveIssuerSession } from "@/lib/issuer_storage";
+import { issuerMe } from "@/lib/issuer";
 import { fetchSetting, saveSetting } from "@/lib/settings";
 import { adminListThemes, adminCreateTheme, adminDeleteTheme, adminSetPosterTheme } from "@/lib/themes";
 import { fetchTmdbCollection, fetchTmdbTvShow, fetchTmdbTvSeason, fetchTmdbSearchCollection, fetchTmdbSearchTv, fetchTmdbMovie, fetchTmdbSearchMovie, tmdbImageUrl, tmdbStillUrl, type TmdbCollection, type TmdbMovie, type TmdbTvShow, type TmdbEpisode, type TmdbTvSeason, type TmdbSearchResult } from "@/lib/tmdb";
@@ -62,6 +69,7 @@ import type { CreatorTheme, PosterEntry } from "@/lib/types";
 import { CardChip } from "@/components/MediaCard";
 import PosterCard from "@/components/PosterCard";
 import { CollectionCard, CountBadge, TVShowCard, type CollectionGroup, type TVShowGroup } from "@/components/SectionedPosterView";
+import StudioWelcome from "./StudioWelcome";
 import ThemeModal from "./ThemeModal";
 import ZipImportDialog, { type ZipImportConfig } from "@/components/ZipImportDialog";
 import PosterActionsMenu from "./PosterActionsMenu";
@@ -198,6 +206,7 @@ type StudioCallbacks = {
   onTogglePublished: (posterId: string, currentlyPublished: boolean) => void;
   onOpenUpload: (preFill: UploadPreFill) => void;
   onOpenZipImport: (config: ZipImportConfig) => void;
+  onZipContextReady: (config: ZipImportConfig | null) => void;
   activeThemeId: string;
   handleMoveAllPosters: (posterIds: string[], themeId: string | null) => void;
 };
@@ -474,6 +483,7 @@ function StudioMoviePlaceholder({ tmdbData, movieTmdbId, cleanTitle, year, aspec
   uploadKind?: string;
   callbacks: StudioCallbacks;
 }) {
+  const t = useTranslations("studio");
   const tp = useTranslations("posterCard");
 
   const [asyncImgUrl, setAsyncImgUrl] = useState<string | null>(null);
@@ -523,7 +533,7 @@ function StudioMoviePlaceholder({ tmdbData, movieTmdbId, cleanTitle, year, aspec
         </Box>
         <Box sx={{ position: "absolute", top: 4, right: 4 }}>
           <PosterActionsMenu
-            onUpload={() => callbacks.onOpenUpload({ mediaType: uploadType, tmdbId: String(movieTmdbId), title: cleanTitle, year, themeId: callbacks.activeThemeId, kind: uploadKind, drawerLabel: uploadKind === "square" ? "Square artwork" : uploadKind === "logo" ? "Logo" : uploadType === "backdrop" ? "Backdrop" : "Movie poster" })}
+            onUpload={() => callbacks.onOpenUpload({ mediaType: uploadType, tmdbId: String(movieTmdbId), title: cleanTitle, year, themeId: callbacks.activeThemeId, kind: uploadKind, drawerLabel: uploadKind === "square" ? t("drawerLabelSquareArtwork") : uploadKind === "logo" ? t("drawerLabelLogo") : uploadType === "backdrop" ? t("drawerLabelBackdrop") : t("drawerLabelMoviePoster") })}
           />
         </Box>
         {placeholderSource && (
@@ -653,7 +663,7 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
       </Stack>
 
       {episodesState === "loading" && (
-        <Typography variant="caption" color="text.disabled">Loading episodes…</Typography>
+        <Typography variant="caption" color="text.disabled">{t("loadingEpisodes")}</Typography>
       )}
       {(tmdbEpisodes.length > 0 || epPostersForSeason.length > 0) && (
         <Stack spacing={1}>
@@ -693,7 +703,7 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
           <Slide direction="up" in={selected.size > 0} mountOnEnter unmountOnExit>
             <Box sx={{ position: "fixed", bottom: 24, left: { xs: 0, md: 220 }, right: 0, zIndex: 1200, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
               <Paper elevation={8} sx={{ px: 2, py: 1, borderRadius: 3, display: "flex", alignItems: "center", gap: 1, pointerEvents: "auto" }}>
-                <Typography variant="body2" sx={{ flex: 1, fontWeight: 700 }}>{selected.size} selected</Typography>
+                <Typography variant="body2" sx={{ flex: 1, fontWeight: 700 }}>{t("selectedCountBold", { count: selected.size })}</Typography>
                 {selectableThemes.length > 0 && (
                   <Select size="small" displayEmpty value="" onChange={(e) => { void callbacks.handleMoveAllPosters([...selected], e.target.value || null); selectNone(); }} sx={{ fontSize: "0.75rem", minWidth: 140 }} renderValue={() => t("changeTheme")}>
                     {selectableThemes.map((th) => <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>)}
@@ -742,6 +752,21 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
     fetchTvSquare(showTmdbId).then((url) => { if (!cancelled && url) setTvSquareUrl(url); });
     return () => { cancelled = true; };
   }, [showTmdbId]);
+
+  useEffect(() => {
+    if (!tmdbData) return;
+    const showYear = tmdbData.first_air_date?.slice(0, 4) ?? undefined;
+    callbacks.onZipContextReady({
+      contextType: "show",
+      contextTmdbId: showTmdbId,
+      contextTitle: tmdbData.name ?? String(showTmdbId),
+      contextYear: showYear ? parseInt(showYear) : undefined,
+      showSeasons: (tmdbData.seasons ?? []).filter((s) => s.season_number > 0).map((s) => ({ id: s.id, season_number: s.season_number })),
+      themeId: callbacks.activeThemeId || undefined,
+    });
+    return () => { callbacks.onZipContextReady(null); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showTmdbId, tmdbData, callbacks.activeThemeId]);
 
   function toggleSelect(posterId: string) {
     setSelected((prev) => { const next = new Set(prev); next.has(posterId) ? next.delete(posterId) : next.add(posterId); return next; });
@@ -883,29 +908,12 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
           <>
             <Checkbox size="small" checked={allSelected} indeterminate={selected.size > 0 && !allSelected} onChange={() => allSelected ? selectNone() : selectAll()} sx={{ p: 0 }} />
             <Typography variant="caption" color="text.secondary" sx={{ cursor: "pointer", "&:hover": { color: "text.primary" } }} onClick={() => allSelected ? selectNone() : selectAll()}>
-              {allSelected ? "Deselect all" : "Select all"}
+              {allSelected ? t("deselectAll") : t("selectAll")}
             </Typography>
-            {selected.size > 0 && <Typography variant="caption" color="text.disabled">· {selected.size} selected</Typography>}
+            {selected.size > 0 && <Typography variant="caption" color="text.disabled">{t("selectedCount", { count: selected.size })}</Typography>}
           </>
         )}
         <Box sx={{ flex: 1 }} />
-        {callbacks.conn && (
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<UnarchiveOutlinedIcon />}
-            onClick={() => callbacks.onOpenZipImport({
-              contextType: "show",
-              contextTmdbId: showTmdbId,
-              contextTitle: tmdbData?.name ?? String(showTmdbId),
-              contextYear: showYear ? parseInt(showYear) : undefined,
-              showSeasons: (tmdbData?.seasons ?? []).filter((s) => s.season_number > 0).map((s) => ({ id: s.id, season_number: s.season_number })),
-              themeId: callbacks.activeThemeId || undefined,
-            })}
-          >
-            {t("importZip")}
-          </Button>
-        )}
       </Stack>
 
       {tmdbState === "error" && (
@@ -1035,7 +1043,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
           <Slide direction="up" in={selected.size > 0} mountOnEnter unmountOnExit>
             <Box sx={{ position: "fixed", bottom: 24, left: { xs: 0, md: 220 }, right: 0, zIndex: 1200, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
               <Paper elevation={8} sx={{ px: 2, py: 1, borderRadius: 3, display: "flex", alignItems: "center", gap: 1, pointerEvents: "auto" }}>
-                <Typography variant="body2" sx={{ flex: 1, fontWeight: 700 }}>{selected.size} selected</Typography>
+                <Typography variant="body2" sx={{ flex: 1, fontWeight: 700 }}>{t("selectedCountBold", { count: selected.size })}</Typography>
                 {selectableThemes.length > 0 && (
                   <Select size="small" displayEmpty value="" onChange={(e) => { void callbacks.handleMoveAllPosters([...selected], e.target.value || null); selectNone(); }} sx={{ fontSize: "0.75rem", minWidth: 140 }} renderValue={() => t("changeTheme")}>
                     {selectableThemes.map((th) => <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>)}
@@ -1082,6 +1090,19 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
       return next;
     });
   }
+
+  useEffect(() => {
+    if (!tmdbData) return;
+    callbacks.onZipContextReady({
+      contextType: "collection",
+      contextTmdbId: collectionTmdbId,
+      contextTitle: tmdbData.name ?? String(collectionTmdbId),
+      collectionParts: tmdbData.parts ?? [],
+      themeId: callbacks.activeThemeId || undefined,
+    });
+    return () => { callbacks.onZipContextReady(null); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionTmdbId, tmdbData, callbacks.activeThemeId]);
 
   const existingPosters = posters.filter((p) => p.media.type !== undefined && (callbacks.activeThemeId === "" || p.media.theme_id === callbacks.activeThemeId));
   const allIds = existingPosters.map((p) => p.poster_id);
@@ -1179,32 +1200,16 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
               sx={{ cursor: "pointer", "&:hover": { color: "text.primary" } }}
               onClick={() => allSelected ? selectNone() : selectAll()}
             >
-              {allSelected ? "Deselect all" : "Select all"}
+              {allSelected ? t("deselectAll") : t("selectAll")}
             </Typography>
             {selected.size > 0 && (
               <Typography variant="caption" color="text.disabled">
-                · {selected.size} selected
+                {t("selectedCount", { count: selected.size })}
               </Typography>
             )}
           </>
         )}
         <Box sx={{ flex: 1 }} />
-        {callbacks.conn && (
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<UnarchiveOutlinedIcon />}
-            onClick={() => callbacks.onOpenZipImport({
-              contextType: "collection",
-              contextTmdbId: collectionTmdbId,
-              contextTitle: tmdbData?.name ?? String(collectionTmdbId),
-              collectionParts: tmdbData?.parts ?? [],
-              themeId: callbacks.activeThemeId || undefined,
-            })}
-          >
-            {t("importZip")}
-          </Button>
-        )}
       </Stack>
 
       {tmdbState === "error" && (
@@ -1231,7 +1236,7 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
                     uploadMediaType="collection"
                     chipLabel="COLLECTION"
                     chipColor="error"
-                    drawerLabel="Collection poster"
+                    drawerLabel={t("drawerLabelCollectionPoster")}
                     collectionTmdbId={collectionTmdbId}
                     callbacks={callbacks}
                     subtitle={movieCountLabel}
@@ -1250,7 +1255,7 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
         return (
           <Stack spacing={1}>
             <StudioCollectionSectionHeading
-              label={totalMovieCount > 0 ? `MOVIES — ${publishedMovieCount} OF ${totalMovieCount} PUBLISHED` : "MOVIES"}
+              label={totalMovieCount > 0 ? t("moviesPublishedHeading", { published: publishedMovieCount, total: totalMovieCount }) : t("moviesHeading")}
               ids={movieIds}
               selected={selected}
               setSelected={setSelected}
@@ -1261,7 +1266,7 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
                     <Box key={m.id}>
                       {uploadedMoviesByTmdbId.has(m.id)
                         ? <StudioPosterCard poster={uploadedMoviesByTmdbId.get(m.id)!} selected={selected.has(uploadedMoviesByTmdbId.get(m.id)!.poster_id)} onToggleSelect={() => toggleSelect(uploadedMoviesByTmdbId.get(m.id)!.poster_id)} callbacks={callbacks} onClick={() => navigateToMovie(m.id)} />
-                        : <StudioCollectionPlaceholderCard movie={m} chipLabel="MOVIE" chipColor="success" drawerLabel="Movie poster" collectionTmdbId={collectionTmdbId} callbacks={callbacks} onCardClick={() => navigateToMovie(m.id)} />
+                        : <StudioCollectionPlaceholderCard movie={m} chipLabel="MOVIE" chipColor="success" drawerLabel={t("drawerLabelMoviePoster")} collectionTmdbId={collectionTmdbId} callbacks={callbacks} onCardClick={() => navigateToMovie(m.id)} />
                       }
                     </Box>
                   ))
@@ -1294,7 +1299,7 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
                     uploadMediaType="backdrop"
                     chipLabel="BACKDROP"
                     chipColor="warning"
-                    drawerLabel="Backdrop"
+                    drawerLabel={t("drawerLabelBackdrop")}
                     collectionTmdbId={collectionTmdbId}
                     callbacks={callbacks}
                   />
@@ -1323,7 +1328,7 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
                     uploadKind="square"
                     chipLabel="SQUARE"
                     chipColor="warning"
-                    drawerLabel="Square artwork"
+                    drawerLabel={t("drawerLabelSquareArtwork")}
                     collectionTmdbId={collectionTmdbId}
                     callbacks={callbacks}
                   />
@@ -1352,7 +1357,7 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
                     uploadKind="logo"
                     chipLabel="LOGO"
                     chipColor="warning"
-                    drawerLabel="Logo"
+                    drawerLabel={t("drawerLabelLogo")}
                     collectionTmdbId={collectionTmdbId}
                     callbacks={callbacks}
                   />
@@ -1387,7 +1392,7 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
               }}
             >
               <Typography variant="body2" sx={{ flex: 1, fontWeight: 700 }}>
-                {selected.size} selected
+                {t("selectedCountBold", { count: selected.size })}
               </Typography>
               {selectableThemes.length > 0 && (
                 <Select
@@ -1540,7 +1545,7 @@ function MovieDetailView({ movieTmdbId, title, posters, allPosters, tmdbData, tm
           <Typography variant="caption" color="text.secondary" sx={{ cursor: "pointer", "&:hover": { color: "text.primary" } }} onClick={() => allSelected ? selectNone() : selectAll()}>
             {allSelected ? "Deselect all" : "Select all"}
           </Typography>
-          {selected.size > 0 && <Typography variant="caption" color="text.disabled">· {selected.size} selected</Typography>}
+          {selected.size > 0 && <Typography variant="caption" color="text.disabled">{t("selectedCount", { count: selected.size })}</Typography>}
         </Stack>
       )}
 
@@ -1625,7 +1630,7 @@ function MovieDetailView({ movieTmdbId, title, posters, allPosters, tmdbData, tm
           <Slide direction="up" in={selected.size > 0} mountOnEnter unmountOnExit>
             <Box sx={{ position: "fixed", bottom: 24, left: { xs: 0, md: 220 }, right: 0, zIndex: 1200, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
               <Paper elevation={8} sx={{ px: 2, py: 1, borderRadius: 3, display: "flex", alignItems: "center", gap: 1, pointerEvents: "auto" }}>
-                <Typography variant="body2" sx={{ flex: 1, fontWeight: 700 }}>{selected.size} selected</Typography>
+                <Typography variant="body2" sx={{ flex: 1, fontWeight: 700 }}>{t("selectedCountBold", { count: selected.size })}</Typography>
                 {selectableThemes.length > 0 && (
                   <Select size="small" value="" displayEmpty renderValue={() => t("changeTheme")} onChange={(e) => { void callbacks.handleMoveAllPosters([...selected], e.target.value || null); selectNone(); }} sx={{ fontSize: "0.75rem", minWidth: 140 }}>
                     {selectableThemes.map((th) => <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>)}
@@ -1648,6 +1653,79 @@ function MovieDetailView({ movieTmdbId, title, posters, allPosters, tmdbData, tm
   );
 }
 
+// ─── Creator handle prompt (one-time migration for pre-handle connections) ────
+
+function CreatorHandlePrompt() {
+  const t = useTranslations("studio");
+  const [value, setValue] = useState("");
+  function save() {
+    if (!value.trim()) return;
+    const conn = loadCreatorConnection();
+    if (conn) saveCreatorConnection({ ...conn, creatorId: value.trim() });
+    window.location.reload();
+  }
+  return (
+    <Container maxWidth="sm" sx={{ py: 8, textAlign: "center" }}>
+      <Typography variant="h5" fontWeight={800} gutterBottom>{t("creatorHandleTitle")}</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        {t("creatorHandleHint")}
+      </Typography>
+      <Stack direction="row" spacing={1} justifyContent="center">
+        <TextField
+          size="small"
+          placeholder={t("creatorHandlePlaceholder")}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+        />
+        <Button variant="contained" disabled={!value.trim()} onClick={save}>{t("save")}</Button>
+      </Stack>
+    </Container>
+  );
+}
+
+// ─── Empty list state ────────────────────────────────────────────────────────
+
+function EmptyListState({
+  icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        py: 10,
+        px: 4,
+        gap: 2,
+      }}
+    >
+      <Box sx={{ color: "text.disabled", lineHeight: 0 }}>{icon}</Box>
+      <Box>
+        <Typography variant="h6" fontWeight={800} gutterBottom>{title}</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 340, mx: "auto" }}>
+          {description}
+        </Typography>
+      </Box>
+      <Button variant="contained" startIcon={<AddIcon />} onClick={onAction} sx={{ mt: 0.5 }}>
+        {actionLabel}
+      </Button>
+    </Box>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function StudioWorkspace() {
@@ -1658,6 +1736,7 @@ export default function StudioWorkspace() {
   const [themes, setThemes] = useState<CreatorTheme[]>([]);
   const [allPosters, setAllPosters] = useState<PosterEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const nav = useMemo(() => navFromParams(searchParams), [searchParams]);
@@ -1688,6 +1767,7 @@ export default function StudioWorkspace() {
   const [uploadPreFill, setUploadPreFill] = useState<UploadPreFill | undefined>(undefined);
   const [zipImportOpen, setZipImportOpen] = useState(false);
   const [zipImportConfig, setZipImportConfig] = useState<ZipImportConfig | null>(null);
+  const [zipContext, setZipContext] = useState<ZipImportConfig | null>(null);
 
   // Pinned collections — persisted on the node so they're available on any device
   const [pinnedCollections, setPinnedCollections] = useState<{ tmdbId: number; title: string }[]>([]);
@@ -1713,6 +1793,22 @@ export default function StudioWorkspace() {
 
   // Delete media group confirmation
   const [deleteGroupConfirm, setDeleteGroupConfirm] = useState<{ group: MediaGroup } | null>(null);
+
+  // Unpin (remove from Studio) — non-destructive, keeps artwork
+  const [unpinConfirm, setUnpinConfirm] = useState<{ group: MediaGroup } | null>(null);
+  const [rowMenuState, setRowMenuState] = useState<{ anchor: HTMLElement; group: MediaGroup } | null>(null);
+
+  function handleUnpinGroup(group: MediaGroup) {
+    if (group.type === "collection") {
+      savePinnedCollections(pinnedCollections.filter((pc) => pc.tmdbId !== group.tmdbId));
+    } else if (group.type === "show") {
+      savePinnedTvShows(pinnedTvShows.filter((ps) => ps.tmdbId !== group.tmdbId));
+    } else if (group.type === "movie") {
+      savePinnedMovies(pinnedMovies.filter((pm) => pm.tmdbId !== group.tmdbId));
+    }
+    if (nav.view === "media" && nav.mediaKey === group.key) navigate({ view: "root" });
+    setUnpinConfirm(null);
+  }
 
   async function handleDeleteMediaGroup(group: MediaGroup) {
     if (!conn) return;
@@ -1891,10 +1987,38 @@ export default function StudioWorkspace() {
       const posters = postersJson.results;
       setAllPosters(posters);
 
-      // Use creator_id from connection (set during onboarding/settings).
-      // Display name is derived from first poster when available.
-      const cid = c.creatorId;
-      const displayName = posters[0]?.creator.display_name ?? "";
+      // Resolve creator_id — try four sources in order of reliability:
+      // 1. The stored connection (set during onboarding)
+      // 2. The poster feed — every poster carries the creator's ID
+      // 3. The cached issuer user in localStorage
+      // 4. A live fetch from /v1/me using the stored issuer token
+      const issuerUser = loadIssuerUser();
+      const displayName = posters[0]?.creator.display_name
+        ?? issuerUser?.display_name
+        ?? issuerUser?.handle
+        ?? c.creatorId
+        ?? "";
+      let cid = c.creatorId;
+      if (!cid && posters.length > 0) {
+        cid = posters[0].creator.creator_id;
+      }
+      if (!cid) {
+        if (issuerUser?.handle) {
+          cid = issuerUser.handle;
+        } else {
+          const issuerToken = loadIssuerToken();
+          if (issuerToken) {
+            try {
+              const freshUser = await issuerMe(issuerToken);
+              if (freshUser.handle) {
+                cid = freshUser.handle;
+                saveIssuerSession(issuerToken, freshUser);
+              }
+            } catch { /* ignore — issuer unreachable */ }
+          }
+        }
+      }
+      if (cid) saveCreatorConnection({ ...c, creatorId: cid });
       const fullConn = { ...c, creatorId: cid, creatorDisplayName: displayName };
       setConn(fullConn);
 
@@ -1975,11 +2099,32 @@ export default function StudioWorkspace() {
         void saveSetting(c.nodeUrl, c.adminToken, cid, "studio_pinned_movies", currentPinnedMovies);
       }
 
-      // Load themes — auto-create "Default theme" for new creators
-      let ts = await adminListThemes(c.nodeUrl, c.adminToken, cid);
-      if (ts.length === 0 && cid) {
-        const defaultTheme = await adminCreateTheme(c.nodeUrl, c.adminToken, cid, "Default theme").catch(() => null);
-        if (defaultTheme) ts = [defaultTheme];
+      // Load themes — auto-create "Default theme" if none exist.
+      // We do NOT silently swallow auth errors here; a 401/403 means the admin session
+      // was wiped (e.g. dev reset) and we need to tell the user to reconnect.
+      let ts: CreatorTheme[] = [];
+      if (cid) {
+        let listError: string | null = null;
+        try {
+          ts = await adminListThemes(c.nodeUrl, c.adminToken, cid);
+        } catch (e) {
+          listError = e instanceof Error ? e.message : String(e);
+          const isAuthError = listError.includes(": 401") || listError.includes(": 403");
+          if (isAuthError) {
+            // Stale session — clear the stored token so the welcome page shows
+            clearCreatorConnection();
+            setSessionExpired(true);
+            setConn(null);
+            setLoading(false);
+            return;
+          }
+          // 400 (missing cid) or network error — fall through with ts = []
+        }
+        if (ts.length === 0 && !listError) {
+          // Backend returned empty themes — create the Default theme now
+          const created = await adminCreateTheme(c.nodeUrl, c.adminToken, cid, "Default theme").catch(() => null);
+          if (created) ts = [created];
+        }
       }
       setThemes(ts);
       setExpandedSections((prev) => {
@@ -2004,12 +2149,22 @@ export default function StudioWorkspace() {
     setThemes(ts);
   }, [conn]);
 
-  const handleDeleteTheme = useCallback(async (themeId: string) => {
-    if (!conn) return;
-    await adminDeleteTheme(conn.nodeUrl, conn.adminToken, conn.creatorId, themeId).catch(() => undefined);
+  const [deleteThemeConfirm, setDeleteThemeConfirm] = useState<CreatorTheme | null>(null);
+  const [deleteThemeNameInput, setDeleteThemeNameInput] = useState("");
+
+  async function confirmDeleteTheme() {
+    if (!conn || !deleteThemeConfirm) return;
+    await adminDeleteTheme(conn.nodeUrl, conn.adminToken, conn.creatorId, deleteThemeConfirm.theme_id).catch(() => undefined);
+    setDeleteThemeConfirm(null);
+    setDeleteThemeNameInput("");
     await refreshThemes();
     navigate({ view: "root" });
-  }, [conn, refreshThemes]);
+  }
+
+  const handleDeleteTheme = useCallback((theme: CreatorTheme) => {
+    setDeleteThemeNameInput("");
+    setDeleteThemeConfirm(theme);
+  }, []);
 
   const handleMovePoster = useCallback(async (posterId: string, themeId: string | null) => {
     if (!conn) return;
@@ -2051,6 +2206,7 @@ export default function StudioWorkspace() {
     onTogglePublished: handleTogglePublished,
     onOpenUpload: (preFill) => { setUploadPreFill(preFill); setUploadDrawerOpen(true); },
     onOpenZipImport: (config) => { setZipImportConfig(config); setZipImportOpen(true); },
+    onZipContextReady: (config) => setZipContext(config),
     activeThemeId,
     handleMoveAllPosters,
   }), [conn, themes, loadData, handleMovePoster, handleDeletePoster, handleTogglePublished, activeThemeId, handleMoveAllPosters]);
@@ -2363,11 +2519,13 @@ export default function StudioWorkspace() {
               <EditOutlinedIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title={t("deleteTheme")}>
-            <IconButton size="small" color="error" onClick={() => theme && void handleDeleteTheme(theme.theme_id)}>
-              <DeleteOutlineIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          {themes.length > 1 && (
+            <Tooltip title={t("deleteTheme")}>
+              <IconButton size="small" color="error" onClick={() => theme && handleDeleteTheme(theme)}>
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
         </Stack>
         {collectionGroups.length === 0 && showGroups.length === 0 && (
           <Typography color="text.secondary">{t("noPostersInTheme")}</Typography>
@@ -2450,6 +2608,13 @@ export default function StudioWorkspace() {
               <EditOutlinedIcon sx={{ fontSize: "0.85rem" }} />
             </IconButton>
           </Tooltip>
+          {themes.length > 1 && (
+            <Tooltip title={t("deleteTheme")}>
+              <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteTheme(theme); }}>
+                <DeleteOutlineIcon sx={{ fontSize: "0.85rem" }} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
       </Card>
     );
@@ -2457,70 +2622,26 @@ export default function StudioWorkspace() {
 
   function renderMain() {
     if (nav.view === "root") {
+      const seasonSet = new Set<string>();
+      const episodeSet = new Set<string>();
+      for (const p of allPosters) {
+        if (p.media.show_tmdb_id != null && p.media.season_number != null) {
+          seasonSet.add(`${p.media.show_tmdb_id}-${p.media.season_number}`);
+          if (p.media.episode_number != null) {
+            episodeSet.add(`${p.media.show_tmdb_id}-${p.media.season_number}-${p.media.episode_number}`);
+          }
+        }
+      }
       return (
-        <Stack spacing={3}>
-          {themes.length === 0 && allPosters.length === 0 && (
-            <Typography color="text.secondary">{t("noThemes")}</Typography>
-          )}
-          {themes.length > 0 && (
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 800, mb: 1.5 }}>{t("byTheme")}</Typography>
-              <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
-                {themes.map((theme) => (
-                  <Box key={theme.theme_id}>
-                    <ThemeCard theme={theme} onClick={() => navigate({ view: "theme", themeId: theme.theme_id })} />
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-          )}
-          {(sidebarCollections.length > 0 || sidebarMovies.length > 0) && (
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 800, mb: 1.5 }}>{t("movies")}</Typography>
-              <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
-                {sidebarCollections.map((g) => (
-                  <Box key={g.key}>
-                    <CollectionCard group={toCollectionGroup(g)} onClick={() => navigate({ view: "media", mediaKey: g.key })} />
-                  </Box>
-                ))}
-                {sidebarMovies.map((g) => {
-                  const moviePoster = postersForMedia(g.key)[0];
-                  const previewUrl = moviePoster?.assets.preview.url ?? null;
-                  return (
-                    <Box key={g.key}>
-                      <Card sx={{ height: "100%", cursor: "pointer" }} onClick={() => navigate({ view: "media", mediaKey: g.key })}>
-                        <Box sx={{ position: "relative", bgcolor: "action.hover" }}>
-                          {previewUrl ? (
-                            <Box component="img" src={previewUrl} alt={g.title} sx={{ width: "100%", aspectRatio: "2 / 3", objectFit: "cover", display: "block" }} />
-                          ) : (
-                            <Box sx={{ width: "100%", aspectRatio: "2 / 3", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <MovieOutlinedIcon sx={{ fontSize: "3rem", color: "text.disabled" }} />
-                            </Box>
-                          )}
-                        </Box>
-                        <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
-                          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>{g.title}</Typography>
-                        </Box>
-                      </Card>
-                    </Box>
-                  );
-                })}
-              </Box>
-            </Box>
-          )}
-          {sidebarTvShows.length > 0 && (
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 800, mb: 1.5 }}>{t("tv")}</Typography>
-              <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
-                {sidebarTvShows.map((g) => (
-                  <Box key={g.key}>
-                    <TVShowCard group={toTVShowGroup(g)} onClick={() => navigate({ view: "media", mediaKey: g.key })} />
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-          )}
-        </Stack>
+        <StudioWelcome
+          showHero={false}
+          creatorHandle={conn?.creatorDisplayName || conn?.creatorId || undefined}
+          collectionCount={sidebarCollections.length}
+          movieCount={sidebarMovies.length}
+          tvShowCount={sidebarTvShows.length}
+          seasonCount={seasonSet.size}
+          episodeCount={episodeSet.size}
+        />
       );
     }
 
@@ -2602,14 +2723,14 @@ export default function StudioWorkspace() {
 
         return (
           <Stack spacing={2}>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography variant="h5" fontWeight={800} sx={{ flex: 1 }}>{t("collections")}</Typography>
-              <IconButton size="small" onClick={() => setAddMovieOpen(true)} aria-label={t("addCollection")}>
-                <AddIcon />
-              </IconButton>
-            </Stack>
             {sidebarCollections.length === 0 ? (
-              <Typography color="text.secondary">{t("noCollections")}</Typography>
+              <EmptyListState
+                icon={<LayersOutlinedIcon sx={{ fontSize: "4rem" }} />}
+                title={t("noCollections")}
+                description={t("noCollectionsHint")}
+                actionLabel={t("addCollection")}
+                onAction={() => setAddMovieOpen(true)}
+              />
             ) : (
               <Table size="small">
                 <TableHead>
@@ -2622,6 +2743,7 @@ export default function StudioWorkspace() {
                     <TableCell align="center" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t("sectionBackdrop")}</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t("sectionSquare")}</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t("sectionLogo")}</TableCell>
+                    <TableCell sx={{ width: 32, p: 0 }} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -2656,6 +2778,11 @@ export default function StudioWorkspace() {
                         {checkCell(stats.hasBackdrop)}
                         {checkCell(stats.hasSquare)}
                         {checkCell(stats.hasLogo)}
+                        <TableCell sx={{ py: 0, px: 0.5, width: 32 }} onClick={(e) => e.stopPropagation()}>
+                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); setRowMenuState({ anchor: e.currentTarget, group: g }); }}>
+                            <MoreVertIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -2701,14 +2828,14 @@ export default function StudioWorkspace() {
 
         return (
           <Stack spacing={2}>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography variant="h5" fontWeight={800} sx={{ flex: 1 }}>{t("movies")}</Typography>
-              <IconButton size="small" onClick={() => setAddMovieOpen(true)} aria-label={t("addMovie")}>
-                <AddIcon />
-              </IconButton>
-            </Stack>
             {sidebarMovies.length === 0 ? (
-              <Typography color="text.secondary">{t("noMovies")}</Typography>
+              <EmptyListState
+                icon={<MovieOutlinedIcon sx={{ fontSize: "4rem" }} />}
+                title={t("noMovies")}
+                description={t("noMoviesHint")}
+                actionLabel={t("addMovie")}
+                onAction={() => setAddMovieOpen(true)}
+              />
             ) : (
               <Table size="small">
                 <TableHead>
@@ -2719,6 +2846,7 @@ export default function StudioWorkspace() {
                     <TableCell align="center" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t("sectionBackdrop")}</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t("sectionSquare")}</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t("sectionLogo")}</TableCell>
+                    <TableCell sx={{ width: 32, p: 0 }} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -2732,6 +2860,11 @@ export default function StudioWorkspace() {
                         {checkCell(stats.hasBackdrop)}
                         {checkCell(stats.hasSquare)}
                         {checkCell(stats.hasLogo)}
+                        <TableCell sx={{ py: 0, px: 0.5, width: 32 }} onClick={(e) => e.stopPropagation()}>
+                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); setRowMenuState({ anchor: e.currentTarget, group: g }); }}>
+                            <MoreVertIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -2790,14 +2923,14 @@ export default function StudioWorkspace() {
 
         return (
           <Stack spacing={2}>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography variant="h5" fontWeight={800} sx={{ flex: 1 }}>{t("tvShows")}</Typography>
-              <IconButton size="small" onClick={() => setAddShowOpen(true)} aria-label={t("addShow")}>
-                <AddIcon />
-              </IconButton>
-            </Stack>
             {sidebarTvShows.length === 0 ? (
-              <Typography color="text.secondary">{t("noTvShows")}</Typography>
+              <EmptyListState
+                icon={<TvOutlinedIcon sx={{ fontSize: "4rem" }} />}
+                title={t("noTvShows")}
+                description={t("noTvShowsHint")}
+                actionLabel={t("addShow")}
+                onAction={() => setAddShowOpen(true)}
+              />
             ) : (
               <Table size="small">
                 <TableHead>
@@ -2811,6 +2944,7 @@ export default function StudioWorkspace() {
                     <TableCell align="center" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t("sectionBackdrop")}</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t("sectionSquare")}</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t("sectionLogo")}</TableCell>
+                    <TableCell sx={{ width: 32, p: 0 }} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -2841,6 +2975,11 @@ export default function StudioWorkspace() {
                         {checkCell(stats.hasBackdrop)}
                         {checkCell(stats.hasSquare)}
                         {checkCell(stats.hasLogo)}
+                        <TableCell sx={{ py: 0, px: 0.5, width: 32 }} onClick={(e) => e.stopPropagation()}>
+                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); setRowMenuState({ anchor: e.currentTarget, group: g }); }}>
+                            <MoreVertIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -2893,14 +3032,11 @@ export default function StudioWorkspace() {
   // ─── No connection state ─────────────────────────────────────────────────
 
   if (!loading && !conn) {
-    return (
-      <Container maxWidth="sm" sx={{ py: 4 }}>
-        <Alert severity="info">
-          {tc("loading")} — Connect your node in{" "}
-          <Link href="/settings">Settings</Link> to use the Studio.
-        </Alert>
-      </Container>
-    );
+    return <StudioWelcome sessionExpired={sessionExpired} />;
+  }
+
+  if (!loading && conn && !conn.creatorId) {
+    return <CreatorHandlePrompt />;
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -2910,27 +3046,15 @@ export default function StudioWorkspace() {
   // Back-to-list params — set when navigating from a list view to a detail view
   const fromListType = searchParams.get("fromListType") as "collections" | "movies" | "tv" | null;
   const fromListThemeId = searchParams.get("fromListThemeId");
-  const fromListLabel = fromListType === "collections" ? t("collections")
-    : fromListType === "movies" ? t("movies")
-    : fromListType === "tv" ? t("tvShows")
-    : null;
-
-  function navigateBackToList() {
-    if (!fromListType || !fromListThemeId) return;
-    const p = new URLSearchParams(searchParams.toString());
-    p.set("view", "list");
-    p.set("type", fromListType);
-    p.set("themeId", fromListThemeId);
-    p.set("themeFilter", fromListThemeId);
-    p.delete("key");
-    p.delete("fromListType");
-    p.delete("fromListThemeId");
-    router.push(`/studio?${p.toString()}`);
-  }
-
-  // Heading shown in the toolbar for non-movie, non-list-from views.
+  // Page title — shown below breadcrumbs in the scrollable area.
   // When fromListType is set for a media view, the detail view renders its own heading.
   const toolbarHeading = (() => {
+    if (nav.view === "root") return null;
+    if (nav.view === "list") {
+      return nav.listType === "collections" ? t("collections")
+        : nav.listType === "movies" ? t("movies")
+        : t("tvShows");
+    }
     if (nav.view === "theme") {
       return themes.find((th) => th.theme_id === nav.themeId)?.name ?? t("title");
     }
@@ -2946,6 +3070,69 @@ export default function StudioWorkspace() {
       return group?.title ?? t("title");
     }
     return t("title");
+  })();
+
+  // ─── Breadcrumbs ─────────────────────────────────────────────────────────────
+
+
+  const defaultThemeId = themes[0]?.theme_id ?? "";
+
+  const makeCrumb = (lt: "collections" | "movies" | "tv", clickable: boolean): PageCrumb => {
+    const label = lt === "collections" ? t("collections") : lt === "movies" ? t("movies") : t("tvShows");
+    return {
+      label,
+      onClick: clickable ? () => navigate({ view: "list", listType: lt, themeId: activeThemeId || defaultThemeId }) : undefined,
+    };
+  };
+
+  const studioBreadcrumbs: PageCrumb[] = (() => {
+    const home: PageCrumb = {
+      label: <HomeIcon sx={{ fontSize: "1rem", verticalAlign: "text-bottom" }} />,
+      onClick: () => navigate({ view: "root" }),
+    };
+    const homeCurrent: PageCrumb = {
+      label: <HomeIcon sx={{ fontSize: "1rem", verticalAlign: "text-bottom" }} />,
+    };
+
+    if (nav.view === "root") return [homeCurrent];
+
+    if (nav.view === "list") return [home, makeCrumb(nav.listType, false)];
+
+    if (nav.view === "media") {
+      if (isMovieView) {
+        const movieName = tmdbMovieData?.title ?? nav.mediaKey.replace("movie:", "");
+        if (tmdbMovieData?.belongs_to_collection) {
+          const coll = tmdbMovieData.belongs_to_collection;
+          return [
+            home,
+            makeCrumb("collections", true),
+            {
+              label: coll.name,
+              onClick: () => {
+                const p = new URLSearchParams(searchParams.toString());
+                p.set("view", "media"); p.set("key", `collection:${coll.id}`);
+                p.delete("fromListType"); p.delete("fromListThemeId");
+                router.push(`/studio?${p.toString()}`);
+              },
+            },
+            { label: movieName },
+          ];
+        }
+        return [home, makeCrumb("movies", true), { label: movieName }];
+      }
+      if (nav.mediaKey.startsWith("collection:")) {
+        const name = tmdbCollectionData?.name ?? sidebarCollections.find((g) => g.key === nav.mediaKey)?.title ?? nav.mediaKey;
+        return [home, makeCrumb("collections", true), { label: name }];
+      }
+      if (nav.mediaKey.startsWith("show:")) {
+        const name = tmdbTvShowData?.name ?? sidebarTvShows.find((g) => g.key === nav.mediaKey)?.title ?? nav.mediaKey;
+        return [home, makeCrumb("tv", true), { label: name }];
+      }
+      const group = sidebarMovies.find((g) => g.key === nav.mediaKey) ?? mediaGroups.find((g) => g.key === nav.mediaKey);
+      return [home, { label: group?.title ?? nav.mediaKey }];
+    }
+
+    return [homeCurrent];
   })();
 
   return (
@@ -3067,35 +3254,20 @@ export default function StudioWorkspace() {
       </Box>
 
       {/* Main content */}
-      <Box sx={{ flex: 1, minWidth: 0, p: 3, overflowY: "auto", "& [data-type-chip]": { display: "none" } }}>
-        {/* Toolbar */}
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-          {fromListType && nav.view === "media" ? (
-            <Stack
-              direction="row" alignItems="center" spacing={0.5} sx={{ flex: 1, cursor: "pointer" }}
-              onClick={navigateBackToList}
-            >
-              <ArrowBackIcon fontSize="small" sx={{ color: "text.secondary" }} />
-              <Typography variant="body2" color="text.secondary">{fromListLabel}</Typography>
-            </Stack>
-          ) : isMovieView && tmdbMovieData?.belongs_to_collection ? (
-            <Stack
-              direction="row" alignItems="center" spacing={0.5} sx={{ flex: 1, cursor: "pointer" }}
-              onClick={() => {
-                const p = new URLSearchParams(searchParams.toString());
-                p.set("view", "media");
-                p.set("key", `collection:${tmdbMovieData.belongs_to_collection!.id}`);
-                router.push(`/studio?${p.toString()}`);
-              }}
-            >
-              <ArrowBackIcon fontSize="small" sx={{ color: "text.secondary" }} />
-              <Typography variant="body2" color="text.secondary">{tmdbMovieData.belongs_to_collection.name}</Typography>
-            </Stack>
-          ) : toolbarHeading ? (
-            <Typography variant="h5" sx={{ fontWeight: 800, flex: 1 }}>{toolbarHeading}</Typography>
-          ) : (
-            <Box sx={{ flex: 1 }} />
-          )}
+      <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* Fixed toolbar */}
+        <Box sx={{
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          px: 2,
+          minHeight: 48,
+          borderBottom: 1,
+          borderColor: "divider",
+          bgcolor: "background.paper",
+        }}>
+          <Box sx={{ flex: 1 }} />
           {themes.length > 0 && (
             <Select
               size="small"
@@ -3108,6 +3280,25 @@ export default function StudioWorkspace() {
               ))}
             </Select>
           )}
+          {nav.view === "list" && (
+            <IconButton
+              size="small"
+              onClick={() => nav.listType === "tv" ? setAddShowOpen(true) : setAddMovieOpen(true)}
+              aria-label={nav.listType === "tv" ? t("addShow") : nav.listType === "collections" ? t("addCollection") : t("addMovie")}
+            >
+              <AddIcon />
+            </IconButton>
+          )}
+          {zipContext && (
+            <Button
+              startIcon={<UnarchiveOutlinedIcon />}
+              size="small"
+              variant="outlined"
+              onClick={() => { setZipImportConfig(zipContext); setZipImportOpen(true); }}
+            >
+              {t("importZip")}
+            </Button>
+          )}
           <Button
             startIcon={<FileUploadOutlinedIcon />}
             size="small"
@@ -3115,15 +3306,28 @@ export default function StudioWorkspace() {
           >
             {t("upload")}
           </Button>
-        </Stack>
+        </Box>
 
-        {!isMovieView && <Breadcrumb />}
-
-        {loading ? (
-          <Typography color="text.secondary">{tc("loading")}</Typography>
-        ) : (
-          renderMain()
-        )}
+        {/* Scrollable content area */}
+        <Box sx={{ flex: 1, overflowY: "auto", "& [data-type-chip]": { display: "none" } }}>
+          <Box sx={{ px: 3, pt: 2, pb: 3 }}>
+            <PageHeader
+              crumbs={studioBreadcrumbs}
+              title={toolbarHeading && nav.view !== "root" && !(
+                nav.view === "list" && (
+                  (nav.listType === "collections" && sidebarCollections.length === 0) ||
+                  (nav.listType === "movies" && sidebarMovies.length === 0) ||
+                  (nav.listType === "tv" && sidebarTvShows.length === 0)
+                )
+              ) ? toolbarHeading : undefined}
+            />
+            {loading ? (
+              <Typography color="text.secondary">{tc("loading")}</Typography>
+            ) : (
+              renderMain()
+            )}
+          </Box>
+        </Box>
       </Box>
 
       {/* Add collection dialog */}
@@ -3236,6 +3440,27 @@ export default function StudioWorkspace() {
         </DialogActions>
       </Dialog>
 
+      {/* Row context menu (⋮ on list view rows and root cards) */}
+      <Menu anchorEl={rowMenuState?.anchor} open={!!rowMenuState} onClose={() => setRowMenuState(null)}>
+        <MenuItem onClick={() => { setUnpinConfirm({ group: rowMenuState!.group }); setRowMenuState(null); }}>
+          {t("removeFromStudio")}
+        </MenuItem>
+      </Menu>
+
+      {/* Remove from Studio confirmation dialog */}
+      <Dialog open={!!unpinConfirm} onClose={() => setUnpinConfirm(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>{t("removeFromStudioTitle")}</DialogTitle>
+        <DialogContent>
+          <Typography>{t("removeFromStudioBody", { title: unpinConfirm?.group.title ?? "" })}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUnpinConfirm(null)}>{tc("cancel")}</Button>
+          <Button variant="contained" onClick={() => unpinConfirm && handleUnpinGroup(unpinConfirm.group)}>
+            {t("removeFromStudio")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Delete media group confirmation dialog */}
       <Dialog open={!!deleteGroupConfirm} onClose={() => setDeleteGroupConfirm(null)} maxWidth="xs" fullWidth>
         <DialogTitle>{t("deleteGroupTitle")}</DialogTitle>
@@ -3287,6 +3512,36 @@ export default function StudioWorkspace() {
           onSaved={() => { void refreshThemes(); setThemeModalOpen(false); }}
         />
       )}
+
+      {/* Delete theme confirmation — requires typing the theme name */}
+      <Dialog open={!!deleteThemeConfirm} onClose={() => setDeleteThemeConfirm(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>{t("deleteThemeTitle")}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            <Typography variant="body2">{t("deleteThemeBody", { title: deleteThemeConfirm?.name ?? "", count: deleteThemeConfirm?.poster_count ?? 0 })}</Typography>
+            <TextField
+              label={t("deleteThemeTypeLabel")}
+              value={deleteThemeNameInput}
+              onChange={(e) => setDeleteThemeNameInput(e.target.value)}
+              placeholder={deleteThemeConfirm?.name ?? ""}
+              size="small"
+              fullWidth
+              autoFocus
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteThemeConfirm(null)}>{tc("cancel")}</Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={deleteThemeNameInput !== deleteThemeConfirm?.name}
+            onClick={() => void confirmDeleteTheme()}
+          >
+            {t("deleteTheme")}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
