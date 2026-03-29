@@ -36,6 +36,9 @@ class IndexedPoster(Base):
     # Artwork kind: "poster" | "background" | "logo" | "banner" | "thumb"
     kind: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
 
+    # BCP-47 language tag (e.g. "en", "ja") or NULL for language-neutral
+    language: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+
     changed_at: Mapped[str] = mapped_column(String, index=True)
 
     poster_json: Mapped[str] = mapped_column(Text)

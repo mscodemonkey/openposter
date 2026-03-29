@@ -111,6 +111,8 @@ export type ZipImportConfig = {
   showSeasons?: Array<{ id: number; season_number: number }>;
   /** Theme to attach all imported posters to. */
   themeId?: string;
+  /** BCP-47 language tag for all imported posters (e.g. "en"). Omit for language-neutral. */
+  language?: string;
 };
 
 // ─── Internal types ───────────────────────────────────────────────────────────
@@ -375,6 +377,7 @@ async function uploadItem(
   item: ImportItem,
   conn: { nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string },
   themeId?: string,
+  language?: string,
   force?: boolean,
 ): Promise<void> {
   const fullFile = new File([item.blob], item.filename, { type: "image/jpeg" });
@@ -420,6 +423,7 @@ async function uploadItem(
   form.append("creator_display_name", conn.creatorDisplayName);
   form.append("published", "false");
   if (themeId) form.append("theme_id", themeId);
+  if (language) form.append("language", language);
   if (force) form.append("force", "true");
 
   // Files last (python-multipart drops text fields that come after file parts)
@@ -587,7 +591,7 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
       // Force upload if: cross-theme conflict (confirmed by user) OR same-theme and user opted in
       const force = conflict?.isCrossTheme || (conflict !== undefined && !conflict.isCrossTheme && forceSameTheme);
       try {
-        await uploadItem(items[i], conn, activeThemeId || undefined, force);
+        await uploadItem(items[i], conn, activeThemeId || undefined, config.language || undefined, force);
         setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "done" } : it));
         done++;
       } catch (e) {

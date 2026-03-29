@@ -14,6 +14,8 @@ export type PosterEntry = {
   poster_id: string;
   /** Artwork kind: "poster" | "background" | "logo" | "banner" | "thumb". Defaults to "poster" if absent. */
   kind?: string;
+  /** BCP-47 language tag (e.g. "en", "ja") or null/undefined = language-neutral */
+  language?: string | null;
   /** True = published (visible to indexers/public), false/undefined = draft */
   published?: boolean;
   media: {
@@ -40,8 +42,8 @@ export type PosterEntry = {
     media?: { type?: string; tmdb_id?: number };
   }> | null;
   assets: {
-    preview: { url: string; hash: string; mime: string };
-    full: { url: string; hash: string; mime: string; access: string };
+    preview: { url: string; hash: string; mime: string; language?: string | null };
+    full: { url: string; hash: string; mime: string; access: string; language?: string | null };
   };
 };
 

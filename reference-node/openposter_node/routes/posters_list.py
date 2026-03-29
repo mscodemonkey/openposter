@@ -96,6 +96,7 @@ async def list_posters(
         entry = {
             "poster_id": p.poster_id,
             "kind": p.kind or "poster",
+            "language": p.language,
             "published": bool(p.published),
             "media": media,
             "creator": {
@@ -112,6 +113,7 @@ async def list_posters(
                     "mime": p.preview_mime,
                     "width": p.preview_width,
                     "height": p.preview_height,
+                    "language": p.language,
                     "sources": ([
                         {"url": origin_preview_url, "role": "origin"},
                         *[{"url": u, "role": "mirror"} for u in mirror_preview_urls],
@@ -125,6 +127,7 @@ async def list_posters(
                     "mime": p.full_mime,
                     "width": p.full_width,
                     "height": p.full_height,
+                    "language": p.language,
                     "sources": ([
                         {"url": origin_full_url, "role": "origin"},
                         *[{"url": u, "role": "mirror"} for u in mirror_full_urls],

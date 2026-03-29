@@ -34,6 +34,26 @@ import ViewDayOutlinedIcon from "@mui/icons-material/ViewDayOutlined";
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { CreatorTheme, PosterEntry } from "@/lib/types";
 
+const ARTWORK_LANGUAGES = [
+  { code: "en", label: "English" },
+  { code: "ja", label: "Japanese" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "es", label: "Spanish" },
+  { code: "pt", label: "Portuguese" },
+  { code: "zh", label: "Chinese" },
+  { code: "ko", label: "Korean" },
+  { code: "it", label: "Italian" },
+  { code: "ru", label: "Russian" },
+  { code: "nl", label: "Dutch" },
+  { code: "sv", label: "Swedish" },
+  { code: "pl", label: "Polish" },
+  { code: "tr", label: "Turkish" },
+  { code: "ar", label: "Arabic" },
+  { code: "da", label: "Danish" },
+  { code: "hi", label: "Hindi" },
+];
+
 const MEDIA_TYPES = [
   { value: "movie", label: "Movie", icon: <MovieOutlinedIcon /> },
   { value: "collection", label: "Collection", icon: <CollectionsOutlinedIcon /> },
@@ -57,6 +77,8 @@ export type UploadPreFill = {
   seasonNumber?: string;
   episodeNumber?: string;
   themeId?: string;
+  /** BCP-47 language tag to pre-fill (e.g. "en"). Empty string = language-neutral. */
+  language?: string;
   /** Label shown in the drawer header, e.g. "Collection poster", "Backdrop". */
   drawerLabel?: string;
 };
@@ -118,6 +140,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
   const [title, setTitle] = useState("");
   const [year, setYear] = useState("");
   const [themeId, setThemeId] = useState("");
+  const [language, setLanguage] = useState("");
   const [redistribution, setRedistribution] = useState("mirrors-approved");
   const [license, setLicense] = useState("all-rights-reserved");
   const [published, setPublished] = useState(false); // default draft
@@ -145,6 +168,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
     setSeasonNumber(preFill?.seasonNumber ?? "");
     setEpisodeNumber(preFill?.episodeNumber ?? "");
     setThemeId(preFill?.themeId || themes[0]?.theme_id || "");
+    setLanguage(preFill?.language ?? "");
     setFullFile(null);
     setPreviewUrl(null);
     setSearchQuery("");
@@ -227,6 +251,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
       fd.set("creator_display_name", conn.creatorDisplayName);
       if (themeId) fd.set("theme_id", themeId);
       if (kind) fd.set("kind", kind);
+      if (language) fd.set("language", language);
       fd.set("attribution_redistribution", redistribution);
       fd.set("attribution_license", license);
       fd.set("published", String(published));
@@ -430,6 +455,14 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
             {/* Theme */}
             <TextField select label="Theme" value={themeId} onChange={(e) => setThemeId(e.target.value)} size="small" fullWidth>
               {themes.map((th) => <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>)}
+            </TextField>
+
+            {/* Artwork language */}
+            <TextField select label={ts("artworkLanguage")} value={language} onChange={(e) => setLanguage(e.target.value)} size="small" fullWidth>
+              <MenuItem value="">{ts("languageNeutral")}</MenuItem>
+              {ARTWORK_LANGUAGES.map((l) => (
+                <MenuItem key={l.code} value={l.code}>{l.label}</MenuItem>
+              ))}
             </TextField>
 
             {/* Published / Draft */}

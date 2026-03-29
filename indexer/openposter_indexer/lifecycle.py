@@ -184,6 +184,7 @@ async def crawl_once(app: FastAPI) -> None:
 
                     creator = poster.get("creator") or {}
                     poster_kind = poster.get("kind") or "poster"
+                    poster_language = poster.get("language")
                     row = IndexedPoster(
                         poster_id=poster_id,
                         source_node=node,
@@ -198,6 +199,7 @@ async def crawl_once(app: FastAPI) -> None:
                         episode_number=(str(media.get("episode_number")) if media.get("episode_number") is not None else None),
                         collection_tmdb_id=(str(media.get("collection_tmdb_id")) if media.get("collection_tmdb_id") is not None else None),
                         kind=poster_kind,
+                        language=poster_language,
                         changed_at=_norm_rfc3339(changed_at),
                         poster_json=json.dumps(poster, separators=(",", ":")),
                     )
@@ -262,6 +264,7 @@ async def init_app_state(app: FastAPI) -> None:
             ("episode_number", "ALTER TABLE indexed_posters ADD COLUMN episode_number VARCHAR"),
             ("collection_tmdb_id", "ALTER TABLE indexed_posters ADD COLUMN collection_tmdb_id VARCHAR"),
             ("kind", "ALTER TABLE indexed_posters ADD COLUMN kind VARCHAR"),
+            ("language", "ALTER TABLE indexed_posters ADD COLUMN language VARCHAR"),
         ]:
             if col not in existing:
                 await conn.exec_driver_sql(ddl)

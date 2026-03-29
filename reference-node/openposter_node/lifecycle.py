@@ -85,6 +85,7 @@ async def init_app_state(app: FastAPI) -> None:
             ("collection_tmdb_id", "ALTER TABLE posters ADD COLUMN collection_tmdb_id INTEGER"),
             ("published", "ALTER TABLE posters ADD COLUMN published INTEGER NOT NULL DEFAULT 1"),
             ("kind", "ALTER TABLE posters ADD COLUMN kind TEXT"),
+            ("language", "ALTER TABLE posters ADD COLUMN language TEXT"),
         ]:
             if name not in col_names:
                 await conn.exec_driver_sql(ddl)
@@ -126,11 +127,15 @@ async def init_app_state(app: FastAPI) -> None:
         if "creator_display_name" not in aa_cols:
             await conn.exec_driver_sql("ALTER TABLE applied_artwork ADD COLUMN creator_display_name TEXT")
 
-        # plex_library_items — add server_id column if missing (table may have existed before this migration)
+        # plex_library_items — add new columns if missing (table may have existed before these migrations)
         pli_cols = {c[1] for c in (await conn.exec_driver_sql("PRAGMA table_info(plex_library_items)")).all()}
         if "server_id" not in pli_cols and pli_cols:
             await conn.exec_driver_sql(
                 "ALTER TABLE plex_library_items ADD COLUMN server_id TEXT NOT NULL DEFAULT 'default'"
+            )
+        if "library_title" not in pli_cols and pli_cols:
+            await conn.exec_driver_sql(
+                "ALTER TABLE plex_library_items ADD COLUMN library_title TEXT"
             )
 
         # Peers table migrations (table is created by create_all above; add any new columns here)

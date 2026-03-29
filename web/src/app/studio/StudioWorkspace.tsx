@@ -56,6 +56,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import MovieOutlinedIcon from "@mui/icons-material/MovieOutlined";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 import UnarchiveOutlinedIcon from "@mui/icons-material/UnarchiveOutlined";
+import LanguageIcon from "@mui/icons-material/Language";
 
 import { POSTER_GRID_COLS, EPISODE_GRID_COLS, BACKDROP_GRID_COLS, GRID_GAP, CHIP_HEIGHT } from "@/lib/grid-sizes";
 import { loadCreatorConnection, saveCreatorConnection, clearCreatorConnection } from "@/lib/storage";
@@ -74,6 +75,28 @@ import ThemeModal from "./ThemeModal";
 import ZipImportDialog, { type ZipImportConfig } from "@/components/ZipImportDialog";
 import PosterActionsMenu from "./PosterActionsMenu";
 import UploadDrawer, { type UploadPreFill } from "./UploadDrawer";
+
+// ─── Artwork language list ────────────────────────────────────────────────────
+
+const ARTWORK_LANGUAGES = [
+  { code: "en", label: "English" },
+  { code: "ja", label: "Japanese" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "es", label: "Spanish" },
+  { code: "pt", label: "Portuguese" },
+  { code: "zh", label: "Chinese" },
+  { code: "ko", label: "Korean" },
+  { code: "it", label: "Italian" },
+  { code: "ru", label: "Russian" },
+  { code: "nl", label: "Dutch" },
+  { code: "sv", label: "Swedish" },
+  { code: "pl", label: "Polish" },
+  { code: "tr", label: "Turkish" },
+  { code: "ar", label: "Arabic" },
+  { code: "da", label: "Danish" },
+  { code: "hi", label: "Hindi" },
+];
 
 // ─── Navigation state ────────────────────────────────────────────────────────
 
@@ -208,6 +231,7 @@ type StudioCallbacks = {
   onOpenZipImport: (config: ZipImportConfig) => void;
   onZipContextReady: (config: ZipImportConfig | null) => void;
   activeThemeId: string;
+  activeLanguage: string;
   handleMoveAllPosters: (posterIds: string[], themeId: string | null) => void;
 };
 
@@ -763,10 +787,11 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
       contextYear: showYear ? parseInt(showYear) : undefined,
       showSeasons: (tmdbData.seasons ?? []).filter((s) => s.season_number > 0).map((s) => ({ id: s.id, season_number: s.season_number })),
       themeId: callbacks.activeThemeId || undefined,
+      language: callbacks.activeLanguage || undefined,
     });
     return () => { callbacks.onZipContextReady(null); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showTmdbId, tmdbData, callbacks.activeThemeId]);
+  }, [showTmdbId, tmdbData, callbacks.activeThemeId, callbacks.activeLanguage]);
 
   function toggleSelect(posterId: string) {
     setSelected((prev) => { const next = new Set(prev); next.has(posterId) ? next.delete(posterId) : next.add(posterId); return next; });
@@ -1099,10 +1124,11 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
       contextTitle: tmdbData.name ?? String(collectionTmdbId),
       collectionParts: tmdbData.parts ?? [],
       themeId: callbacks.activeThemeId || undefined,
+      language: callbacks.activeLanguage || undefined,
     });
     return () => { callbacks.onZipContextReady(null); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collectionTmdbId, tmdbData, callbacks.activeThemeId]);
+  }, [collectionTmdbId, tmdbData, callbacks.activeThemeId, callbacks.activeLanguage]);
 
   const existingPosters = posters.filter((p) => p.media.type !== undefined && (callbacks.activeThemeId === "" || p.media.theme_id === callbacks.activeThemeId));
   const allIds = existingPosters.map((p) => p.poster_id);
@@ -1768,6 +1794,7 @@ export default function StudioWorkspace() {
   const [zipImportOpen, setZipImportOpen] = useState(false);
   const [zipImportConfig, setZipImportConfig] = useState<ZipImportConfig | null>(null);
   const [zipContext, setZipContext] = useState<ZipImportConfig | null>(null);
+  const [activeLanguage, setActiveLanguage] = useState("");
 
   // Pinned collections — persisted on the node so they're available on any device
   const [pinnedCollections, setPinnedCollections] = useState<{ tmdbId: number; title: string }[]>([]);
@@ -2208,10 +2235,18 @@ export default function StudioWorkspace() {
     onOpenZipImport: (config) => { setZipImportConfig(config); setZipImportOpen(true); },
     onZipContextReady: (config) => setZipContext(config),
     activeThemeId,
+    activeLanguage,
     handleMoveAllPosters,
-  }), [conn, themes, loadData, handleMovePoster, handleDeletePoster, handleTogglePublished, activeThemeId, handleMoveAllPosters]);
+  }), [conn, themes, loadData, handleMovePoster, handleDeletePoster, handleTogglePublished, activeThemeId, activeLanguage, handleMoveAllPosters]);
 
   // ─── Derived views ──────────────────────────────────────────────────────────
+
+  // When a language is active, filter the poster set so detail views only show that language.
+  const visiblePosters = useMemo(() =>
+    activeLanguage
+      ? allPosters.filter((p) => (p.language ?? null) === activeLanguage)
+      : allPosters,
+  [allPosters, activeLanguage]);
 
   const mediaGroups = useMemo(() => groupByMedia(allPosters), [allPosters]);
 
@@ -2373,7 +2408,7 @@ export default function StudioWorkspace() {
     const [type, id] = mediaKey.split(":");
     if (type === "show") {
       const showId = Number(id);
-      return allPosters.filter((p) =>
+      return visiblePosters.filter((p) =>
         (p.media.type === "show" && p.media.tmdb_id === showId) ||
         ((p.media.type === "season" || p.media.type === "episode") && p.media.show_tmdb_id === showId) ||
         (p.media.type === "backdrop" && (p.media.show_tmdb_id || null) === showId)
@@ -2381,13 +2416,13 @@ export default function StudioWorkspace() {
     }
     if (type === "collection") {
       const collId = Number(id);
-      return allPosters.filter((p) =>
+      return visiblePosters.filter((p) =>
         (p.media.type === "collection" && p.media.tmdb_id === collId) ||
         (p.media.type === "movie" && p.media.collection_tmdb_id === collId) ||
         (p.media.type === "backdrop" && p.media.collection_tmdb_id === collId)
       );
     }
-    return allPosters.filter(
+    return visiblePosters.filter(
       (p) => p.media.type === type && String(p.media.tmdb_id) === id
     );
   }
@@ -3009,13 +3044,13 @@ export default function StudioWorkspace() {
       if (nav.mediaKey.startsWith("collection:")) {
         const collId = Number(nav.mediaKey.split(":")[1]);
         return (
-          <CollectionDetailView collectionTmdbId={collId} posters={posters} allPosters={allPosters} tmdbData={tmdbCollectionData} tmdbState={tmdbCollectionState} callbacks={studioCallbacks} />
+          <CollectionDetailView collectionTmdbId={collId} posters={posters} allPosters={visiblePosters} tmdbData={tmdbCollectionData} tmdbState={tmdbCollectionState} callbacks={studioCallbacks} />
         );
       }
       if (nav.mediaKey.startsWith("movie:")) {
         const movieId = Number(nav.mediaKey.split(":")[1]);
         return (
-          <MovieDetailView movieTmdbId={movieId} title={group?.title ?? ""} posters={posters} allPosters={allPosters} tmdbData={tmdbMovieData} tmdbState={tmdbMovieState} callbacks={studioCallbacks} />
+          <MovieDetailView movieTmdbId={movieId} title={group?.title ?? ""} posters={posters} allPosters={visiblePosters} tmdbData={tmdbMovieData} tmdbState={tmdbMovieState} callbacks={studioCallbacks} />
         );
       }
       return (
@@ -3268,6 +3303,21 @@ export default function StudioWorkspace() {
           bgcolor: "background.paper",
         }}>
           <Box sx={{ flex: 1 }} />
+          <Tooltip title={t("artworkLanguageTooltip")} placement="bottom">
+            <Select
+              size="small"
+              displayEmpty
+              value={activeLanguage}
+              onChange={(e) => setActiveLanguage(e.target.value)}
+              startAdornment={<LanguageIcon sx={{ fontSize: "1rem", mr: 0.5, color: "text.secondary" }} />}
+              sx={{ minWidth: 160, fontSize: "0.8rem" }}
+            >
+              <MenuItem value="">{t("allLanguages")}</MenuItem>
+              {ARTWORK_LANGUAGES.map((l) => (
+                <MenuItem key={l.code} value={l.code}>{l.label}</MenuItem>
+              ))}
+            </Select>
+          </Tooltip>
           {themes.length > 0 && (
             <Select
               size="small"
@@ -3302,7 +3352,7 @@ export default function StudioWorkspace() {
           <Button
             startIcon={<FileUploadOutlinedIcon />}
             size="small"
-            onClick={() => { setUploadPreFill({ themeId: activeThemeId }); setUploadDrawerOpen(true); }}
+            onClick={() => { setUploadPreFill({ themeId: activeThemeId, language: activeLanguage || undefined }); setUploadDrawerOpen(true); }}
           >
             {t("upload")}
           </Button>

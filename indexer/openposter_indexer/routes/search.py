@@ -18,6 +18,7 @@ async def search(
     q: str | None = Query(None),
     type: str | None = Query(None),  # noqa: A002
     kind: str | None = Query(None),
+    language: str | None = Query(None),
     creator_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     cursor: str | None = Query(None),
@@ -47,6 +48,8 @@ async def search(
             stmt = stmt.where(IndexedPoster.kind == kind)
         if q is not None and q.strip() != "":
             stmt = stmt.where(IndexedPoster.title.ilike(f"%{q.strip()}%"))
+        if language is not None:
+            stmt = stmt.where(IndexedPoster.language == language)
         if creator_id is not None:
             stmt = stmt.where(IndexedPoster.creator_id == str(creator_id))
 

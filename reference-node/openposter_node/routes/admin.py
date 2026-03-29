@@ -294,7 +294,26 @@ async def admin_list_themes(request: Request):
             CreatorTheme.creator_id == creator_id,
             CreatorTheme.deleted_at.is_(None),
         ).order_by(CreatorTheme.created_at.asc())
-        themes = (await session.execute(stmt)).scalars().all()
+        themes = list((await session.execute(stmt)).scalars().all())
+
+        # Auto-provision a Default theme if creator has none
+        if not themes:
+            import secrets as _secrets
+            theme_id = "thm_" + _secrets.token_hex(8)
+            now = _now_rfc3339()
+            default_theme = CreatorTheme(
+                theme_id=theme_id,
+                creator_id=creator_id,
+                name="Default theme",
+                description=None,
+                cover_hash=None,
+                created_at=now,
+                updated_at=now,
+                deleted_at=None,
+            )
+            session.add(default_theme)
+            await session.commit()
+            themes = [default_theme]
 
         # Count posters per theme
         from sqlalchemy import func
@@ -363,7 +382,7 @@ async def admin_update_theme(request: Request, theme_id: str, body: ThemeUpdate)
 @router.delete("/admin/themes/{theme_id}")
 async def admin_delete_theme(request: Request, theme_id: str):
     await _require_admin(request)
-    from sqlalchemy import update
+    from sqlalchemy import func, select, update
     from ..db import CreatorTheme, Poster
 
     creator_id = request.headers.get("x-creator-id", "").strip()
@@ -376,11 +395,21 @@ async def admin_delete_theme(request: Request, theme_id: str):
         if creator_id and t.creator_id != creator_id:
             raise http_error(403, "forbidden", "theme belongs to a different creator")
 
-        # Unset theme_id on all associated posters
+        # Prevent deleting the only remaining theme
+        remaining = (await session.execute(
+            select(func.count(CreatorTheme.theme_id)).where(
+                CreatorTheme.creator_id == t.creator_id,
+                CreatorTheme.deleted_at.is_(None),
+            )
+        )).scalar_one()
+        if remaining <= 1:
+            raise http_error(409, "conflict", "cannot delete the only theme")
+
+        # Soft-delete all posters in this theme
         await session.execute(
             update(Poster)
             .where(Poster.theme_id == theme_id)
-            .values(theme_id=None, updated_at=now)
+            .values(deleted_at=now, updated_at=now)
         )
 
         t.deleted_at = now
@@ -487,6 +516,7 @@ async def admin_upload_poster(
     links_json: str | None = Form(None),
     theme_id: str | None = Form(None),
     kind: str = Form("poster"),
+    language: str | None = Form(None),
     attribution_license: str = Form("all-rights-reserved"),
     attribution_redistribution: str = Form("mirrors-approved"),
     published: bool = Form(True),
@@ -635,6 +665,7 @@ async def admin_upload_poster(
             attribution_source_url=None,
             links_json=(None if not links_json else links_json),
             theme_id=theme_id,
+            language=language,
             preview_hash=preview_hash,
             preview_bytes=preview_bytes,
             preview_mime=preview_mime,

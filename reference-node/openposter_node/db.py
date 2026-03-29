@@ -74,6 +74,9 @@ class Poster(Base):
     # Draft / published — False = draft (not visible to indexers), True = published
     published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # BCP-47 language tag (e.g. "en", "ja", "fr") or NULL for language-neutral artwork
+    language: Mapped[str | None] = mapped_column(String, nullable=True)
+
     preview_hash: Mapped[str] = mapped_column(String)
     preview_bytes: Mapped[int] = mapped_column(Integer)
     preview_mime: Mapped[str] = mapped_column(String)
@@ -148,6 +151,7 @@ class PlexLibraryItem(Base):
     child_count: Mapped[int | None] = mapped_column(Integer, nullable=True)  # season count
     parent_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)  # parent ratingKey
     collection_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list of collection ratingKeys
+    library_title: Mapped[str | None] = mapped_column(String, nullable=True, index=True)  # Plex section title
     synced_at: Mapped[str] = mapped_column(String)                    # RFC3339
 
 

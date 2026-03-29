@@ -15,6 +15,7 @@ async def search(
     tmdb_id: int = Query(...),
     type: str | None = Query(None),  # noqa: A002 (spec uses `type`)
     kind: str | None = Query(None),
+    language: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     cursor: str | None = Query(None),
 ):
@@ -27,6 +28,8 @@ async def search(
             stmt = stmt.where(Poster.media_type == type)
         if kind:
             stmt = stmt.where(Poster.kind == kind)
+        if language is not None:
+            stmt = stmt.where(Poster.language == language)
         stmt = stmt.limit(limit)
         posters = (await session.execute(stmt)).scalars().all()
 
@@ -45,6 +48,7 @@ async def search(
         entry = {
             "poster_id": p.poster_id,
             "kind": p.kind or "poster",
+            "language": p.language,
             "media": {
                 "type": p.media_type,
                 "tmdb_id": p.tmdb_id,
@@ -64,6 +68,7 @@ async def search(
                     "mime": p.preview_mime,
                     "width": p.preview_width,
                     "height": p.preview_height,
+                    "language": p.language,
                     "sources": ([
                         {"url": origin_preview_url, "role": "origin"},
                         *[{"url": u, "role": "mirror"} for u in mirror_preview_urls],
@@ -77,6 +82,7 @@ async def search(
                     "mime": p.full_mime,
                     "width": p.full_width,
                     "height": p.full_height,
+                    "language": p.language,
                     "sources": ([
                         {"url": origin_full_url, "role": "origin"},
                         *[{"url": u, "role": "mirror"} for u in mirror_full_urls],
