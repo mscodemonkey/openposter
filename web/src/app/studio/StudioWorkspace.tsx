@@ -3583,7 +3583,7 @@ export default function StudioWorkspace() {
           onClose={() => setZipImportOpen(false)}
           config={zipImportConfig}
           conn={conn}
-          onComplete={() => { void loadData(); }}
+          onComplete={(opts) => { void loadData(); const lang = opts?.language ?? ""; if (lang !== activeLanguage) { switchLanguage(lang); } }}
           allPosters={allPosters}
           themes={themes}
         />

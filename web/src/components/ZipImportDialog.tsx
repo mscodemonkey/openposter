@@ -462,7 +462,7 @@ interface ZipImportDialogProps {
   onClose: () => void;
   config: ZipImportConfig;
   conn: { nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string } | null;
-  onComplete: () => void;
+  onComplete: (opts?: { language?: string }) => void;
   allPosters?: PosterEntry[];
   themes?: CreatorTheme[];
 }
@@ -623,7 +623,7 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
       setErrorCount(errors);
     }
 
-    void onComplete();
+    void onComplete({ language: activeLanguage || undefined });
     setPhase("done");
   }
 
