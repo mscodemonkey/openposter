@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useState, useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
+
+import { ARTWORK_LANGUAGE_CODES, getLanguageLabel } from "@/lib/artwork-languages";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -467,6 +469,7 @@ interface ZipImportDialogProps {
 
 export default function ZipImportDialog({ open, onClose, config, conn, onComplete, allPosters = [], themes = [] }: ZipImportDialogProps) {
   const t = useTranslations("studio");
+  const locale = useLocale();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>("select");
   const [items, setItems] = useState<ImportItem[]>([]);
@@ -475,12 +478,18 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
   const [errorCount, setErrorCount] = useState(0);
   const [forceSameTheme, setForceSameTheme] = useState(false);
   const [activeThemeId, setActiveThemeId] = useState<string>(config.themeId ?? "");
+  const [activeLanguage, setActiveLanguage] = useState<string>(config.language ?? "");
 
-  // Keep activeThemeId in sync if config.themeId changes (e.g. dialog reused for a different context)
+  // Keep activeThemeId/activeLanguage in sync if config changes (e.g. dialog reused for a different context)
   const prevConfigTheme = useRef(config.themeId);
   if (config.themeId !== prevConfigTheme.current) {
     prevConfigTheme.current = config.themeId;
     setActiveThemeId(config.themeId ?? "");
+  }
+  const prevConfigLang = useRef(config.language);
+  if (config.language !== prevConfigLang.current) {
+    prevConfigLang.current = config.language;
+    setActiveLanguage(config.language ?? "");
   }
 
   const targetThemeId = activeThemeId;
@@ -490,11 +499,11 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
   const conflictMap = useMemo(() => {
     const map = new Map<number, ConflictInfo>();
     items.forEach((item, idx) => {
-      const c = detectConflict(item, allPosters, targetThemeId, config.language);
+      const c = detectConflict(item, allPosters, targetThemeId, activeLanguage || undefined);
       if (c) map.set(idx, c);
     });
     return map;
-  }, [items, allPosters, targetThemeId, config.language]);
+  }, [items, allPosters, targetThemeId, activeLanguage]);
 
   const crossThemeItems = useMemo(() =>
     items.filter((_, idx) => conflictMap.get(idx)?.isCrossTheme === true),
@@ -597,7 +606,7 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
       // Force upload if: cross-theme conflict (confirmed by user) OR same-theme and user opted in
       const force = conflict?.isCrossTheme || (conflict !== undefined && !conflict.isCrossTheme && forceSameTheme);
       try {
-        await uploadItem(items[i], conn, activeThemeId || undefined, config.language || undefined, force);
+        await uploadItem(items[i], conn, activeThemeId || undefined, activeLanguage || undefined, force);
         setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "done" } : it));
         done++;
       } catch (e) {
@@ -640,6 +649,23 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
             {contextTypeLabel}: <strong>{config.contextTitle}</strong>
           </Typography>
+        </Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0 }}>
+          <Typography variant="caption" color="text.secondary">{t("zipImportLanguageLabel")}</Typography>
+          <Select
+            size="small"
+            value={activeLanguage}
+            onChange={(e) => setActiveLanguage(e.target.value)}
+            disabled={importing}
+            displayEmpty
+            sx={{ fontSize: "0.8rem", minWidth: 110 }}
+            renderValue={(v) => v ? getLanguageLabel(v as string, locale) : t("languageNeutral")}
+          >
+            <MenuItem value="">{t("languageNeutral")}</MenuItem>
+            {ARTWORK_LANGUAGE_CODES.map((code) => (
+              <MenuItem key={code} value={code}>{getLanguageLabel(code, locale)}</MenuItem>
+            ))}
+          </Select>
         </Box>
         {themes.length > 0 && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0 }}>
