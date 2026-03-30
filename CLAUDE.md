@@ -186,9 +186,13 @@ The Studio (`/studio`) is a creator workspace built in `web/src/app/studio/Studi
 
 **PlaceholderCard pattern**: `border: "1px dashed"`, grayscale TMDB image at 0.3 opacity, red MISSING chip top-left, small upload `IconButton` top-right, title strip below. Always reuse this pattern.
 
-**ZIP import** (`ZipImportDialog`): Parses ZIP natively (no npm dep) using browser `DecompressionStream`. Matches filenames to context (collection/show). All text form fields are appended **before** file fields in `uploadItem` — critical for python-multipart compatibility.
+**Language switcher**: Toolbar language selector is a true switcher (no "All languages" option) that defaults to the `studio_default_language` setting (saved via `saveSetting`). Switching language filters the poster grid and shows a toast ("Now showing {language} artwork"). Language names are rendered via `Intl.DisplayNames` using `getLanguageLabel(code, locale)` from `web/src/lib/artwork-languages.ts`. "Textless" = `language: null`.
 
-**Upload Drawer** (`UploadDrawer`): Side panel for individual poster uploads; pre-fills from context. Uses `conn.creatorId` directly.
+**Language badge on cards**: Uploaded artwork cards (`StudioPosterCard`) show the language code (e.g. "EN", "JA") as a `CardChip` in the top-left corner. The type chip is suppressed (`chip={false}` on `PosterCard`) — use the language badge instead. Placeholder/NO ARTWORK cards keep their type chips unchanged.
+
+**ZIP import** (`ZipImportDialog`): Parses ZIP natively (no npm dep) using browser `DecompressionStream`. Matches filenames to context (collection/show). All text form fields are appended **before** file fields in `uploadItem` — critical for python-multipart compatibility. Header has Language + Theme dropdowns; on completion, switches studio language + shows toast if language changed.
+
+**Upload Drawer** (`UploadDrawer`): Side panel for individual poster uploads; pre-fills from context including active language. Uses `conn.creatorId` directly. `onUploaded` callback receives `{ language?: string }` so the studio can auto-switch language + show toast.
 
 ## My Media
 
