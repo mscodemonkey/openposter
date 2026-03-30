@@ -352,9 +352,15 @@ function detectConflict(
   item: ImportItem,
   allPosters: PosterEntry[],
   targetThemeId: string,
+  importLanguage: string | undefined,
 ): ConflictInfo | null {
   const k = item.kind;
+  // Normalise to null so undefined and null both represent "textless/language-neutral"
+  const importLang = importLanguage ?? null;
   const match = allPosters.find((p) => {
+    // Only conflict with posters of the same language — uploading "en" shouldn't
+    // conflict with existing textless posters and vice versa.
+    if ((p.language ?? null) !== importLang) return false;
     if (k.tag === "collectionPoster") return p.media.type === "collection" && p.media.tmdb_id === k.tmdbId;
     if (k.tag === "collectionBackdrop") return p.media.type === "backdrop" && p.media.tmdb_id === k.tmdbId;
     if (k.tag === "movie") return p.media.type === "movie" && p.media.tmdb_id === k.tmdbId;
@@ -484,11 +490,11 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
   const conflictMap = useMemo(() => {
     const map = new Map<number, ConflictInfo>();
     items.forEach((item, idx) => {
-      const c = detectConflict(item, allPosters, targetThemeId);
+      const c = detectConflict(item, allPosters, targetThemeId, config.language);
       if (c) map.set(idx, c);
     });
     return map;
-  }, [items, allPosters, targetThemeId]);
+  }, [items, allPosters, targetThemeId, config.language]);
 
   const crossThemeItems = useMemo(() =>
     items.filter((_, idx) => conflictMap.get(idx)?.isCrossTheme === true),
