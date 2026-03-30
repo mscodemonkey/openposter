@@ -271,6 +271,7 @@ function StudioPosterCard({ poster, selected, onToggleSelect, callbacks, titleOv
     <Box sx={{ position: "relative" }}>
       <PosterCard
         poster={poster}
+        chip={false}
         {...(onClick ? { onClick } : { actions: [{ label: tc("details"), href: `/p/${encodeURIComponent(poster.poster_id)}` }] })}
         titleOverride={titleOverride}
         aspectRatio={(poster.media.type === "backdrop" || isEpisode) ? "16 / 9" : (poster.kind === "logo" ? "16 / 9" : poster.kind === "square" ? "1 / 1" : "2 / 3")}
@@ -302,6 +303,11 @@ function StudioPosterCard({ poster, selected, onToggleSelect, callbacks, titleOv
           </Box>
         )}
       />
+      {poster.language && (
+        <Box sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
+          <CardChip label={poster.language.toUpperCase()} color="info" />
+        </Box>
+      )}
       <Box sx={{ position: "absolute", top: 4, right: 4 }}>
         <PosterActionsMenu
           poster={poster}
