@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import IconButton from "@mui/material/IconButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
@@ -12,11 +12,13 @@ import MenuItem from "@mui/material/MenuItem";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import DriveFileMoveOutlinedIcon from "@mui/icons-material/DriveFileMoveOutlined";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
+import LanguageIcon from "@mui/icons-material/Language";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PublishOutlinedIcon from "@mui/icons-material/PublishOutlined";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import UnpublishedOutlinedIcon from "@mui/icons-material/UnpublishedOutlined";
 
+import { ARTWORK_LANGUAGE_CODES, getLanguageLabel } from "@/lib/artwork-languages";
 import type { CreatorTheme, PosterEntry } from "@/lib/types";
 
 interface PosterActionsMenuProps {
@@ -27,20 +29,23 @@ interface PosterActionsMenuProps {
   onMove?: (themeId: string | null) => void;
   onDelete?: () => void;
   onTogglePublished?: () => void;
+  onChangeLanguage?: (lang: string | null) => void;
 }
 
-export default function PosterActionsMenu({ poster, themes = [], onUpload, onMove, onDelete, onTogglePublished }: PosterActionsMenuProps) {
+export default function PosterActionsMenu({ poster, themes = [], onUpload, onMove, onDelete, onTogglePublished, onChangeLanguage }: PosterActionsMenuProps) {
   const t = useTranslations("studio");
   const tc = useTranslations("common");
+  const locale = useLocale();
 
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
 
   const currentThemeId = poster?.media.theme_id ?? null;
   const otherThemes = themes.filter((th) => th.theme_id !== currentThemeId);
   const published = poster?.published !== false;
 
-  const close = () => { setAnchor(null); setMoveOpen(false); };
+  const close = () => { setAnchor(null); setMoveOpen(false); setLangOpen(false); };
 
   return (
     <>
@@ -67,6 +72,17 @@ export default function PosterActionsMenu({ poster, themes = [], onUpload, onMov
                 </MenuItem>
               )),
             ]
+          : langOpen
+          ? [
+              <MenuItem key="textless" onClick={() => { onChangeLanguage?.(null); close(); }}>
+                <ListItemText inset primary={t("languageNeutral")} />
+              </MenuItem>,
+              ...ARTWORK_LANGUAGE_CODES.map((code) => (
+                <MenuItem key={code} onClick={() => { onChangeLanguage?.(code); close(); }}>
+                  <ListItemText inset primary={getLanguageLabel(code, locale)} />
+                </MenuItem>
+              )),
+            ]
           : [
               onUpload ? (
                 <MenuItem key="upload" onClick={() => { onUpload(); close(); }}>
@@ -88,6 +104,12 @@ export default function PosterActionsMenu({ poster, themes = [], onUpload, onMov
                 <MenuItem key="move" onClick={() => setMoveOpen(true)}>
                   <ListItemIcon><DriveFileMoveOutlinedIcon fontSize="small" /></ListItemIcon>
                   <ListItemText primary={t("moveToTheme")} />
+                </MenuItem>
+              ) : null,
+              onChangeLanguage ? (
+                <MenuItem key="lang" onClick={() => setLangOpen(true)}>
+                  <ListItemIcon><LanguageIcon fontSize="small" /></ListItemIcon>
+                  <ListItemText primary={t("changeLanguage")} />
                 </MenuItem>
               ) : null,
               onDelete ? (

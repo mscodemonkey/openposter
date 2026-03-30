@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+
+import { ARTWORK_LANGUAGE_CODES, getLanguageLabel } from "@/lib/artwork-languages";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -34,25 +36,6 @@ import ViewDayOutlinedIcon from "@mui/icons-material/ViewDayOutlined";
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { CreatorTheme, PosterEntry } from "@/lib/types";
 
-const ARTWORK_LANGUAGES = [
-  { code: "en", label: "English" },
-  { code: "ja", label: "Japanese" },
-  { code: "fr", label: "French" },
-  { code: "de", label: "German" },
-  { code: "es", label: "Spanish" },
-  { code: "pt", label: "Portuguese" },
-  { code: "zh", label: "Chinese" },
-  { code: "ko", label: "Korean" },
-  { code: "it", label: "Italian" },
-  { code: "ru", label: "Russian" },
-  { code: "nl", label: "Dutch" },
-  { code: "sv", label: "Swedish" },
-  { code: "pl", label: "Polish" },
-  { code: "tr", label: "Turkish" },
-  { code: "ar", label: "Arabic" },
-  { code: "da", label: "Danish" },
-  { code: "hi", label: "Hindi" },
-];
 
 const MEDIA_TYPES = [
   { value: "movie", label: "Movie", icon: <MovieOutlinedIcon /> },
@@ -86,7 +69,7 @@ export type UploadPreFill = {
 interface UploadDrawerProps {
   open: boolean;
   onClose: () => void;
-  onUploaded: () => void;
+  onUploaded: (opts?: { language?: string }) => void;
   themes: CreatorTheme[];
   conn: { nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string } | null;
   preFill?: UploadPreFill;
@@ -128,6 +111,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
   const t = useTranslations("upload");
   const tc = useTranslations("common");
   const ts = useTranslations("studio");
+  const locale = useLocale();
 
   const [step, setStep] = useState(0);
   const [mediaType, setMediaType] = useState("");
@@ -282,7 +266,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
         return;
       }
 
-      onUploaded();
+      onUploaded({ language: language || undefined });
       onClose();
     } finally {
       setUploading(false);
@@ -460,8 +444,8 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
             {/* Artwork language */}
             <TextField select label={ts("artworkLanguage")} value={language} onChange={(e) => setLanguage(e.target.value)} size="small" fullWidth>
               <MenuItem value="">{ts("languageNeutral")}</MenuItem>
-              {ARTWORK_LANGUAGES.map((l) => (
-                <MenuItem key={l.code} value={l.code}>{l.label}</MenuItem>
+              {ARTWORK_LANGUAGE_CODES.map((code) => (
+                <MenuItem key={code} value={code}>{getLanguageLabel(code, locale)}</MenuItem>
               ))}
             </TextField>
 

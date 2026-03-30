@@ -45,6 +45,8 @@ class PosterMetaPatch(BaseModel):
     clear_collection_tmdb_id: bool = False
     clear_show_tmdb_id: bool = False
     published: bool | None = None
+    language: str | None = None
+    clear_language: bool = False  # set language to null (Textless)
 
 
 def _now_rfc3339() -> str:
@@ -643,6 +645,48 @@ async def admin_upload_poster(
                 if target.creator_id != creator_id:
                     raise http_error(400, "invalid_request", "links may only reference posters by the same creator")
 
+        # If a soft-deleted row already occupies this poster_id, resurrect it
+        # rather than inserting a new row (which would hit the UNIQUE constraint).
+        existing_deleted = await session.get(Poster, poster_id)
+        if existing_deleted is not None:
+            existing_deleted.updated_at = now
+            existing_deleted.deleted_at = None
+            existing_deleted.media_type = media_type
+            existing_deleted.kind = kind
+            existing_deleted.tmdb_id = tmdb_id
+            existing_deleted.show_tmdb_id = show_tmdb_id
+            existing_deleted.season_number = season_number
+            existing_deleted.episode_number = episode_number
+            existing_deleted.collection_tmdb_id = collection_tmdb_id
+            existing_deleted.title = title
+            existing_deleted.year = year
+            existing_deleted.creator_id = creator_id
+            existing_deleted.creator_display_name = creator_display_name
+            existing_deleted.creator_home_node = cfg.base_url or str(request.base_url).rstrip("/")
+            existing_deleted.attribution_license = attribution_license
+            existing_deleted.attribution_redistribution = attribution_redistribution
+            existing_deleted.attribution_source_url = None
+            existing_deleted.links_json = None if not links_json else links_json
+            existing_deleted.theme_id = theme_id
+            existing_deleted.language = language
+            existing_deleted.preview_hash = preview_hash
+            existing_deleted.preview_bytes = preview_bytes
+            existing_deleted.preview_mime = preview_mime
+            existing_deleted.preview_width = None
+            existing_deleted.preview_height = None
+            existing_deleted.full_access = "public"
+            existing_deleted.full_hash = full_hash
+            existing_deleted.full_bytes = full_bytes
+            existing_deleted.full_mime = full_mime
+            existing_deleted.full_width = None
+            existing_deleted.full_height = None
+            existing_deleted.enc_alg = None
+            existing_deleted.enc_key_id = None
+            existing_deleted.enc_nonce = None
+            existing_deleted.published = published
+            await session.commit()
+            return {"ok": True, "poster_id": poster_id}
+
         row = Poster(
             poster_id=poster_id,
             created_at=now,
@@ -783,6 +827,10 @@ async def admin_patch_poster(request: Request, poster_id: str, body: PosterMetaP
             p.year = body.year
         if body.published is not None:
             p.published = body.published
+        if body.clear_language:
+            p.language = None
+        elif body.language is not None:
+            p.language = body.language
 
         p.updated_at = now
         await session.commit()

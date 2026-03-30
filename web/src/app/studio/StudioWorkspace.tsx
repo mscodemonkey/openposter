@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+
+import { ARTWORK_LANGUAGE_CODES, getLanguageLabel } from "@/lib/artwork-languages";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -16,6 +18,7 @@ import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardMedia from "@mui/material/CardMedia";
 import Dialog from "@mui/material/Dialog";
+import Snackbar from "@mui/material/Snackbar";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -76,27 +79,6 @@ import ZipImportDialog, { type ZipImportConfig } from "@/components/ZipImportDia
 import PosterActionsMenu from "./PosterActionsMenu";
 import UploadDrawer, { type UploadPreFill } from "./UploadDrawer";
 
-// ─── Artwork language list ────────────────────────────────────────────────────
-
-const ARTWORK_LANGUAGES = [
-  { code: "en", label: "English" },
-  { code: "ja", label: "Japanese" },
-  { code: "fr", label: "French" },
-  { code: "de", label: "German" },
-  { code: "es", label: "Spanish" },
-  { code: "pt", label: "Portuguese" },
-  { code: "zh", label: "Chinese" },
-  { code: "ko", label: "Korean" },
-  { code: "it", label: "Italian" },
-  { code: "ru", label: "Russian" },
-  { code: "nl", label: "Dutch" },
-  { code: "sv", label: "Swedish" },
-  { code: "pl", label: "Polish" },
-  { code: "tr", label: "Turkish" },
-  { code: "ar", label: "Arabic" },
-  { code: "da", label: "Danish" },
-  { code: "hi", label: "Hindi" },
-];
 
 // ─── Navigation state ────────────────────────────────────────────────────────
 
@@ -233,6 +215,8 @@ type StudioCallbacks = {
   activeThemeId: string;
   activeLanguage: string;
   handleMoveAllPosters: (posterIds: string[], themeId: string | null) => void;
+  onChangeLanguage: (posterId: string, lang: string | null) => void;
+  handleChangeLanguageAllPosters: (posterIds: string[], lang: string | null) => void;
 };
 
 // ─── Module-scope sub-components ─────────────────────────────────────────────
@@ -337,6 +321,7 @@ function StudioPosterCard({ poster, selected, onToggleSelect, callbacks, titleOv
           onMove={(themeId) => callbacks.onMove(poster.poster_id, themeId)}
           onDelete={() => callbacks.onDelete(poster.poster_id)}
           onTogglePublished={() => callbacks.onTogglePublished(poster.poster_id, published)}
+          onChangeLanguage={(lang) => callbacks.onChangeLanguage(poster.poster_id, lang)}
         />
       </Box>
     </Box>
@@ -601,6 +586,7 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
   const t = useTranslations("studio");
   const tc = useTranslations("common");
   const tp = useTranslations("posterCard");
+  const locale = useLocale();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tmdbEpisodes, setTmdbEpisodes] = useState<TmdbEpisode[]>([]);
@@ -733,6 +719,10 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
                     {selectableThemes.map((th) => <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>)}
                   </Select>
                 )}
+                <Select size="small" displayEmpty value="" onChange={(e) => { const val = e.target.value as string; void callbacks.handleChangeLanguageAllPosters([...selected], val === "__textless__" ? null : val); selectNone(); }} sx={{ fontSize: "0.75rem", minWidth: 160 }} renderValue={() => t("changeLanguage")}>
+                  <MenuItem value="__textless__">{t("languageNeutral")}</MenuItem>
+                  {ARTWORK_LANGUAGE_CODES.map((code) => (<MenuItem key={code} value={code}>{getLanguageLabel(code, locale)}</MenuItem>))}
+                </Select>
                 <Button size="small" variant="outlined" color="warning" disabled={allDraft} onClick={() => void batchSetPublished(false)}>{t("setDraft")}</Button>
                 <Button size="small" variant="contained" color="success" disabled={allPublished} onClick={() => void batchSetPublished(true)}>{t("publish")}</Button>
                 {!confirmDelete
@@ -759,6 +749,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
   const t = useTranslations("studio");
   const tc = useTranslations("common");
   const tp = useTranslations("posterCard");
+  const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromListType = searchParams.get("fromListType");
@@ -1074,6 +1065,10 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
                     {selectableThemes.map((th) => <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>)}
                   </Select>
                 )}
+                <Select size="small" displayEmpty value="" onChange={(e) => { const val = e.target.value as string; void callbacks.handleChangeLanguageAllPosters([...selected], val === "__textless__" ? null : val); selectNone(); }} sx={{ fontSize: "0.75rem", minWidth: 160 }} renderValue={() => t("changeLanguage")}>
+                  <MenuItem value="__textless__">{t("languageNeutral")}</MenuItem>
+                  {ARTWORK_LANGUAGE_CODES.map((code) => (<MenuItem key={code} value={code}>{getLanguageLabel(code, locale)}</MenuItem>))}
+                </Select>
                 <Button size="small" variant="outlined" color="warning" disabled={allDraft} onClick={() => void batchSetPublished(false)}>{t("setDraft")}</Button>
                 <Button size="small" variant="contained" color="success" disabled={allPublished} onClick={() => void batchSetPublished(true)}>{t("publish")}</Button>
                 {!confirmDelete
@@ -1093,6 +1088,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
 function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData, tmdbState, callbacks }: { collectionTmdbId: number; posters: PosterEntry[]; allPosters: PosterEntry[]; tmdbData: TmdbCollection | null; tmdbState: "idle" | "loading" | "ok" | "error"; callbacks: StudioCallbacks }) {
   const t = useTranslations("studio");
   const tc = useTranslations("common");
+  const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromListType = searchParams.get("fromListType");
@@ -1432,6 +1428,10 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
                   {selectableThemes.map((th) => <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>)}
                 </Select>
               )}
+              <Select size="small" displayEmpty value="" onChange={(e) => { const val = e.target.value as string; void callbacks.handleChangeLanguageAllPosters([...selected], val === "__textless__" ? null : val); selectNone(); }} sx={{ fontSize: "0.75rem", minWidth: 160 }} renderValue={() => t("changeLanguage")}>
+                <MenuItem value="__textless__">{t("languageNeutral")}</MenuItem>
+                {ARTWORK_LANGUAGE_CODES.map((code) => (<MenuItem key={code} value={code}>{getLanguageLabel(code, locale)}</MenuItem>))}
+              </Select>
               <Button size="small" variant="outlined" color="warning" disabled={allDraft} onClick={() => void batchSetPublished(false)}>
                 {t("setDraft")}
               </Button>
@@ -1465,6 +1465,7 @@ function MovieDetailView({ movieTmdbId, title, posters, allPosters, tmdbData, tm
 }) {
   const t = useTranslations("studio");
   const tc = useTranslations("common");
+  const locale = useLocale();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -1662,6 +1663,10 @@ function MovieDetailView({ movieTmdbId, title, posters, allPosters, tmdbData, tm
                     {selectableThemes.map((th) => <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>)}
                   </Select>
                 )}
+                <Select size="small" displayEmpty value="" onChange={(e) => { const val = e.target.value as string; void callbacks.handleChangeLanguageAllPosters([...selected], val === "__textless__" ? null : val); selectNone(); }} sx={{ fontSize: "0.75rem", minWidth: 160 }} renderValue={() => t("changeLanguage")}>
+                  <MenuItem value="__textless__">{t("languageNeutral")}</MenuItem>
+                  {ARTWORK_LANGUAGE_CODES.map((code) => (<MenuItem key={code} value={code}>{getLanguageLabel(code, locale)}</MenuItem>))}
+                </Select>
                 <Button size="small" variant="outlined" color="warning" disabled={allDraft} onClick={() => void batchSetPublished(false)}>{t("setDraft")}</Button>
                 <Button size="small" variant="contained" color="success" disabled={allPublished} onClick={() => void batchSetPublished(true)}>{t("publish")}</Button>
                 {!confirmDelete
@@ -1757,6 +1762,7 @@ function EmptyListState({
 export default function StudioWorkspace() {
   const t = useTranslations("studio");
   const tc = useTranslations("common");
+  const locale = useLocale();
 
   const [conn, setConn] = useState<{ nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string } | null>(null);
   const [themes, setThemes] = useState<CreatorTheme[]>([]);
@@ -1794,7 +1800,8 @@ export default function StudioWorkspace() {
   const [zipImportOpen, setZipImportOpen] = useState(false);
   const [zipImportConfig, setZipImportConfig] = useState<ZipImportConfig | null>(null);
   const [zipContext, setZipContext] = useState<ZipImportConfig | null>(null);
-  const [activeLanguage, setActiveLanguage] = useState("");
+  const [activeLanguage, setActiveLanguage] = useState("en");
+  const [languageToast, setLanguageToast] = useState<string | null>(null);
 
   // Pinned collections — persisted on the node so they're available on any device
   const [pinnedCollections, setPinnedCollections] = useState<{ tmdbId: number; title: string }[]>([]);
@@ -2050,11 +2057,13 @@ export default function StudioWorkspace() {
       setConn(fullConn);
 
       // Load pinned collections, TV shows, and standalone movies from node
-      const [pinnedColsFromNode, pinnedShowsFromNode, pinnedMoviesFromNode] = await Promise.all([
+      const [pinnedColsFromNode, pinnedShowsFromNode, pinnedMoviesFromNode, defaultLang] = await Promise.all([
         fetchSetting<{ tmdbId: number; title: string }[]>(c.nodeUrl, c.adminToken, cid, "studio_pinned_collections"),
         fetchSetting<{ tmdbId: number; title: string }[]>(c.nodeUrl, c.adminToken, cid, "studio_pinned_tv_shows"),
         fetchSetting<{ tmdbId: number; title: string }[]>(c.nodeUrl, c.adminToken, cid, "studio_pinned_movies"),
+        fetchSetting<string>(c.nodeUrl, c.adminToken, cid, "studio_default_language"),
       ]);
+      setActiveLanguage(defaultLang ?? "en");
       // Compute media groups from posters so we can auto-pin any untracked ones
       const derivedGroups = groupByMedia(posters);
 
@@ -2199,6 +2208,34 @@ export default function StudioWorkspace() {
     await loadData();
   }, [conn, loadData]);
 
+  function switchLanguage(lang: string) {
+    setActiveLanguage(lang);
+    const label = lang === "" ? t("languageNeutral") : getLanguageLabel(lang, locale);
+    setLanguageToast(t("nowShowingLanguage", { language: label }));
+  }
+
+  const handleChangeLanguage = useCallback(async (posterId: string, lang: string | null) => {
+    if (!conn) return;
+    await fetch(`${conn.nodeUrl}/v1/admin/posters/${encodeURIComponent(posterId)}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${conn.adminToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(lang === null ? { clear_language: true } : { language: lang }),
+    }).catch(() => undefined);
+    await loadData();
+  }, [conn, loadData]);
+
+  const handleChangeLanguageAllPosters = useCallback(async (posterIds: string[], lang: string | null) => {
+    if (!conn || posterIds.length === 0) return;
+    await Promise.all(posterIds.map((id) =>
+      fetch(`${conn.nodeUrl}/v1/admin/posters/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${conn.adminToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(lang === null ? { clear_language: true } : { language: lang }),
+      }).catch(() => undefined)
+    ));
+    await loadData();
+  }, [conn, loadData]);
+
   const handleMoveAllPosters = useCallback(async (posterIds: string[], themeId: string | null) => {
     if (!conn || posterIds.length === 0) return;
     await Promise.all(posterIds.map((id) => adminSetPosterTheme(conn.nodeUrl, conn.adminToken, id, themeId).catch(() => undefined)));
@@ -2237,16 +2274,17 @@ export default function StudioWorkspace() {
     activeThemeId,
     activeLanguage,
     handleMoveAllPosters,
-  }), [conn, themes, loadData, handleMovePoster, handleDeletePoster, handleTogglePublished, activeThemeId, activeLanguage, handleMoveAllPosters]);
+    onChangeLanguage: handleChangeLanguage,
+    handleChangeLanguageAllPosters,
+  }), [conn, themes, loadData, handleMovePoster, handleDeletePoster, handleTogglePublished, activeThemeId, activeLanguage, handleMoveAllPosters, handleChangeLanguage, handleChangeLanguageAllPosters]);
 
   // ─── Derived views ──────────────────────────────────────────────────────────
 
   // When a language is active, filter the poster set so detail views only show that language.
-  const visiblePosters = useMemo(() =>
-    activeLanguage
-      ? allPosters.filter((p) => (p.language ?? null) === activeLanguage)
-      : allPosters,
-  [allPosters, activeLanguage]);
+  const visiblePosters = useMemo(() => {
+    if (activeLanguage === "") return allPosters.filter((p) => p.language == null);
+    return allPosters.filter((p) => p.language === activeLanguage);
+  }, [allPosters, activeLanguage]);
 
   const mediaGroups = useMemo(() => groupByMedia(allPosters), [allPosters]);
 
@@ -2528,6 +2566,7 @@ export default function StudioWorkspace() {
                     themes={themes}
                     onMove={(themeId) => void handleMovePoster(p.poster_id, themeId)}
                     onDelete={() => void handleDeletePoster(p.poster_id)}
+                    onChangeLanguage={(lang) => void handleChangeLanguage(p.poster_id, lang)}
                   />
                 </Box>
               </Card>
@@ -3308,13 +3347,13 @@ export default function StudioWorkspace() {
               size="small"
               displayEmpty
               value={activeLanguage}
-              onChange={(e) => setActiveLanguage(e.target.value)}
+              onChange={(e) => switchLanguage(e.target.value)}
               startAdornment={<LanguageIcon sx={{ fontSize: "1rem", mr: 0.5, color: "text.secondary" }} />}
               sx={{ minWidth: 160, fontSize: "0.8rem" }}
             >
-              <MenuItem value="">{t("allLanguages")}</MenuItem>
-              {ARTWORK_LANGUAGES.map((l) => (
-                <MenuItem key={l.code} value={l.code}>{l.label}</MenuItem>
+              <MenuItem value="">{t("languageNeutral")}</MenuItem>
+              {ARTWORK_LANGUAGE_CODES.map((code) => (
+                <MenuItem key={code} value={code}>{getLanguageLabel(code, locale)}</MenuItem>
               ))}
             </Select>
           </Tooltip>
@@ -3531,7 +3570,7 @@ export default function StudioWorkspace() {
       <UploadDrawer
         open={uploadDrawerOpen}
         onClose={() => setUploadDrawerOpen(false)}
-        onUploaded={() => { void loadData(); }}
+        onUploaded={(opts) => { void loadData(); const uploadedLang = opts?.language ?? ""; if (uploadedLang !== activeLanguage) { switchLanguage(uploadedLang); } }}
         themes={themes}
         conn={conn}
         preFill={uploadPreFill}
@@ -3592,6 +3631,14 @@ export default function StudioWorkspace() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={languageToast !== null}
+        autoHideDuration={3000}
+        onClose={() => setLanguageToast(null)}
+        message={languageToast}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
     </Box>
   );
 }

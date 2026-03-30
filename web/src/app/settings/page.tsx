@@ -2,18 +2,33 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+
+import { ARTWORK_LANGUAGE_CODES, getLanguageLabel } from "@/lib/artwork-languages";
+import { fetchSetting, saveSetting } from "@/lib/settings";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
+import Divider from "@mui/material/Divider";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 import Container from "@mui/material/Container";
 import Paper from "@mui/material/Paper";
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
 import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+
+import PlexMark from "@/components/PlexMark";
 
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
@@ -29,11 +44,16 @@ import { fetchSyncStatus, triggerSync, type SyncStatus } from "@/lib/media-serve
 import { detectMediaServer, listMediaServers, addMediaServer, removeMediaServer, type MediaServerConfig, type DetectResult } from "@/lib/media-servers";
 import { getArtworkSettings, removeAllPlexLabels, saveArtworkSettings } from "@/lib/artwork-tracking";
 
+type PlexOAuthServer = { name: string; url: string; connections: { uri: string; local: boolean }[] };
+type PlexLibrary = { id: string; title: string; type: string };
+
 export default function SettingsPage() {
   const t = useTranslations("settings");
   const tc = useTranslations("common");
   const tn = useTranslations("nav");
   const tms = useTranslations("mediaServers");
+  const ts = useTranslations("studio");
+  const locale = useLocale();
   const [nodeUrl, setNodeUrl] = useState("http://localhost:8081");
   const [adminToken, setAdminToken] = useState("");
   const [connStatus, setConnStatus] = useState<string | null>(null);
@@ -55,6 +75,17 @@ export default function SettingsPage() {
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
+  // Plex OAuth state
+  const [plexOAuthPolling, setPlexOAuthPolling] = useState(false);
+  const [plexOAuthMode, setPlexOAuthMode] = useState(false);
+  const [plexOAuthServers, setPlexOAuthServers] = useState<PlexOAuthServer[] | null>(null);
+  const [plexOAuthToken, setPlexOAuthToken] = useState<string | null>(null);
+  const [plexServerName, setPlexServerName] = useState<string | null>(null);
+  const [plexLibraries, setPlexLibraries] = useState<PlexLibrary[] | null>(null);
+  const [plexLibraryClass, setPlexLibraryClass] = useState<Record<string, "tv" | "movies" | "ignore">>({});
+  const [fetchingLibraries, setFetchingLibraries] = useState(false);
+  const plexPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const [backdropPreview, setBackdropPreview] = useState<string | null>(null);
   const [backdropStatus, setBackdropStatus] = useState<string | null>(null);
   const backdropInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +97,7 @@ export default function SettingsPage() {
   const [autoUpdateArtwork, setAutoUpdateArtwork] = useState(false);
   const [addPlexLabels, setAddPlexLabels] = useState(true);
   const [removingLabels, setRemovingLabels] = useState(false);
+  const [defaultLanguage, setDefaultLanguage] = useState("en");
 
   useEffect(() => {
     setPosterSize(getPosterSize());
@@ -81,6 +113,10 @@ export default function SettingsPage() {
       setAutoUpdateArtwork(s.auto_update_artwork);
       setAddPlexLabels(s.add_plex_labels);
     });
+    const cid = conn.creatorId ?? "";
+    fetchSetting<string>(conn.nodeUrl, conn.adminToken, cid, "studio_default_language").then((lang) => {
+      setDefaultLanguage(lang ?? "en");
+    });
     listMediaServers(conn.nodeUrl, conn.adminToken).then((list) => {
       setServers(list);
       list.forEach((srv) => {
@@ -89,6 +125,81 @@ export default function SettingsPage() {
           .catch(() => undefined);
       });
     });
+  }, []);
+
+  async function fetchPlexLibraries(url: string, token: string) {
+    setFetchingLibraries(true);
+    setPlexLibraries(null);
+    try {
+      const r = await fetch(`/api/plex-libraries?url=${encodeURIComponent(url)}&token=${encodeURIComponent(token)}`);
+      const data = (await r.json()) as { libraries?: PlexLibrary[]; error?: string };
+      if (data.libraries) {
+        setPlexLibraries(data.libraries);
+        const cls: Record<string, "tv" | "movies" | "ignore"> = {};
+        data.libraries.forEach((lib) => {
+          cls[lib.id] = lib.type === "show" ? "tv" : lib.type === "movie" ? "movies" : "ignore";
+        });
+        setPlexLibraryClass(cls);
+      }
+    } catch { /* non-fatal — UI shows fallback */ }
+    setFetchingLibraries(false);
+  }
+
+  function resetAddForm() {
+    setAddingServer(false);
+    setDetectUrl(""); setDetectToken(""); setDetected(null); setDetectError(null);
+    setAddTvLibraries(""); setAddMovieLibraries("");
+    setPlexOAuthMode(false); setPlexOAuthServers(null); setPlexOAuthToken(null);
+    setPlexServerName(null); setPlexLibraries(null); setPlexLibraryClass({});
+  }
+
+  // Resume Plex OAuth after redirect back from plex.tv
+  useEffect(() => {
+    const raw = sessionStorage.getItem("plex_oauth_pin");
+    if (!raw) return;
+    let pinData: { id: number; clientIdentifier: string };
+    try { pinData = JSON.parse(raw); } catch { sessionStorage.removeItem("plex_oauth_pin"); return; }
+    sessionStorage.removeItem("plex_oauth_pin");
+    setAddingServer(true);
+    setPlexOAuthPolling(true);
+
+    async function runPoll() {
+      try {
+        const poll = await fetch(`/api/plex-oauth/poll/${pinData.id}`);
+        if (!poll.ok) return;
+        const data = (await poll.json()) as { done: boolean; token?: string; servers?: PlexOAuthServer[] };
+        if (!data.done || !data.token) return;
+
+        clearInterval(plexPollRef.current!);
+        plexPollRef.current = null;
+        setPlexOAuthPolling(false);
+        setPlexOAuthMode(true);
+        setPlexOAuthToken(data.token);
+
+        const srvs = data.servers ?? [];
+        if (srvs.length === 0) {
+          setDetectError("No Plex Media Servers found on your account.");
+          return;
+        }
+        if (srvs.length > 1) {
+          // Multiple servers — show picker first
+          setPlexOAuthServers(srvs);
+          return;
+        }
+        // Single server — go straight to library fetch
+        setPlexServerName(srvs[0].name);
+        setDetectUrl(srvs[0].url);
+        if (srvs[0].connections.length > 1) {
+          setPlexOAuthServers(srvs); // show connection picker
+        }
+        void fetchPlexLibraries(srvs[0].url, data.token);
+      } catch { /* keep polling */ }
+    }
+
+    plexPollRef.current = setInterval(() => void runPoll(), 2000);
+    void runPoll();
+    return () => { if (plexPollRef.current) clearInterval(plexPollRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Poll sync status for each server — faster while syncing
@@ -112,6 +223,27 @@ export default function SettingsPage() {
     return v.split(",").map((s) => s.trim()).filter(Boolean);
   }
 
+  async function handlePlexOAuth() {
+    setPlexOAuthMode(false);
+    setPlexOAuthServers(null);
+    setPlexOAuthToken(null);
+    setPlexServerName(null);
+    setPlexLibraries(null);
+    setPlexLibraryClass({});
+    try {
+      const res = await fetch("/api/plex-oauth/start", { method: "POST" });
+      if (!res.ok) throw new Error("Could not start Plex sign-in");
+      const { id, code, clientIdentifier } = (await res.json()) as { id: number; code: string; clientIdentifier: string };
+      // Persist pin so we can resume after the redirect back from plex.tv
+      sessionStorage.setItem("plex_oauth_pin", JSON.stringify({ id, clientIdentifier }));
+      const forwardUrl = encodeURIComponent(window.location.href);
+      const authUrl = `https://app.plex.tv/auth#?clientID=${clientIdentifier}&code=${code}&context[device][product]=OpenPoster&forwardUrl=${forwardUrl}`;
+      window.location.href = authUrl; // navigate same tab — Plex redirects back here
+    } catch (e: unknown) {
+      setDetectError(e instanceof Error ? e.message : "Plex sign-in failed");
+    }
+  }
+
   async function handleDetect() {
     const conn = loadCreatorConnection();
     if (!conn) return;
@@ -125,6 +257,44 @@ export default function SettingsPage() {
       setDetectError(e instanceof Error ? e.message : tms("detectFailed"));
     } finally {
       setDetecting(false);
+    }
+  }
+
+  async function handleAddPlexOAuth() {
+    const conn = loadCreatorConnection();
+    if (!conn || !plexOAuthToken || !plexServerName) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      const tvLibs = (plexLibraries ?? [])
+        .filter((lib) => plexLibraryClass[lib.id] === "tv")
+        .map((lib) => lib.title);
+      const movieLibs = (plexLibraries ?? [])
+        .filter((lib) => plexLibraryClass[lib.id] === "movies")
+        .map((lib) => lib.title);
+      const added = await addMediaServer(conn.nodeUrl, conn.adminToken, {
+        type: "plex",
+        name: plexServerName,
+        base_url: detectUrl,
+        token: plexOAuthToken,
+        tv_libraries: tvLibs,
+        movie_libraries: movieLibs,
+      });
+      setServers((prev) => {
+        const idx = prev.findIndex((s) => s.id === added.id);
+        if (idx >= 0) { const next = [...prev]; next[idx] = added; return next; }
+        return [...prev, added];
+      });
+      resetAddForm();
+      // Kick off an immediate sync
+      await triggerSync(conn.nodeUrl, conn.adminToken).catch(() => undefined);
+      fetchSyncStatus(conn.nodeUrl, conn.adminToken)
+        .then((status) => setSyncStatuses((prev) => ({ ...prev, [added.id]: status })))
+        .catch(() => undefined);
+    } catch (e: unknown) {
+      setAddError(e instanceof Error ? e.message : tms("addFailed"));
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -150,6 +320,10 @@ export default function SettingsPage() {
       setAddingServer(false);
       setDetectUrl(""); setDetectToken(""); setDetected(null);
       setAddTvLibraries(""); setAddMovieLibraries("");
+      await triggerSync(conn.nodeUrl, conn.adminToken).catch(() => undefined);
+      fetchSyncStatus(conn.nodeUrl, conn.adminToken)
+        .then((status) => setSyncStatuses((prev) => ({ ...prev, [added.id]: status })))
+        .catch(() => undefined);
     } catch (e: unknown) {
       setAddError(e instanceof Error ? e.message : tms("addFailed"));
     } finally {
@@ -207,6 +381,13 @@ export default function SettingsPage() {
     } catch (err: unknown) {
       setBackdropStatus(err instanceof Error ? err.message : t("uploadFailed"));
     }
+  }
+
+  async function handleDefaultLanguageChange(code: string) {
+    const conn = loadCreatorConnection();
+    if (!conn) return;
+    setDefaultLanguage(code);
+    await saveSetting(conn.nodeUrl, conn.adminToken, conn.creatorId ?? "", "studio_default_language", code);
   }
 
   async function handleAutoUpdateToggle(checked: boolean) {
@@ -416,7 +597,6 @@ export default function SettingsPage() {
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="body2" fontWeight={700} noWrap>{srv.name}</Typography>
-                      <Typography variant="caption" color="text.disabled" noWrap>{srv.base_url}</Typography>
                     </Box>
                     <Button
                       size="small"
@@ -472,42 +652,140 @@ export default function SettingsPage() {
             {addingServer && (
               <Box sx={{ borderRadius: 1, border: "1px dashed", borderColor: "divider", p: 1.5 }}>
                 <Stack spacing={1.5}>
-                  <TextField
-                    label={tms("serverUrl")}
-                    value={detectUrl}
-                    onChange={(e) => { setDetectUrl(e.target.value); setDetected(null); setDetectError(null); }}
-                    placeholder="http://192.168.1.10:32400"
-                    size="small"
-                  />
-                  <TextField
-                    label={tms("serverToken")}
-                    value={detectToken}
-                    onChange={(e) => { setDetectToken(e.target.value); setDetected(null); setDetectError(null); }}
-                    type="password"
-                    size="small"
-                  />
-                  <Stack direction="row" spacing={1}>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      disabled={detecting || !detectUrl || !detectToken}
-                      startIcon={detecting ? <CircularProgress size={14} color="inherit" /> : undefined}
-                      onClick={() => void handleDetect()}
-                    >
-                      {detecting ? tms("detecting") : tms("detect")}
-                    </Button>
-                    <Button size="small" color="inherit" onClick={() => { setAddingServer(false); setDetected(null); setDetectError(null); }}>
-                      {tc("cancel")}
-                    </Button>
-                  </Stack>
-                  {detectError && <Alert severity="error">{detectError}</Alert>}
-                  {detected && (
+                  {/* Sign in with Plex button — always shown */}
+                  <Button
+                    variant="outlined"
+                    startIcon={plexOAuthPolling ? <CircularProgress size={16} color="inherit" /> : <PlexMark height={18} />}
+                    onClick={() => void handlePlexOAuth()}
+                    disabled={plexOAuthPolling}
+                    sx={{ borderColor: "#e5a00d", color: "#e5a00d", "&:hover": { borderColor: "#e5a00d", bgcolor: "rgba(229,160,13,0.08)" }, "&.Mui-disabled": { borderColor: "divider" } }}
+                  >
+                    {plexOAuthPolling ? tms("waitingForPlex") : tms("signInWithPlex")}
+                  </Button>
+                  {plexOAuthPolling && (
+                    <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
+                      {tms("plexAuthOpened")}
+                    </Typography>
+                  )}
+
+                  {plexOAuthMode ? (
+                    /* ── Plex OAuth path ── */
                     <>
-                      <Alert severity="success">
-                        {tms("detected", { name: `${detected.type === "plex" ? tms("plexType") : tms("jellyfinType")} — ${detected.name}` })}
-                      </Alert>
-                      {detected.type === "plex" && (
+                      {/* Server picker — multiple Plex servers on account */}
+                      {plexOAuthServers && plexOAuthServers.length > 1 && (
+                        <FormControl size="small">
+                          <InputLabel>{tms("plexSelectServer")}</InputLabel>
+                          <Select
+                            label={tms("plexSelectServer")}
+                            value={detectUrl}
+                            onChange={(e) => {
+                              const picked = plexOAuthServers.find((s) => s.url === e.target.value);
+                              if (!picked) return;
+                              setDetectUrl(picked.url);
+                              setPlexServerName(picked.name);
+                              setPlexOAuthServers(picked.connections.length > 1 ? [picked] : null);
+                              void fetchPlexLibraries(picked.url, plexOAuthToken ?? "");
+                            }}
+                          >
+                            {plexOAuthServers.map((srv) => (
+                              <MenuItem key={srv.url} value={srv.url}>{srv.name}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+                      {/* Library classification table */}
+                      {plexServerName && (
                         <>
+                          <Typography variant="subtitle2" fontWeight={700}>{tms("plexLibrariesHeading")}</Typography>
+                          {fetchingLibraries && (
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <CircularProgress size={16} />
+                              <Typography variant="caption" color="text.secondary">{tms("fetchingLibraries")}</Typography>
+                            </Stack>
+                          )}
+                          {!fetchingLibraries && plexLibraries && (
+                            <TableContainer>
+                              <Table size="small">
+                                <TableBody>
+                                  {plexLibraries.map((lib) => (
+                                    <TableRow key={lib.id} sx={{ "& td": { borderBottom: 0 } }}>
+                                      <TableCell sx={{ pl: 0, py: 0.5 }}>{lib.title}</TableCell>
+                                      <TableCell sx={{ pr: 0, py: 0.5 }} align="right">
+                                        <Select
+                                          size="small"
+                                          value={plexLibraryClass[lib.id] ?? "ignore"}
+                                          onChange={(e) => setPlexLibraryClass((p) => ({ ...p, [lib.id]: e.target.value as "tv" | "movies" | "ignore" }))}
+                                          sx={{ minWidth: 120 }}
+                                        >
+                                          <MenuItem value="tv">{tms("libTv")}</MenuItem>
+                                          <MenuItem value="movies">{tms("libMovies")}</MenuItem>
+                                          <MenuItem value="ignore">{tms("libIgnore")}</MenuItem>
+                                        </Select>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          )}
+                          {!fetchingLibraries && !plexLibraries && (
+                            <Alert severity="warning">{tms("plexLibrariesFailed")}</Alert>
+                          )}
+                        </>
+                      )}
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          size="small"
+                          disabled={adding || !plexServerName || fetchingLibraries}
+                          startIcon={adding ? <CircularProgress size={14} color="inherit" /> : undefined}
+                          onClick={() => void handleAddPlexOAuth()}
+                        >
+                          {adding ? tms("adding") : tms("add")}
+                        </Button>
+                        <Button size="small" color="inherit" onClick={resetAddForm}>
+                          {tc("cancel")}
+                        </Button>
+                      </Stack>
+                      {addError && <Alert severity="error">{addError}</Alert>}
+                    </>
+                  ) : (
+                    /* ── Manual path (Jellyfin or manual Plex) ── */
+                    <>
+                      <Divider><Typography variant="caption" color="text.disabled">{tms("orEnterManually")}</Typography></Divider>
+                      <TextField
+                        label={tms("serverUrl")}
+                        value={detectUrl}
+                        onChange={(e) => { setDetectUrl(e.target.value); setDetected(null); setDetectError(null); }}
+                        placeholder="http://192.168.1.10:32400"
+                        size="small"
+                      />
+                      <TextField
+                        label={tms("serverToken")}
+                        value={detectToken}
+                        onChange={(e) => { setDetectToken(e.target.value); setDetected(null); setDetectError(null); }}
+                        type="password"
+                        size="small"
+                      />
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          disabled={detecting || !detectUrl || !detectToken}
+                          startIcon={detecting ? <CircularProgress size={14} color="inherit" /> : undefined}
+                          onClick={() => void handleDetect()}
+                        >
+                          {detecting ? tms("detecting") : tms("detect")}
+                        </Button>
+                        <Button size="small" color="inherit" onClick={resetAddForm}>
+                          {tc("cancel")}
+                        </Button>
+                      </Stack>
+                      {detectError && <Alert severity="error">{detectError}</Alert>}
+                      {detected && (
+                        <>
+                          <Alert severity="success">
+                            {tms("detected", { name: `${detected.type === "plex" ? tms("plexType") : tms("jellyfinType")} — ${detected.name}` })}
+                          </Alert>
                           <TextField
                             label={tms("tvLibraries")}
                             value={addTvLibraries}
@@ -523,19 +801,19 @@ export default function SettingsPage() {
                             placeholder="Movies"
                             size="small"
                           />
+                          <Stack direction="row" spacing={1}>
+                            <Button
+                              size="small"
+                              disabled={adding}
+                              startIcon={adding ? <CircularProgress size={14} color="inherit" /> : undefined}
+                              onClick={() => void handleAddServer()}
+                            >
+                              {adding ? tms("adding") : tms("add")}
+                            </Button>
+                          </Stack>
+                          {addError && <Alert severity="error">{addError}</Alert>}
                         </>
                       )}
-                      <Stack direction="row" spacing={1}>
-                        <Button
-                          size="small"
-                          disabled={adding}
-                          startIcon={adding ? <CircularProgress size={14} color="inherit" /> : undefined}
-                          onClick={() => void handleAddServer()}
-                        >
-                          {adding ? tms("adding") : tms("add")}
-                        </Button>
-                      </Stack>
-                      {addError && <Alert severity="error">{addError}</Alert>}
                     </>
                   )}
                 </Stack>
@@ -581,6 +859,24 @@ export default function SettingsPage() {
                   )}
                 </Box>
               )}
+              <Box>
+                <TextField
+                  select
+                  label={ts("defaultArtworkLanguage")}
+                  value={defaultLanguage}
+                  onChange={(e) => void handleDefaultLanguageChange(e.target.value)}
+                  size="small"
+                  sx={{ minWidth: 220 }}
+                >
+                  <MenuItem value="">{ts("languageNeutral")}</MenuItem>
+                  {ARTWORK_LANGUAGE_CODES.map((code) => (
+                    <MenuItem key={code} value={code}>{getLanguageLabel(code, locale)}</MenuItem>
+                  ))}
+                </TextField>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {ts("defaultArtworkLanguageHint")}
+                </Typography>
+              </Box>
             </Stack>
           </Paper>
         )}
