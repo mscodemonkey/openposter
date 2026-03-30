@@ -405,11 +405,11 @@ async def admin_delete_theme(request: Request, theme_id: str):
         if remaining <= 1:
             raise http_error(409, "conflict", "cannot delete the only theme")
 
-        # Soft-delete all posters in this theme
+        # Unset theme_id on all associated posters (do NOT delete them)
         await session.execute(
             update(Poster)
             .where(Poster.theme_id == theme_id)
-            .values(deleted_at=now, updated_at=now)
+            .values(theme_id=None, updated_at=now)
         )
 
         t.deleted_at = now
