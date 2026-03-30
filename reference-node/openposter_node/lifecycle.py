@@ -100,15 +100,6 @@ async def init_app_state(app: FastAPI) -> None:
         await conn.exec_driver_sql(
             "UPDATE posters SET kind = 'background' WHERE media_type = 'backdrop' AND kind IS NULL"
         )
-        # Heal posters that were incorrectly soft-deleted when their theme was deleted
-        # (a bug in theme deletion set deleted_at instead of unlinking theme_id).
-        # Restore them: clear deleted_at and unlink from the (now-deleted) theme.
-        await conn.exec_driver_sql(
-            "UPDATE posters SET deleted_at = NULL, theme_id = NULL"
-            " WHERE deleted_at IS NOT NULL"
-            " AND theme_id IS NOT NULL"
-            " AND theme_id IN (SELECT theme_id FROM creator_theme WHERE deleted_at IS NOT NULL)"
-        )
 
         # creator_profile and creator_settings tables — created by create_all above, nothing to migrate yet
         _ = CreatorProfile  # ensure the import is used
