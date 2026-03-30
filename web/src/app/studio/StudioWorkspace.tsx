@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
-import { ARTWORK_LANGUAGE_CODES, getLanguageLabel } from "@/lib/artwork-languages";
+import { ARTWORK_LANGUAGE_CODES, getLanguageLabel, getLanguageFlag } from "@/lib/artwork-languages";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -243,6 +243,16 @@ function StudioStatusBar({ published }: { published: boolean }) {
   );
 }
 
+/** Language badge for the top-left of Studio cards. Shows flag + uppercase code. */
+function LanguageChip({ language }: { language: string }) {
+  const flag = getLanguageFlag(language);
+  return (
+    <Box sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
+      <CardChip label={flag ? `${flag} ${language.toUpperCase()}` : language.toUpperCase()} color="info" />
+    </Box>
+  );
+}
+
 interface StudioPosterCardProps {
   poster: PosterEntry;
   selected: boolean;
@@ -303,11 +313,7 @@ function StudioPosterCard({ poster, selected, onToggleSelect, callbacks, titleOv
           </Box>
         )}
       />
-      {poster.language && (
-        <Box sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
-          <CardChip label={poster.language.toUpperCase()} color="info" />
-        </Box>
-      )}
+      {poster.language && <LanguageChip language={poster.language} />}
       <Box sx={{ position: "absolute", top: 4, right: 4 }}>
         <PosterActionsMenu
           poster={poster}
@@ -335,7 +341,7 @@ function StudioPosterCard({ poster, selected, onToggleSelect, callbacks, titleOv
   );
 }
 
-function StudioTvPlaceholderCard({ label, imagePath, aspectRatio = "2 / 3", noChrome = false, isTransparent = false, chipLabel, chipColor = "warning", subtitle, subtitleHref, placeholderSource, onUpload, onCardClick }: {
+function StudioTvPlaceholderCard({ label, imagePath, aspectRatio = "2 / 3", noChrome = false, isTransparent = false, chipLabel, chipColor = "warning", subtitle, subtitleHref, placeholderSource, activeLanguage, onUpload, onCardClick }: {
   label: string;
   imagePath?: string | null;
   aspectRatio?: string;
@@ -350,6 +356,8 @@ function StudioTvPlaceholderCard({ label, imagePath, aspectRatio = "2 / 3", noCh
   subtitleHref?: string;
   /** When set, shows "PLACEHOLDER FROM X" in the status bar instead of "NO ARTWORK". */
   placeholderSource?: "THEMOVIEDB.ORG" | "FANART.TV";
+  /** Active studio language — shows language badge instead of type chip when set. */
+  activeLanguage?: string;
   onUpload: () => void;
   /** When set, clicking anywhere on the card (outside the upload menu) navigates. */
   onCardClick?: () => void;
@@ -376,9 +384,9 @@ function StudioTvPlaceholderCard({ label, imagePath, aspectRatio = "2 / 3", noCh
             </Typography>
           </Box>
         )}
-        <Box data-type-chip sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
-          <CardChip label={chipLabel} color={chipColor} />
-        </Box>
+        {activeLanguage
+          ? <LanguageChip language={activeLanguage} />
+          : <Box data-type-chip sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}><CardChip label={chipLabel} color={chipColor} /></Box>}
         <Box sx={{ position: "absolute", top: 4, right: 4 }}>
           <PosterActionsMenu onUpload={onUpload} />
         </Box>
@@ -428,9 +436,9 @@ function StudioCollectionPlaceholderCard({ movie, aspectRatio = "2 / 3", uploadM
               sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block", filter: "grayscale(0.75)", opacity: 0.2 }} />
           )}
         </Box>
-        <Box data-type-chip sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
-          <CardChip label={chipLabel} color={chipColor} />
-        </Box>
+        {callbacks.activeLanguage
+          ? <LanguageChip language={callbacks.activeLanguage} />
+          : <Box data-type-chip sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}><CardChip label={chipLabel} color={chipColor} /></Box>}
         <Box sx={{ position: "absolute", top: 4, right: 4 }}>
           <PosterActionsMenu
             onUpload={() => callbacks.onOpenUpload({ mediaType: uploadMediaType, kind: uploadKind, tmdbId: String(movie.id), title: movie.title, year, collectionTmdbId: String(collectionTmdbId), themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined, drawerLabel })}
@@ -544,9 +552,9 @@ function StudioMoviePlaceholder({ tmdbData, movieTmdbId, cleanTitle, year, aspec
               sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: isTransparent ? "contain" : "cover", display: "block", filter: "grayscale(0.75)", opacity: 0.2 }} />
           )}
         </Box>
-        <Box data-type-chip sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
-          <CardChip label={chipLabel} color={chipColor} />
-        </Box>
+        {callbacks.activeLanguage
+          ? <LanguageChip language={callbacks.activeLanguage} />
+          : <Box data-type-chip sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}><CardChip label={chipLabel} color={chipColor} /></Box>}
         <Box sx={{ position: "absolute", top: 4, right: 4 }}>
           <PosterActionsMenu
             onUpload={() => callbacks.onOpenUpload({ mediaType: uploadType, tmdbId: String(movieTmdbId), title: cleanTitle, year, themeId: callbacks.activeThemeId, kind: uploadKind, language: callbacks.activeLanguage || undefined, drawerLabel: uploadKind === "square" ? t("drawerLabelSquareArtwork") : uploadKind === "logo" ? t("drawerLabelLogo") : uploadType === "backdrop" ? t("drawerLabelBackdrop") : t("drawerLabelMoviePoster") })}
@@ -694,7 +702,7 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
                     <Box key={ep.episode_number}>
                       {existing
                         ? <StudioPosterCard poster={existing} selected={selected.has(existing.poster_id)} onToggleSelect={() => toggleSelect(existing.poster_id)} callbacks={callbacks} />
-                        : <StudioTvPlaceholderCard label={epLabel} imagePath={ep.still_path} aspectRatio="16 / 9" chipLabel={tp("episode")} chipColor="success" onUpload={() => callbacks.onOpenUpload({ mediaType: "episode", showTmdbId: String(showTmdbId), tmdbId: String(showTmdbId), seasonNumber: String(seasonNumber), episodeNumber: String(ep.episode_number), title: ep.name, themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} />
+                        : <StudioTvPlaceholderCard label={epLabel} imagePath={ep.still_path} aspectRatio="16 / 9" chipLabel={tp("episode")} chipColor="success" onUpload={() => callbacks.onOpenUpload({ mediaType: "episode", showTmdbId: String(showTmdbId), tmdbId: String(showTmdbId), seasonNumber: String(seasonNumber), episodeNumber: String(ep.episode_number), title: ep.name, themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} activeLanguage={callbacks.activeLanguage || undefined} />
                       }
                     </Box>
                   );
@@ -957,7 +965,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
               ))
             : (
                 <Box>
-                  <StudioTvPlaceholderCard label={showDisplayTitle ?? (tmdbData?.name ?? "Show")} imagePath={tmdbData?.poster_path} placeholderSource={tmdbData?.poster_path ? "THEMOVIEDB.ORG" : undefined} chipLabel={tp("tvBoxSet")} chipColor="error" subtitle={showCountsSubtitle} noChrome onUpload={() => callbacks.onOpenUpload({ mediaType: "show", tmdbId: String(showTmdbId), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} />
+                  <StudioTvPlaceholderCard label={showDisplayTitle ?? (tmdbData?.name ?? "Show")} imagePath={tmdbData?.poster_path} placeholderSource={tmdbData?.poster_path ? "THEMOVIEDB.ORG" : undefined} chipLabel={tp("tvBoxSet")} chipColor="error" subtitle={showCountsSubtitle} noChrome onUpload={() => callbacks.onOpenUpload({ mediaType: "show", tmdbId: String(showTmdbId), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} activeLanguage={callbacks.activeLanguage || undefined} />
                 </Box>
               )
           }
@@ -974,7 +982,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
             }
             return (
               <Box key={`season-poster-${sn}`}>
-                <StudioTvPlaceholderCard label={t("seasonTitle", { n: String(sn).padStart(2, "0") })} imagePath={season.poster_path} placeholderSource={season.poster_path ? "THEMOVIEDB.ORG" : undefined} chipLabel={tp("season")} chipColor="info" subtitle={episodeCountSubtitle} noChrome onCardClick={() => navigateToSeason(sn)} onUpload={() => callbacks.onOpenUpload({ mediaType: "season", showTmdbId: String(showTmdbId), tmdbId: String(showTmdbId), seasonNumber: String(sn), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} />
+                <StudioTvPlaceholderCard label={t("seasonTitle", { n: String(sn).padStart(2, "0") })} imagePath={season.poster_path} placeholderSource={season.poster_path ? "THEMOVIEDB.ORG" : undefined} chipLabel={tp("season")} chipColor="info" subtitle={episodeCountSubtitle} noChrome onCardClick={() => navigateToSeason(sn)} onUpload={() => callbacks.onOpenUpload({ mediaType: "season", showTmdbId: String(showTmdbId), tmdbId: String(showTmdbId), seasonNumber: String(sn), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} activeLanguage={callbacks.activeLanguage || undefined} />
               </Box>
             );
           })}
@@ -993,7 +1001,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
               ))
             : (
                 <Box>
-                  <StudioTvPlaceholderCard label={tmdbData?.name ?? "Show"} imagePath={tmdbData?.backdrop_path} placeholderSource={tmdbData?.backdrop_path ? "THEMOVIEDB.ORG" : undefined} aspectRatio="16 / 9" noChrome chipLabel={tp("backdrop")} chipColor="warning" subtitle={showYear} onUpload={() => callbacks.onOpenUpload({ mediaType: "backdrop", showTmdbId: String(showTmdbId), tmdbId: String(showTmdbId), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} />
+                  <StudioTvPlaceholderCard label={tmdbData?.name ?? "Show"} imagePath={tmdbData?.backdrop_path} placeholderSource={tmdbData?.backdrop_path ? "THEMOVIEDB.ORG" : undefined} aspectRatio="16 / 9" noChrome chipLabel={tp("backdrop")} chipColor="warning" subtitle={showYear} onUpload={() => callbacks.onOpenUpload({ mediaType: "backdrop", showTmdbId: String(showTmdbId), tmdbId: String(showTmdbId), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} activeLanguage={callbacks.activeLanguage || undefined} />
                 </Box>
               )
           }
@@ -1009,7 +1017,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
             }
             return (
               <Box key={`season-back-${sn}`}>
-                <StudioTvPlaceholderCard label={t("seasonTitle", { n: String(sn).padStart(2, "0") })} imagePath={null} aspectRatio="16 / 9" noChrome chipLabel={tp("backdrop")} chipColor="warning" onCardClick={() => navigateToSeason(sn)} onUpload={() => callbacks.onOpenUpload({ mediaType: "backdrop", showTmdbId: String(showTmdbId), tmdbId: String(showTmdbId), seasonNumber: String(sn), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} />
+                <StudioTvPlaceholderCard label={t("seasonTitle", { n: String(sn).padStart(2, "0") })} imagePath={null} aspectRatio="16 / 9" noChrome chipLabel={tp("backdrop")} chipColor="warning" onCardClick={() => navigateToSeason(sn)} onUpload={() => callbacks.onOpenUpload({ mediaType: "backdrop", showTmdbId: String(showTmdbId), tmdbId: String(showTmdbId), seasonNumber: String(sn), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} activeLanguage={callbacks.activeLanguage || undefined} />
               </Box>
             );
           })}
@@ -1028,7 +1036,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
               ))
             : (
                 <Box>
-                  <StudioTvPlaceholderCard label={tmdbData?.name ?? "Show"} imagePath={tvSquareUrl} placeholderSource={tvSquareUrl ? "FANART.TV" : undefined} aspectRatio="1 / 1" noChrome isTransparent chipLabel={tp("square")} chipColor="warning" subtitle={showYear} onUpload={() => callbacks.onOpenUpload({ mediaType: "show", kind: "square", tmdbId: String(showTmdbId), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} />
+                  <StudioTvPlaceholderCard label={tmdbData?.name ?? "Show"} imagePath={tvSquareUrl} placeholderSource={tvSquareUrl ? "FANART.TV" : undefined} aspectRatio="1 / 1" noChrome isTransparent chipLabel={tp("square")} chipColor="warning" subtitle={showYear} onUpload={() => callbacks.onOpenUpload({ mediaType: "show", kind: "square", tmdbId: String(showTmdbId), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} activeLanguage={callbacks.activeLanguage || undefined} />
                 </Box>
               )
           }
@@ -1047,7 +1055,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
               ))
             : (
                 <Box>
-                  <StudioTvPlaceholderCard label={tmdbData?.name ?? "Show"} imagePath={tvLogoUrl} placeholderSource={tvLogoUrl ? "THEMOVIEDB.ORG" : undefined} aspectRatio="16 / 9" noChrome isTransparent chipLabel={tp("logo")} chipColor="warning" subtitle={showYear} onUpload={() => callbacks.onOpenUpload({ mediaType: "show", kind: "logo", tmdbId: String(showTmdbId), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} />
+                  <StudioTvPlaceholderCard label={tmdbData?.name ?? "Show"} imagePath={tvLogoUrl} placeholderSource={tvLogoUrl ? "THEMOVIEDB.ORG" : undefined} aspectRatio="16 / 9" noChrome isTransparent chipLabel={tp("logo")} chipColor="warning" subtitle={showYear} onUpload={() => callbacks.onOpenUpload({ mediaType: "show", kind: "logo", tmdbId: String(showTmdbId), title: tmdbData?.name ?? "", themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} activeLanguage={callbacks.activeLanguage || undefined} />
                 </Box>
               )
           }
