@@ -30,18 +30,20 @@ import SearchIcon from "@mui/icons-material/Search";
 import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ReplayIcon from "@mui/icons-material/Replay";
-import StarIcon from "@mui/icons-material/Star";
-import StarBorderIcon from "@mui/icons-material/StarBorder";
 import UploadIcon from "@mui/icons-material/Upload";
 
 import AltArtworkDrawer from "@/components/AltArtworkDrawer";
 import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
 import CardTitleStrip from "@/components/CardTitleStrip";
 import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
+import CreatorSubscriptionToolbarAction from "./CreatorSubscriptionToolbarAction";
+import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
+import { useCreatorSubscriptions } from "./useCreatorSubscriptions";
+import { useArtworkDrawer } from "./useArtworkDrawer";
 import type { PosterEntry } from "@/lib/types";
-import { getSubscriptions, getCreatorSubscriptions, subscribeCreator, unsubscribeCreator } from "@/lib/subscriptions";
+import { getSubscriptions } from "@/lib/subscriptions";
 import { applyToPlexPoster } from "@/lib/plex";
-import { getArtworkSettings, getTrackedArtwork, fetchPosterFromNode, untrackArtwork } from "@/lib/artwork-tracking";
+import { getTrackedArtwork, fetchPosterFromNode, untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
 import { thumbUrl, artUrl, logoUrl, squareUrl } from "@/lib/media-server";
 import type { MediaItem } from "@/lib/media-server";
@@ -269,14 +271,12 @@ export default function CollectionMediaDetail({
   const tmdbResolvedForRef = useRef<string | null>(null);
 
   // ── Drawer ─────────────────────────────────────────────────────────────────
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerKind, setDrawerKind] = useState<"collection" | "movie">("collection");
   const [drawerMovieId, setDrawerMovieId] = useState<string | null>(null);
   const [drawerIsBackdrop, setDrawerIsBackdrop] = useState(false);
   const [drawerIsLogo, setDrawerIsLogo] = useState(false);
   const [drawerIsSquare, setDrawerIsSquare] = useState(false);
-  const [drawerPosters, setDrawerPosters] = useState<PosterEntry[]>([]);
-  const [drawerLoading, setDrawerLoading] = useState(false);
+  const { drawerOpen, drawerPosters, drawerLoading, closeDrawer, openDrawer: openArtworkDrawer } = useArtworkDrawer();
 
   // ── Apply ──────────────────────────────────────────────────────────────────
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -285,7 +285,7 @@ export default function CollectionMediaDetail({
   // Tracks keys where OP artwork was applied this session — separate from appliedPreviews
   // which is also updated on reset (for cache-busting), so can't be used for badge logic.
   const [opAppliedKeys, setOpAppliedKeys] = useState<Set<string>>(new Set());
-  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
+  const autoUpdateEnabled = useArtworkAutoUpdate(conn.nodeUrl, conn.adminToken);
 
   // ── Reset ──────────────────────────────────────────────────────────────────
   const [resettingIds, setResettingIds] = useState<Set<string>>(new Set());
@@ -312,9 +312,7 @@ export default function CollectionMediaDetail({
   const [openCardKey, setOpenCardKey] = useState<string | null>(null);
 
   // ── Creator subscriptions ──────────────────────────────────────────────────
-  const [creatorSubs, setCreatorSubs] = useState<Set<string>>(
-    () => new Set(getCreatorSubscriptions().map((s) => s.creatorId)),
-  );
+  const { creatorSubs, toggleCreatorSubscription } = useCreatorSubscriptions();
 
   // ── Snackbar ──────────────────────────────────────────────────────────────
   const [autoMatchMenuAnchor, setAutoMatchMenuAnchor] = useState<HTMLElement | null>(null);
@@ -334,11 +332,6 @@ export default function CollectionMediaDetail({
   const [applyingAll, setApplyingAll] = useState(false);
 
   // ── Effects ────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    getArtworkSettings(conn.nodeUrl, conn.adminToken)
-      .then((s) => setAutoUpdateEnabled(s.auto_update_artwork));
-  }, [conn.nodeUrl, conn.adminToken]);
 
   useEffect(() => {
     getTrackedArtwork(conn.nodeUrl, conn.adminToken).then((all) => {
@@ -520,8 +513,6 @@ export default function CollectionMediaDetail({
     setDrawerIsBackdrop(isBackdrop);
     setDrawerIsLogo(isLogo);
     setDrawerIsSquare(isSquare);
-    setDrawerPosters([]);
-    setDrawerOpen(true);
 
     const baseType = isBackdrop ? "backdrop" : (kind === "collection" ? "collection" : "movie");
     const kindParam = isLogo ? "&kind=logo" : isSquare ? "&kind=square" : "";
@@ -540,15 +531,7 @@ export default function CollectionMediaDetail({
       if (movieTmdbId) searchUrl = `/api/search?tmdb_id=${movieTmdbId}&type=${baseType}${kindParam}&limit=200`;
     }
 
-    if (!searchUrl) return;
-    setDrawerLoading(true);
-    fetch(searchUrl)
-      .then((r) => r.json())
-      .then((d: { results: PosterEntry[] }) =>
-        setDrawerPosters(d.results.filter((p) => typeof p.assets?.preview?.url === "string" && p.assets.preview.url.length > 0)),
-      )
-      .catch(() => setDrawerPosters([]))
-      .finally(() => setDrawerLoading(false));
+    openArtworkDrawer(searchUrl);
   }
 
   /** Applies the chosen poster to Plex via the node, updates local tracked/applied state, and triggers the same-creator match check. */
@@ -866,13 +849,11 @@ export default function CollectionMediaDetail({
   function handleCollectionCreatorSubscribe() {
     const cid = trackedItem?.creator_id;
     if (!cid) return;
-    if (isCollCreatorSubscribed) {
-      unsubscribeCreator(cid);
-      setCreatorSubs((prev) => { const s = new Set(prev); s.delete(cid); return s; });
-    } else {
-      subscribeCreator({ creatorId: cid, creatorDisplayName: trackedItem?.creator_display_name ?? cid, nodeBase: trackedItem?.node_base ?? "" });
-      setCreatorSubs((prev) => new Set([...prev, cid]));
-    }
+    toggleCreatorSubscription({
+      creatorId: cid,
+      creatorDisplayName: trackedItem?.creator_display_name ?? cid,
+      nodeBase: trackedItem?.node_base ?? "",
+    });
   }
 
   /**
@@ -1110,14 +1091,12 @@ export default function CollectionMediaDetail({
               <MediaCardOverlay title={item.title}>
                 <Box sx={{ gridColumn: "span 4", display: "flex", gap: 0.75 }}>
                   <Box sx={{ flex: 1 }}>
-                    <ToolbarButton
-                      icon={isCollCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                    <CreatorSubscriptionToolbarAction
+                      creatorId={trackedItem?.creator_id}
+                      isSubscribed={isCollCreatorSubscribed}
                       disabled={!trackedItem}
-                      active={isCollCreatorSubscribed}
-                      tooltip={isCollCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
-                      menuItems={trackedItem?.creator_id ? [
-                        { label: isCollCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"), onClick: () => { handleCollectionCreatorSubscribe(); setTimeout(() => setOpenCardKey(null), 500); } },
-                      ] : undefined}
+                      onToggle={handleCollectionCreatorSubscribe}
+                      onAfterToggle={() => setTimeout(() => setOpenCardKey(null), 500)}
                     />
                   </Box>
                   <Box sx={{ flex: 1 }}>
@@ -1169,13 +1148,11 @@ export default function CollectionMediaDetail({
                 const isResetting = resettingIds.has(movie.id);
                 const handleCreatorSubscribe = () => {
                   if (!tracked?.creator_id) return;
-                  if (isCreatorSubscribed) {
-                    unsubscribeCreator(tracked.creator_id);
-                    setCreatorSubs((prev) => { const s = new Set(prev); s.delete(tracked.creator_id!); return s; });
-                  } else {
-                    subscribeCreator({ creatorId: tracked.creator_id, creatorDisplayName: tracked.creator_display_name ?? tracked.creator_id, nodeBase: tracked.node_base ?? "" });
-                    setCreatorSubs((prev) => new Set([...prev, tracked.creator_id!]));
-                  }
+                  toggleCreatorSubscription({
+                    creatorId: tracked.creator_id,
+                    creatorDisplayName: tracked.creator_display_name ?? tracked.creator_id,
+                    nodeBase: tracked.node_base ?? "",
+                  });
                 };
                 return (
                   <Box key={movie.id}>
@@ -1214,14 +1191,12 @@ export default function CollectionMediaDetail({
                             onClick={(e) => { e.stopPropagation(); onMarkRetry(movie.id); setOpenCardKey(null); }}
                           />
                         ) : (
-                          <ToolbarButton
-                            icon={isCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                          <CreatorSubscriptionToolbarAction
+                            creatorId={tracked?.creator_id}
+                            isSubscribed={isCreatorSubscribed}
                             disabled={!tracked}
-                            active={isCreatorSubscribed}
-                            tooltip={isCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
-                            menuItems={tracked?.creator_id ? [
-                              { label: isCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"), onClick: () => { handleCreatorSubscribe(); setTimeout(() => setOpenCardKey(null), 500); } },
-                            ] : undefined}
+                            onToggle={handleCreatorSubscribe}
+                            onAfterToggle={() => setTimeout(() => setOpenCardKey(null), 500)}
                           />
                         )}
                         <ToolbarButton
@@ -1278,20 +1253,20 @@ export default function CollectionMediaDetail({
                   {(() => {
                     const isBgSubbed = trackedBackdrop?.creator_id ? creatorSubs.has(trackedBackdrop.creator_id) : false;
                     return (
-                      <ToolbarButton
-                        icon={isBgSubbed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                      <CreatorSubscriptionToolbarAction
+                        creatorId={trackedBackdrop?.creator_id}
+                        isSubscribed={isBgSubbed}
                         disabled={!trackedBackdrop}
-                        active={isBgSubbed}
-                        tooltip={isBgSubbed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
-                        menuItems={trackedBackdrop?.creator_id ? [{
-                          label: isBgSubbed ? t("menuUnsubscribe") : t("menuSubscribe"),
-                          onClick: () => {
-                            const cid = trackedBackdrop.creator_id!;
-                            if (isBgSubbed) { unsubscribeCreator(cid); setCreatorSubs((p) => { const s = new Set(p); s.delete(cid); return s; }); }
-                            else { subscribeCreator({ creatorId: cid, creatorDisplayName: trackedBackdrop.creator_display_name ?? cid, nodeBase: trackedBackdrop.node_base ?? "" }); setCreatorSubs((p) => new Set([...p, cid])); }
-                            setOpenCardKey(null);
-                          },
-                        }] : undefined}
+                        onToggle={() => {
+                          const cid = trackedBackdrop?.creator_id;
+                          if (!cid) return;
+                          toggleCreatorSubscription({
+                            creatorId: cid,
+                            creatorDisplayName: trackedBackdrop?.creator_display_name ?? cid,
+                            nodeBase: trackedBackdrop?.node_base ?? "",
+                          });
+                        }}
+                        onAfterToggle={() => setOpenCardKey(null)}
                       />
                     );
                   })()}
@@ -1352,20 +1327,20 @@ export default function CollectionMediaDetail({
                           {(() => {
                             const isBgSubbed = trackedBg?.creator_id ? creatorSubs.has(trackedBg.creator_id) : false;
                             return (
-                              <ToolbarButton
-                                icon={isBgSubbed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                              <CreatorSubscriptionToolbarAction
+                                creatorId={trackedBg?.creator_id}
+                                isSubscribed={isBgSubbed}
                                 disabled={!trackedBg}
-                                active={isBgSubbed}
-                                tooltip={isBgSubbed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
-                                menuItems={trackedBg?.creator_id ? [{
-                                  label: isBgSubbed ? t("menuUnsubscribe") : t("menuSubscribe"),
-                                  onClick: () => {
-                                    const cid = trackedBg.creator_id!;
-                                    if (isBgSubbed) { unsubscribeCreator(cid); setCreatorSubs((p) => { const s = new Set(p); s.delete(cid); return s; }); }
-                                    else { subscribeCreator({ creatorId: cid, creatorDisplayName: trackedBg.creator_display_name ?? cid, nodeBase: trackedBg.node_base ?? "" }); setCreatorSubs((p) => new Set([...p, cid])); }
-                                    setOpenCardKey(null);
-                                  },
-                                }] : undefined}
+                                onToggle={() => {
+                                  const cid = trackedBg?.creator_id;
+                                  if (!cid) return;
+                                  toggleCreatorSubscription({
+                                    creatorId: cid,
+                                    creatorDisplayName: trackedBg?.creator_display_name ?? cid,
+                                    nodeBase: trackedBg?.node_base ?? "",
+                                  });
+                                }}
+                                onAfterToggle={() => setOpenCardKey(null)}
                               />
                             );
                           })()}
@@ -1602,7 +1577,7 @@ export default function CollectionMediaDetail({
       {/* ── Drawer ── */}
       <AltArtworkDrawer
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={closeDrawer}
         title={drawerTitle}
         subtitle={drawerSubtitle}
         posters={visibleDrawerPosters}

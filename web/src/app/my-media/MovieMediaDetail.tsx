@@ -10,18 +10,20 @@ import Typography from "@mui/material/Typography";
 
 import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
 import ReplayIcon from "@mui/icons-material/Replay";
-import StarIcon from "@mui/icons-material/Star";
-import StarBorderIcon from "@mui/icons-material/StarBorder";
 import UploadIcon from "@mui/icons-material/Upload";
 
 import AltArtworkDrawer from "@/components/AltArtworkDrawer";
 import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
 import CardTitleStrip from "@/components/CardTitleStrip";
 import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
+import CreatorSubscriptionToolbarAction from "./CreatorSubscriptionToolbarAction";
+import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
+import { useCreatorSubscriptions } from "./useCreatorSubscriptions";
+import { useArtworkDrawer } from "./useArtworkDrawer";
 import type { PosterEntry } from "@/lib/types";
-import { getSubscriptions, getCreatorSubscriptions, subscribeCreator, unsubscribeCreator } from "@/lib/subscriptions";
+import { getSubscriptions } from "@/lib/subscriptions";
 import { applyToPlexPoster } from "@/lib/plex";
-import { getArtworkSettings, getTrackedArtwork, fetchPosterFromNode, untrackArtwork } from "@/lib/artwork-tracking";
+import { getTrackedArtwork, fetchPosterFromNode, untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
 import { thumbUrl, artUrl, logoUrl, squareUrl } from "@/lib/media-server";
 import type { MediaItem } from "@/lib/media-server";
@@ -39,17 +41,15 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
   const t = useTranslations("myMedia");
 
   // ── Drawer ────────────────────────────────────────────────────────────────
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"poster" | "backdrop" | "square" | "logo">("poster");
-  const [drawerPosters, setDrawerPosters] = useState<PosterEntry[]>([]);
-  const [drawerLoading, setDrawerLoading] = useState(false);
+  const { drawerOpen, drawerPosters, drawerLoading, closeDrawer, openDrawer: openArtworkDrawer } = useArtworkDrawer();
 
   // ── Apply ─────────────────────────────────────────────────────────────────
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
   const [appliedPreviews, setAppliedPreviews] = useState<Map<string, string>>(new Map());
   const [opAppliedKeys, setOpAppliedKeys] = useState<Set<string>>(new Set());
-  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
+  const autoUpdateEnabled = useArtworkAutoUpdate(conn.nodeUrl, conn.adminToken);
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   const [resettingIds, setResettingIds] = useState<Set<string>>(new Set());
@@ -70,9 +70,7 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
   const [logoSelected, setLogoSelected] = useState(false);
 
   // ── Subscriptions ─────────────────────────────────────────────────────────
-  const [creatorSubs, setCreatorSubs] = useState<Set<string>>(
-    () => new Set(getCreatorSubscriptions().map((s) => s.creatorId)),
-  );
+  const { creatorSubs, toggleCreatorSubscription } = useCreatorSubscriptions();
 
   // ── Snackbar ──────────────────────────────────────────────────────────────
   const [snack, setSnack] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
@@ -85,11 +83,6 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
   const [tmdbData, setTmdbData] = useState<{ poster_path?: string; backdrop_path?: string } | null>(null);
 
   // ── Effects ───────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    getArtworkSettings(conn.nodeUrl, conn.adminToken)
-      .then((s) => setAutoUpdateEnabled(s.auto_update_artwork));
-  }, [conn.nodeUrl, conn.adminToken]);
 
   useEffect(() => {
     getTrackedArtwork(conn.nodeUrl, conn.adminToken).then((all) => {
@@ -155,10 +148,6 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
 
   function openDrawer(mode: "poster" | "backdrop" | "square" | "logo") {
     setDrawerMode(mode);
-    setDrawerPosters([]);
-    setDrawerOpen(true);
-    if (!item.tmdb_id) return;
-    setDrawerLoading(true);
     const params = mode === "backdrop"
       ? `tmdb_id=${item.tmdb_id}&type=backdrop`
       : mode === "square"
@@ -166,17 +155,7 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
         : mode === "logo"
           ? `tmdb_id=${item.tmdb_id}&type=movie&kind=logo`
           : `tmdb_id=${item.tmdb_id}&type=movie`;
-    fetch(`/api/search?${params}&limit=200`)
-      .then((r) => r.json())
-      .then((d: { results: PosterEntry[] }) =>
-        setDrawerPosters(
-          d.results.filter(
-            (p) => typeof p.assets?.preview?.url === "string" && p.assets.preview.url.length > 0,
-          ),
-        ),
-      )
-      .catch(() => setDrawerPosters([]))
-      .finally(() => setDrawerLoading(false));
+    openArtworkDrawer(item.tmdb_id ? `/api/search?${params}&limit=200` : null);
   }
 
   async function handleApply(poster: PosterEntry) {
@@ -341,25 +320,21 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
   function handlePosterCreatorSubscribe() {
     const cid = trackedItem?.creator_id;
     if (!cid) return;
-    if (isPosterCreatorSubscribed) {
-      unsubscribeCreator(cid);
-      setCreatorSubs((prev) => { const s = new Set(prev); s.delete(cid); return s; });
-    } else {
-      subscribeCreator({ creatorId: cid, creatorDisplayName: trackedItem?.creator_display_name ?? cid, nodeBase: trackedItem?.node_base ?? "" });
-      setCreatorSubs((prev) => new Set([...prev, cid]));
-    }
+    toggleCreatorSubscription({
+      creatorId: cid,
+      creatorDisplayName: trackedItem?.creator_display_name ?? cid,
+      nodeBase: trackedItem?.node_base ?? "",
+    });
   }
 
   function handleBackdropCreatorSubscribe() {
     const cid = trackedBackdrop?.creator_id;
     if (!cid) return;
-    if (isBackdropCreatorSubscribed) {
-      unsubscribeCreator(cid);
-      setCreatorSubs((prev) => { const s = new Set(prev); s.delete(cid); return s; });
-    } else {
-      subscribeCreator({ creatorId: cid, creatorDisplayName: trackedBackdrop?.creator_display_name ?? cid, nodeBase: trackedBackdrop?.node_base ?? "" });
-      setCreatorSubs((prev) => new Set([...prev, cid]));
-    }
+    toggleCreatorSubscription({
+      creatorId: cid,
+      creatorDisplayName: trackedBackdrop?.creator_display_name ?? cid,
+      nodeBase: trackedBackdrop?.node_base ?? "",
+    });
   }
 
   // ── Image sources ─────────────────────────────────────────────────────────
@@ -414,17 +389,12 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
             overlayChip={<CardChip label="POSTER" color="warning" />}
             overlay={
               <MediaCardOverlay title={item.title} subtitle={item.year ? String(item.year) : ""}>
-                <ToolbarButton
-                  icon={isPosterCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                <CreatorSubscriptionToolbarAction
+                  creatorId={trackedItem?.creator_id}
+                  isSubscribed={isPosterCreatorSubscribed}
                   disabled={!trackedItem}
-                  active={isPosterCreatorSubscribed}
-                  tooltip={isPosterCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
-                  menuItems={trackedItem?.creator_id ? [
-                    {
-                      label: isPosterCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"),
-                      onClick: () => { handlePosterCreatorSubscribe(); setTimeout(() => setPosterSelected(false), 500); },
-                    },
-                  ] : undefined}
+                  onToggle={handlePosterCreatorSubscribe}
+                  onAfterToggle={() => setTimeout(() => setPosterSelected(false), 500)}
                 />
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
@@ -471,12 +441,12 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
             overlayChip={<CardChip label="BACKDROP" color="warning" />}
             overlay={
               <MediaCardOverlay>
-                <ToolbarButton
-                  icon={isBackdropCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                <CreatorSubscriptionToolbarAction
+                  creatorId={trackedBackdrop?.creator_id}
+                  isSubscribed={isBackdropCreatorSubscribed}
                   disabled={!trackedBackdrop}
-                  active={isBackdropCreatorSubscribed}
-                  tooltip={isBackdropCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
-                  menuItems={trackedBackdrop?.creator_id ? [{ label: isBackdropCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"), onClick: () => { handleBackdropCreatorSubscribe(); setBackdropSelected(false); } }] : undefined}
+                  onToggle={handleBackdropCreatorSubscribe}
+                  onAfterToggle={() => setBackdropSelected(false)}
                 />
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
@@ -585,7 +555,7 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
       {/* ── Drawer ───────────────────────────────────────────────────────── */}
       <AltArtworkDrawer
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={closeDrawer}
         title={item.title}
         subtitle={drawerMode === "backdrop" ? t("backdrops").toUpperCase() : drawerMode === "square" ? t("squares").toUpperCase() : drawerMode === "logo" ? t("logos").toUpperCase() : t("posters").toUpperCase()}
         posters={visibleDrawerPosters}
