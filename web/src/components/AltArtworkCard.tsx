@@ -89,7 +89,7 @@ export default function AltArtworkCard({
             disabled={isApplying || isApplied}
             sx={{ fontSize: "0.65rem", py: 0.25, minWidth: 0 }}
           >
-            {isApplied ? "Applied ✓" : isApplying ? <CircularProgress size={12} /> : label}
+            {isApplied ? t("appliedCheck") : isApplying ? <CircularProgress size={12} /> : label}
           </Button>
         </Stack>
       </Box>

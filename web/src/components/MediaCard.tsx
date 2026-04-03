@@ -22,7 +22,7 @@ import { useTranslations } from "next-intl";
 // flexbox variance. Every instance renders identically regardless
 // of DOM position or DPR.
 
-type ChipColor = "primary" | "secondary" | "error" | "warning" | "info" | "success" | "default";
+type ChipColor = "primary" | "secondary" | "error" | "warning" | "info" | "success" | "default" | "light";
 
 const CHIP_BG: Record<ChipColor, string> = {
   primary:   "#1e3a8a",
@@ -32,6 +32,7 @@ const CHIP_BG: Record<ChipColor, string> = {
   info:      "#1e3a8a",
   success:   "#1e3a8a",
   default:   "#1e3a8a",
+  light:     "#dddddd",
 };
 
 const CHIP_TEXT: Record<ChipColor, string> = {
@@ -42,6 +43,7 @@ const CHIP_TEXT: Record<ChipColor, string> = {
   info:      "#ffffff",
   success:   "#ffffff",
   default:   "#ffffff",
+  light:     "#000000",
 };
 
 export interface CardChipProps {

@@ -111,7 +111,8 @@ async def _upsert_item(session, *, id: str, title: str, year: int | None,
                        type: str, item_index: int | None, tmdb_id: int | None,
                        leaf_count: int | None, child_count: int | None,
                        parent_id: str | None, collection_ids: str | None = None,
-                       server_id: str = "default") -> None:
+                       server_id: str = "default",
+                       library_title: str | None = None) -> None:
     now = _now()
     existing = await session.get(PlexLibraryItem, id)
     if existing:
@@ -126,13 +127,16 @@ async def _upsert_item(session, *, id: str, title: str, year: int | None,
         existing.parent_id = parent_id
         if collection_ids is not None:
             existing.collection_ids = collection_ids
+        if library_title is not None:
+            existing.library_title = library_title
         existing.synced_at = now
     else:
         session.add(PlexLibraryItem(
             id=id, server_id=server_id, title=title, year=year, type=type,
             item_index=item_index, tmdb_id=tmdb_id, leaf_count=leaf_count,
             child_count=child_count, parent_id=parent_id,
-            collection_ids=collection_ids or "[]", synced_at=now,
+            collection_ids=collection_ids or "[]",
+            library_title=library_title, synced_at=now,
         ))
 
 
@@ -176,13 +180,15 @@ async def _sync_one_server(app: FastAPI, server: dict,
 
             # ── Phase 1: Movies ──────────────────────────────────────────────
             await _progress("movies", 0, 0, "Fetching movies…")
-            raw_movies: list[dict] = []
-            raw_collections: list[dict] = []
+            # list of (raw_item_dict, section_title) pairs
+            raw_movies: list[tuple[dict, str]] = []
+            raw_collections: list[tuple[dict, str]] = []
 
             for sec in sections:
                 if sec.get("title") not in movie_libraries or sec.get("type") != "movie":
                     continue
                 sec_key = sec.get("key", "")
+                sec_title: str = sec.get("title", "")
                 try:
                     r = await client.get(
                         f"{base_url}/library/sections/{sec_key}/all",
@@ -190,7 +196,10 @@ async def _sync_one_server(app: FastAPI, server: dict,
                         headers=_PLEX_HEADERS, timeout=60.0,
                     )
                     r.raise_for_status()
-                    raw_movies.extend(r.json().get("MediaContainer", {}).get("Metadata", []))
+                    raw_movies.extend(
+                        (item, sec_title)
+                        for item in r.json().get("MediaContainer", {}).get("Metadata", [])
+                    )
                 except Exception as e:
                     logger.warning("plex_sync[%s]: failed to fetch movies section %s: %s",
                                    server_id, sec_key, e)
@@ -202,26 +211,31 @@ async def _sync_one_server(app: FastAPI, server: dict,
                         headers=_PLEX_HEADERS, timeout=60.0,
                     )
                     r.raise_for_status()
-                    raw_collections.extend(r.json().get("MediaContainer", {}).get("Metadata", []))
+                    raw_collections.extend(
+                        (item, sec_title)
+                        for item in r.json().get("MediaContainer", {}).get("Metadata", [])
+                    )
                 except Exception as e:
                     logger.warning("plex_sync[%s]: failed to fetch collections section %s: %s",
                                    server_id, sec_key, e)
 
             async with app.state.Session() as session:
-                for raw in raw_movies:
+                for raw, sec_title in raw_movies:
                     d = _item_from_plex(raw, type_override="movie")
                     if d["id"]:
-                        await _upsert_item(session, **d, collection_ids="[]", server_id=server_id)
+                        await _upsert_item(session, **d, collection_ids="[]",
+                                           server_id=server_id, library_title=sec_title)
                 await session.commit()
 
             # ── Phase 2: Shows ───────────────────────────────────────────────
             await _progress("shows", 0, 0, "Fetching TV shows…")
-            raw_shows: list[dict] = []
+            raw_shows: list[tuple[dict, str]] = []
 
             for sec in sections:
                 if sec.get("title") not in tv_libraries or sec.get("type") != "show":
                     continue
                 sec_key = sec.get("key", "")
+                sec_title = sec.get("title", "")
                 try:
                     r = await client.get(
                         f"{base_url}/library/sections/{sec_key}/all",
@@ -229,26 +243,31 @@ async def _sync_one_server(app: FastAPI, server: dict,
                         headers=_PLEX_HEADERS, timeout=60.0,
                     )
                     r.raise_for_status()
-                    raw_shows.extend(r.json().get("MediaContainer", {}).get("Metadata", []))
+                    raw_shows.extend(
+                        (item, sec_title)
+                        for item in r.json().get("MediaContainer", {}).get("Metadata", [])
+                    )
                 except Exception as e:
                     logger.warning("plex_sync[%s]: failed to fetch shows section %s: %s",
                                    server_id, sec_key, e)
 
             async with app.state.Session() as session:
-                for raw in raw_shows:
+                for raw, sec_title in raw_shows:
                     d = _item_from_plex(raw, type_override="show")
                     if d["id"]:
-                        await _upsert_item(session, **d, server_id=server_id)
+                        await _upsert_item(session, **d, server_id=server_id,
+                                           library_title=sec_title)
                 await session.commit()
 
             # ── Phase 3: Collections ─────────────────────────────────────────
             await _progress("collections", 0, 0, "Fetching collections…")
 
             async with app.state.Session() as session:
-                for raw in raw_collections:
+                for raw, sec_title in raw_collections:
                     d = _item_from_plex(raw, type_override="collection")
                     if d["id"]:
-                        await _upsert_item(session, **d, server_id=server_id)
+                        await _upsert_item(session, **d, server_id=server_id,
+                                           library_title=sec_title)
                 await session.commit()
 
             # ── Phase 4: Collection children (builds movie→collection map) ───
@@ -258,7 +277,7 @@ async def _sync_one_server(app: FastAPI, server: dict,
 
             movie_to_colls: dict[str, set[str]] = {}
 
-            for i, coll_raw in enumerate(raw_collections):
+            for i, (coll_raw, _sec_title) in enumerate(raw_collections):
                 coll_id = str(coll_raw.get("ratingKey", ""))
                 coll_title = coll_raw.get("title", "")
                 if not coll_id:
@@ -287,7 +306,7 @@ async def _sync_one_server(app: FastAPI, server: dict,
             total_shows = len(raw_shows)
             await _progress("seasons", 0, total_shows, "Fetching seasons…")
 
-            for i, show_raw in enumerate(raw_shows):
+            for i, (show_raw, _sec_title) in enumerate(raw_shows):
                 show_id = str(show_raw.get("ratingKey", ""))
                 show_title = show_raw.get("title", "")
                 if not show_id:

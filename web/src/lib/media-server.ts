@@ -10,6 +10,7 @@ export type MediaItem = {
   leaf_count: number | null;
   child_count: number | null; // season count for shows; null for movies/collections
   collection_ids?: string[]; // ratingKeys of collections this movie belongs to (movies only)
+  library_title?: string | null; // Plex section title (e.g. "Movies", "4K Movies")
 };
 
 export type MediaLibrary = {

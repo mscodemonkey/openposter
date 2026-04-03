@@ -695,7 +695,10 @@
     "othersLabelLogosCollection": "Other logos for this collection",
     "othersLabelSquareCollection": "Other squares for this collection",
     "othersLabelBackdropsCollection": "Other backdrops for this collection",
-    "othersLabelPostersCollection": "Other posters for this collection"
+    "othersLabelPostersCollection": "Other posters for this collection",
+    "cardCollectionMovies": "{count, plural, one {# Movie} other {# Movies}}",
+    "cardCollectionShows": "{count, plural, one {# TV Show} other {# TV Shows}}",
+    "cardCollectionMixed": "{movieCount, plural, one {# Movie} other {# Movies}}, {showCount, plural, one {# TV Show} other {# TV Shows}}"
   },
   "plex": {
     "sectionTitle": "Plex Media Server",

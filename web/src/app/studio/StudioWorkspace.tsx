@@ -70,6 +70,7 @@ import { adminListThemes, adminCreateTheme, adminDeleteTheme, adminSetPosterThem
 import { fetchTmdbCollection, fetchTmdbTvShow, fetchTmdbTvSeason, fetchTmdbSearchCollection, fetchTmdbSearchTv, fetchTmdbMovie, fetchTmdbSearchMovie, tmdbImageUrl, tmdbStillUrl, type TmdbCollection, type TmdbMovie, type TmdbTvShow, type TmdbEpisode, type TmdbTvSeason, type TmdbSearchResult } from "@/lib/tmdb";
 import { fetchMovieLogo, fetchMovieSquare, fetchTvLogo, fetchTvSquare } from "@/lib/placeholder-images";
 import type { CreatorTheme, PosterEntry } from "@/lib/types";
+import CardTitleStrip from "@/components/CardTitleStrip";
 import { CardChip } from "@/components/MediaCard";
 import PosterCard from "@/components/PosterCard";
 import { CollectionCard, CountBadge, TVShowCard, type CollectionGroup, type TVShowGroup } from "@/components/SectionedPosterView";
@@ -247,8 +248,8 @@ function StudioStatusBar({ published }: { published: boolean }) {
 function LanguageChip({ language }: { language: string }) {
   const flag = getLanguageFlag(language);
   return (
-    <Box sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
-      <CardChip label={flag ? `${flag} ${language.toUpperCase()}` : language.toUpperCase()} color="info" />
+    <Box sx={{ position: "absolute", top: 3, left: 0, pointerEvents: "none", filter: "drop-shadow(0 1px 4px rgba(0,0,0,0.9))" }}>
+      <CardChip label={flag ? `${language.toUpperCase()} ${flag}` : language.toUpperCase()} color="light" />
     </Box>
   );
 }
@@ -396,16 +397,7 @@ function StudioTvPlaceholderCard({ label, imagePath, aspectRatio = "2 / 3", noCh
           {t("noArtwork")}
         </Typography>
       </Box>
-      <Box sx={{ px: 1, pt: 0.75, pb: 0.75, textAlign: "center" }}>
-        <Typography variant="caption" color="text.primary" noWrap sx={{ display: "block", fontWeight: 600 }}>{label}</Typography>
-        {subtitle && (subtitleHref ? (
-          <Link href={subtitleHref} style={{ color: "inherit" }} onClick={(e) => e.stopPropagation()}>
-            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block", textDecoration: "underline", textUnderlineOffset: 2 }}>{subtitle}</Typography>
-          </Link>
-        ) : (
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>{subtitle}</Typography>
-        ))}
-      </Box>
+      <CardTitleStrip title={label} subtitle={subtitle} subtitleHref={subtitleHref} />
     </Card>
   );
 }
@@ -458,16 +450,7 @@ function StudioCollectionPlaceholderCard({ movie, aspectRatio = "2 / 3", uploadM
           No artwork
         </Typography>
       </Box>
-      <Box sx={{ px: 1, pt: 0.75, pb: 0.5, textAlign: "center" }}>
-        <Typography variant="caption" color="text.disabled" noWrap sx={{ display: "block", fontWeight: 600 }}>
-          {movie.title}
-        </Typography>
-        {(subtitle ?? year) && (
-          <Typography variant="caption" color="text.disabled" noWrap sx={{ display: "block" }}>
-            {subtitle ?? year}
-          </Typography>
-        )}
-      </Box>
+      <CardTitleStrip title={movie.title} subtitle={subtitle ?? year ?? undefined} />
     </Box>
   );
 }
@@ -574,16 +557,7 @@ function StudioMoviePlaceholder({ tmdbData, movieTmdbId, cleanTitle, year, aspec
           No artwork
         </Typography>
       </Box>
-      <Box sx={{ px: 1, pt: 0.75, pb: 0.5, textAlign: "center" }}>
-        <Typography variant="caption" color="text.primary" noWrap sx={{ display: "block", fontWeight: 600 }}>
-          {cleanTitle}
-        </Typography>
-        {year && (
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
-            {year}
-          </Typography>
-        )}
-      </Box>
+      <CardTitleStrip title={cleanTitle} subtitle={year ?? undefined} />
     </Box>
   );
 }
@@ -697,21 +671,26 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
             {tmdbEpisodes.length > 0
               ? tmdbEpisodes.map((ep: TmdbEpisode) => {
                   const existing = uploadedEpisodePosters.get(ep.episode_number);
-                  const epLabel = `E${String(ep.episode_number).padStart(2, "0")} · ${ep.name}`;
+                  const epLabel = `Episode ${String(ep.episode_number).padStart(2, "0")}`;
+                  const epSubtitle = ep.name && !/^episode\s+\d+$/i.test(ep.name.trim()) ? ep.name : undefined;
                   return (
                     <Box key={ep.episode_number}>
                       {existing
-                        ? <StudioPosterCard poster={existing} selected={selected.has(existing.poster_id)} onToggleSelect={() => toggleSelect(existing.poster_id)} callbacks={callbacks} />
-                        : <StudioTvPlaceholderCard label={epLabel} imagePath={ep.still_path} aspectRatio="16 / 9" chipLabel={tp("episode")} chipColor="success" onUpload={() => callbacks.onOpenUpload({ mediaType: "episode", showTmdbId: String(showTmdbId), tmdbId: String(showTmdbId), seasonNumber: String(seasonNumber), episodeNumber: String(ep.episode_number), title: ep.name, themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} activeLanguage={callbacks.activeLanguage || undefined} />
+                        ? <StudioPosterCard poster={existing} selected={selected.has(existing.poster_id)} onToggleSelect={() => toggleSelect(existing.poster_id)} callbacks={callbacks} titleOverride={epLabel} subtitle={epSubtitle} />
+                        : <StudioTvPlaceholderCard label={epLabel} subtitle={epSubtitle} imagePath={ep.still_path} aspectRatio="16 / 9" noChrome chipLabel={tp("episode")} chipColor="success" onUpload={() => callbacks.onOpenUpload({ mediaType: "episode", showTmdbId: String(showTmdbId), tmdbId: String(showTmdbId), seasonNumber: String(seasonNumber), episodeNumber: String(ep.episode_number), title: ep.name, themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined })} activeLanguage={callbacks.activeLanguage || undefined} />
                       }
                     </Box>
                   );
                 })
-              : epPostersForSeason.sort((a, b) => (a.media.episode_number ?? 0) - (b.media.episode_number ?? 0)).map((p) => (
-                  <Box key={p.poster_id}>
-                    <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} />
-                  </Box>
-                ))
+              : epPostersForSeason.sort((a, b) => (a.media.episode_number ?? 0) - (b.media.episode_number ?? 0)).map((p) => {
+                  const epLabel = p.media.episode_number != null ? `Episode ${String(p.media.episode_number).padStart(2, "0")}` : (p.media.title ?? "Episode");
+                  const epSubtitle = p.media.title && !/^episode\s+\d+$/i.test(p.media.title.trim()) ? p.media.title : undefined;
+                  return (
+                    <Box key={p.poster_id}>
+                      <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={epLabel} subtitle={epSubtitle} />
+                    </Box>
+                  );
+                })
             }
           </Box>
         </Stack>
@@ -2730,6 +2709,30 @@ export default function StudioWorkspace() {
           tvShowCount={sidebarTvShows.length}
           seasonCount={seasonSet.size}
           episodeCount={episodeSet.size}
+          trendingActions={{
+            pinnedCollections,
+            pinnedMovies,
+            pinnedTvShows,
+            onAddCollection: (id, title) => {
+              const next = pinnedCollections.filter((c) => c.tmdbId !== id);
+              next.push({ tmdbId: id, title });
+              savePinnedCollections(next);
+              navigate({ view: "media", mediaKey: `collection:${id}` });
+            },
+            onAddMovie: (id, title) => {
+              const next = pinnedMovies.filter((m) => m.tmdbId !== id);
+              next.push({ tmdbId: id, title });
+              savePinnedMovies(next);
+              navigate({ view: "media", mediaKey: `movie:${id}` });
+            },
+            onAddShow: (id, title) => {
+              const next = pinnedTvShows.filter((s) => s.tmdbId !== id);
+              next.push({ tmdbId: id, title });
+              savePinnedTvShows(next);
+              navigate({ view: "media", mediaKey: `show:${id}` });
+            },
+            onNavigate: (mediaKey) => navigate({ view: "media", mediaKey }),
+          }}
         />
       );
     }

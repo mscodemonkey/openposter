@@ -109,6 +109,7 @@ def _db_item_to_dict(item: PlexLibraryItem) -> dict:
         "leaf_count": item.leaf_count,
         "child_count": item.child_count,
         "collection_ids": json.loads(item.collection_ids or "[]"),
+        "library_title": item.library_title,
     }
 
 

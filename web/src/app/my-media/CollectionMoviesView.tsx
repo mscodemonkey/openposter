@@ -35,6 +35,7 @@ import { POSTER_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
 // Module-level to prevent remount on parent re-render.
 
 function CardRetryMenu({ onRetry }: { onRetry: () => void }) {
+  const t = useTranslations("myMedia");
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   return (
     <>
@@ -48,7 +49,7 @@ function CardRetryMenu({ onRetry }: { onRetry: () => void }) {
       </IconButton>
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
         <MenuItem onClick={() => { setAnchorEl(null); onRetry(); }} dense>
-          Retry download
+          {t("retryDownload")}
         </MenuItem>
       </Menu>
     </>
@@ -106,7 +107,7 @@ function AltMoviePosterCard({ poster, subs, applyingId, appliedIds, onApply }: A
             disabled={isApplying || isApplied}
             sx={{ fontSize: "0.65rem", py: 0.25, minWidth: 0 }}
           >
-            {isApplied ? "Applied ✓" : isApplying ? <CircularProgress size={12} /> : t("usePoster")}
+            {isApplied ? t("appliedCheck") : isApplying ? <CircularProgress size={12} /> : t("usePoster")}
           </Button>
         </Stack>
       </Box>
@@ -297,7 +298,7 @@ export default function CollectionMoviesView({
         </Typography>
       </Stack>
 
-      <Typography variant="h5" gutterBottom>{t("moviesFor", { title: collectionTitle })}</Typography>
+      <Typography variant="h5" fontWeight={800} sx={{ mt: 1, mb: 2 }}>{t("moviesFor", { title: collectionTitle })}</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {t("selectMovieHint")}
       </Typography>
@@ -346,7 +347,7 @@ export default function CollectionMoviesView({
             </Stack>
           ) : !selectedMovie.tmdb_id ? (
             <Alert severity="info" sx={{ maxWidth: 500 }}>
-              No TMDB ID — artwork lookup unavailable for this movie.
+              {t("noTmdbIdMovie")}
             </Alert>
           ) : visibleAltPosters.length === 0 ? (
             <Typography color="text.secondary">{t("noAlternatives")}</Typography>

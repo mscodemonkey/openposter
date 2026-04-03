@@ -18,6 +18,7 @@ import {
 } from "@/lib/issuer";
 import { clearIssuerSession, loadIssuerToken, loadIssuerUser, saveIssuerSession } from "@/lib/issuer_storage";
 import { saveCreatorConnection } from "@/lib/storage";
+import { adminCreateTheme } from "@/lib/themes";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -161,7 +162,14 @@ export default function OnboardingPage() {
 
     // Persist for upload/library/admin tooling.
     const issuerUser = loadIssuerUser();
-    saveCreatorConnection({ nodeUrl: localUrl.replace(/\/+$/, ""), adminToken: json.admin.token, creatorId: issuerUser?.handle ?? "" });
+    const creatorId = issuerUser?.handle ?? "";
+    const nodeUrl = localUrl.replace(/\/+$/, "");
+    saveCreatorConnection({ nodeUrl, adminToken: json.admin.token, creatorId });
+
+    // Bootstrap Default theme so the creator has somewhere to assign uploads immediately.
+    if (creatorId) {
+      await adminCreateTheme(nodeUrl, json.admin.token, creatorId, "Default theme").catch(() => undefined);
+    }
 
     const out = (await issuerClaimNode(token, { local_url: localUrl, node_admin_token: json.admin.token })) as {
       node: { node_id: string };

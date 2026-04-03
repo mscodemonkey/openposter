@@ -8,9 +8,10 @@ import Link from "next/link";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardMedia from "@mui/material/CardMedia";
-import Typography from "@mui/material/Typography";
+
 
 import type { PosterEntry } from "@/lib/types";
+import CardTitleStrip from "./CardTitleStrip";
 import { CardChip } from "./MediaCard";
 import OPLogo from "./OPLogo";
 
@@ -127,32 +128,14 @@ export default function PosterCard({
   const subtitleLine = subtitle ?? subtitleParts.join(" · ");
 
   const titleStrip = (
-    <Box sx={{ px: 1, pt: 0.75, pb: 0.75, textAlign: "center", position: "relative" }}>
-      <Typography
-        variant="caption"
-        noWrap
-        sx={{ display: "block", fontWeight: 600, color: "text.primary", lineHeight: 1.6 }}
-      >
-        {titleLine}
-      </Typography>
-      {(subtitleSlot || subtitleLine) && (
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0.25 }}>
-          {subtitleSlot ?? (
-            <>
-              <Typography variant="caption" noWrap sx={{ color: "text.secondary", lineHeight: 1.4 }}>
-                {subtitleLine}
-              </Typography>
-              {subscribeSlot}
-            </>
-          )}
-        </Box>
-      )}
-      {menuSlot && (
-        <Box sx={{ position: "absolute", top: "50%", right: 0, transform: "translateY(-50%)" }}>
-          {menuSlot}
-        </Box>
-      )}
-    </Box>
+    <CardTitleStrip
+      title={titleLine}
+      subtitle={subtitleSlot ? undefined : subtitleLine || undefined}
+      subtitleSlot={subtitleSlot}
+      subscribeSlot={subscribeSlot}
+      menuSlot={menuSlot}
+      sx={{ mt: 0, px: 1, pt: 0.75, pb: 0.75 }}
+    />
   );
 
   const primary = actions?.[0];

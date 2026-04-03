@@ -25,6 +25,7 @@ import UploadIcon from "@mui/icons-material/Upload";
 
 import AltArtworkDrawer from "@/components/AltArtworkDrawer";
 import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
+import CardTitleStrip from "@/components/CardTitleStrip";
 import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
 import type { PosterEntry } from "@/lib/types";
 import { getSubscriptions, getCreatorSubscriptions, subscribeCreator, unsubscribeCreator } from "@/lib/subscriptions";
@@ -538,7 +539,7 @@ export default function EpisodeMediaDetail({
                   badge={<ArtworkSourceBadge source={tracked ? "openposter" : failed ? null : "plex"} creatorName={tracked?.creator_display_name} mediaServer={serverName} />}
                   chip={<CardChip label={epLabel} color="success" />}
                   overlay={
-                    <MediaCardOverlay title={episode.title ?? epLabel} subtitle={epSubtitle}>
+                    <MediaCardOverlay>
                       <Box sx={{ gridColumn: "span 4", display: "flex", gap: 0.75 }}>
                         <Box sx={{ flex: 1 }}>
                           <ToolbarButton
@@ -576,6 +577,10 @@ export default function EpisodeMediaDetail({
                       </Box>
                     </MediaCardOverlay>
                   }
+                />
+                <CardTitleStrip
+                  title={episode.index != null ? `Episode ${String(episode.index).padStart(2, "0")}` : (episode.title ?? "Episode")}
+                  subtitle={episode.title && !/^episode\s+\d+$/i.test(episode.title.trim()) ? episode.title : undefined}
                 />
               </Box>
             );

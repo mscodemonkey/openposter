@@ -16,6 +16,7 @@ import UploadIcon from "@mui/icons-material/Upload";
 
 import AltArtworkDrawer from "@/components/AltArtworkDrawer";
 import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
+import CardTitleStrip from "@/components/CardTitleStrip";
 import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
 import type { PosterEntry } from "@/lib/types";
 import { getSubscriptions, getCreatorSubscriptions, subscribeCreator, unsubscribeCreator } from "@/lib/subscriptions";
@@ -444,6 +445,7 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
               </MediaCardOverlay>
             }
           />
+          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
         </Box>
 
         {/* ── Backdrops section ─────────────────────────────────────────── */}
@@ -468,7 +470,7 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
             chip={<CardChip label="MOVIE" color="success" />}
             overlayChip={<CardChip label="BACKDROP" color="warning" />}
             overlay={
-              <MediaCardOverlay title={item.title} subtitle={item.year ? String(item.year) : ""}>
+              <MediaCardOverlay>
                 <ToolbarButton
                   icon={isBackdropCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedBackdrop}
@@ -491,6 +493,7 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
               </MediaCardOverlay>
             }
           />
+          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
         </Box>
 
         {/* ── Square section ────────────────────────────────────────────── */}
@@ -516,7 +519,7 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
             chip={<CardChip label="MOVIE" color="success" />}
             overlayChip={<CardChip label="SQUARE" color="warning" />}
             overlay={
-              <MediaCardOverlay title={item.title} subtitle={item.year ? String(item.year) : ""}>
+              <MediaCardOverlay>
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedSquare}
@@ -532,6 +535,7 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
               </MediaCardOverlay>
             }
           />
+          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
         </Box>
 
         {/* ── Logo section ──────────────────────────────────────────────── */}
@@ -557,7 +561,7 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
             chip={<CardChip label="MOVIE" color="success" />}
             overlayChip={<CardChip label="LOGO" color="warning" />}
             overlay={
-              <MediaCardOverlay title={item.title} subtitle={item.year ? String(item.year) : ""}>
+              <MediaCardOverlay>
                 <ToolbarButton
                   icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
                   disabled={!trackedLogo}
@@ -573,6 +577,7 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
               </MediaCardOverlay>
             }
           />
+          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
         </Box>
 
       </Box>

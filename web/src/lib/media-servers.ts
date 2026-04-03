@@ -46,6 +46,9 @@ export async function detectMediaServer(
     body: JSON.stringify({ url: serverUrl, token: serverToken }),
   });
   if (!r.ok) {
+    if (r.status === 401 || r.status === 403) {
+      throw new Error("Node session expired — please reconnect your node in Settings.");
+    }
     const j = (await r.json().catch(() => null)) as { error?: { message?: string } } | null;
     throw new Error(j?.error?.message ?? `Detection failed: ${r.status}`);
   }

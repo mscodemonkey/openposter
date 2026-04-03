@@ -143,7 +143,7 @@ export default function AltArtworkDrawer({
       {/* Scrollable content */}
       <Box sx={{ flex: 1, overflowY: "auto", p: 2.5 }}>
         {!hasTmdbId ? (
-          <Alert severity="info">No TMDB ID — artwork lookup unavailable for this item.</Alert>
+          <Alert severity="info">{t("noTmdbIdItem")}</Alert>
         ) : loading ? (
           <Stack alignItems="center" sx={{ py: 4 }}>
             <CircularProgress />
