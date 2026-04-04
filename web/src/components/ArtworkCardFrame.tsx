@@ -136,31 +136,6 @@ export default function ArtworkCardFrame({
 
   return (
     <Box sx={{ position: "relative", height: "100%", overflow: "visible", ...containerSx as object }}>
-      <Box
-        sx={{
-          mb: 0.5,
-          px: 1,
-          py: 0.25,
-          bgcolor: "#facc15",
-          color: "#000",
-          borderRadius: 0.75,
-          display: "inline-flex",
-          alignItems: "center",
-        }}
-      >
-        <Box
-          component="span"
-          sx={{
-            fontSize: "0.65rem",
-            fontWeight: 800,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            lineHeight: 1.2,
-          }}
-        >
-          New Card
-        </Box>
-      </Box>
       {clickableMedia}
       {menuSlot && (
         <Box sx={{ position: "absolute", top: 4, right: 4, zIndex: 2 }}>

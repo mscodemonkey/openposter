@@ -8,8 +8,6 @@ import Link from "next/link";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Card from "@mui/material/Card";
-import CardActionArea from "@mui/material/CardActionArea";
 import Container from "@mui/material/Container";
 import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
@@ -31,6 +29,7 @@ import PhotoSizeSelectActualOutlinedIcon from "@mui/icons-material/PhotoSizeSele
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 import ViewDayOutlinedIcon from "@mui/icons-material/ViewDayOutlined";
 
+import ArtworkCardFrame from "@/components/ArtworkCardFrame";
 import { INDEXER_BASE_URL } from "@/lib/config";
 import { loadCreatorConnection } from "@/lib/storage";
 import { adminListThemes } from "@/lib/themes";
@@ -234,20 +233,27 @@ function StudioUploadPageInner() {
               <Grid container spacing={2}>
                 {MEDIA_TYPES.map(({ value, label, icon }) => (
                   <Grid key={value} size={{ xs: 6, sm: 4 }}>
-                    <Card
-                      variant="outlined"
-                      sx={{ borderColor: mediaType === value ? "primary.main" : "divider", borderWidth: mediaType === value ? 2 : 1 }}
-                    >
-                      <CardActionArea
-                        onClick={() => { setMediaType(value); setStep(1); }}
-                        sx={{ p: 2, display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}
-                      >
-                        <Box sx={{ fontSize: "2rem", color: mediaType === value ? "primary.main" : "text.secondary" }}>
+                    <ArtworkCardFrame
+                      media={
+                        <Box
+                          sx={{
+                            aspectRatio: "4 / 3",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            bgcolor: "action.hover",
+                            color: mediaType === value ? "primary.main" : "text.secondary",
+                            fontSize: "2rem",
+                          }}
+                        >
                           {icon}
                         </Box>
-                        <Typography variant="body2" fontWeight={700}>{label}</Typography>
-                      </CardActionArea>
-                    </Card>
+                      }
+                      title={label}
+                      onClick={() => { setMediaType(value); setStep(1); }}
+                      selected={mediaType === value}
+                      containerSx={{ height: "100%" }}
+                    />
                   </Grid>
                 ))}
               </Grid>

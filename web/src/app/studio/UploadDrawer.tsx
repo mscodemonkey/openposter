@@ -8,8 +8,6 @@ import { ARTWORK_LANGUAGE_CODES, getLanguageLabel } from "@/lib/artwork-language
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Card from "@mui/material/Card";
-import CardActionArea from "@mui/material/CardActionArea";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
@@ -33,6 +31,7 @@ import PhotoSizeSelectActualOutlinedIcon from "@mui/icons-material/PhotoSizeSele
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 import ViewDayOutlinedIcon from "@mui/icons-material/ViewDayOutlined";
 
+import ArtworkCardFrame from "@/components/ArtworkCardFrame";
 import { INDEXER_BASE_URL } from "@/lib/config";
 import type { CreatorTheme, PosterEntry } from "@/lib/types";
 
@@ -336,18 +335,27 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
             <Grid container spacing={1.5}>
               {MEDIA_TYPES.map(({ value, label, icon }) => (
                 <Grid key={value} size={{ xs: 6 }}>
-                  <Card
-                    variant="outlined"
-                    sx={{ borderColor: mediaType === value ? "primary.main" : "divider", borderWidth: mediaType === value ? 2 : 1 }}
-                  >
-                    <CardActionArea
-                      onClick={() => { setMediaType(value); setStep(1); }}
-                      sx={{ p: 1.5, display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}
-                    >
-                      <Box sx={{ fontSize: "1.75rem", color: mediaType === value ? "primary.main" : "text.secondary" }}>{icon}</Box>
-                      <Typography variant="body2" fontWeight={700}>{label}</Typography>
-                    </CardActionArea>
-                  </Card>
+                  <ArtworkCardFrame
+                    media={
+                      <Box
+                        sx={{
+                          aspectRatio: "4 / 3",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          bgcolor: "action.hover",
+                          color: mediaType === value ? "primary.main" : "text.secondary",
+                          fontSize: "1.75rem",
+                        }}
+                      >
+                        {icon}
+                      </Box>
+                    }
+                    title={label}
+                    onClick={() => { setMediaType(value); setStep(1); }}
+                    selected={mediaType === value}
+                    containerSx={{ height: "100%" }}
+                  />
                 </Grid>
               ))}
             </Grid>
