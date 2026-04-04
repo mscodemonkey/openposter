@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { alpha, styled } from "@mui/material/styles";
+import { usePathname } from "next/navigation";
 
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
@@ -13,7 +12,6 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
-import InputBase from "@mui/material/InputBase";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
@@ -26,7 +24,6 @@ import CloudDoneIcon from "@mui/icons-material/CloudDone";
 import CloudOffIcon from "@mui/icons-material/CloudOff";
 import CloseIcon from "@mui/icons-material/Close";
 import MenuIcon from "@mui/icons-material/Menu";
-import SearchIcon from "@mui/icons-material/Search";
 import SettingsIcon from "@mui/icons-material/Settings";
 
 import { loadCreatorConnection } from "@/lib/storage";
@@ -39,87 +36,6 @@ const NAV_ITEMS = [
   { key: "myMedia",   href: "/my-media" },
   { key: "studio",    href: "/studio" },
 ] as const;
-
-// Styled search container — matches the MUI "App Bar with search field" example
-const Search = styled("div")(({ theme }) => ({
-  position: "relative",
-  borderRadius: theme.shape.borderRadius,
-  backgroundColor: alpha(theme.palette.common.white, 0.15),
-  "&:hover": { backgroundColor: alpha(theme.palette.common.white, 0.25) },
-  marginLeft: theme.spacing(1),
-  width: "auto",
-}));
-
-const SearchIconWrapper = styled("div")(({ theme }) => ({
-  padding: theme.spacing(0, 1.5),
-  height: "100%",
-  position: "absolute",
-  pointerEvents: "none",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-}));
-
-const StyledInputBase = styled(InputBase)(({ theme }) => ({
-  color: "inherit",
-  "& .MuiInputBase-input": {
-    padding: theme.spacing(1, 1, 1, 0),
-    paddingLeft: `calc(1em + ${theme.spacing(3)})`,
-    width: "16ch",
-    "&:focus": { width: "24ch" },
-    transition: theme.transitions.create("width"),
-  },
-}));
-
-/** Reads useSearchParams — must be inside a Suspense boundary. */
-function SearchBox() {
-  const t = useTranslations("nav");
-  const router = useRouter();
-  const sp = useSearchParams();
-  const [q, setQ] = useState(() => {
-    try { return sp.get("q") ?? ""; } catch { return ""; }
-  });
-
-  useEffect(() => {
-    try { setQ(sp.get("q") ?? ""); } catch { /* ignore */ }
-  }, [sp]);
-
-  function handleSearch(e: { preventDefault(): void }) {
-    e.preventDefault();
-    const trimmed = q.trim();
-    router.push(trimmed ? `/browse?q=${encodeURIComponent(trimmed)}` : "/browse");
-  }
-
-  return (
-    <form onSubmit={handleSearch} style={{ display: "flex" }}>
-      <Search>
-        <SearchIconWrapper>
-          <SearchIcon fontSize="small" />
-        </SearchIconWrapper>
-        <StyledInputBase
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={t("searchPlaceholder")}
-          inputProps={{ "aria-label": t("searchAriaLabel") }}
-          endAdornment={
-            q
-              ? (
-                <IconButton
-                  size="small"
-                  onClick={() => { setQ(""); router.push("/browse"); }}
-                  sx={{ color: "inherit", opacity: 0.7, mr: 0.5 }}
-                  aria-label={t("clearSearch")}
-                >
-                  <CloseIcon sx={{ fontSize: 16 }} />
-                </IconButton>
-              )
-              : undefined
-          }
-        />
-      </Search>
-    </form>
-  );
-}
 
 export default function Nav() {
   const t = useTranslations("nav");
@@ -135,6 +51,7 @@ export default function Nav() {
       const conn = loadCreatorConnection();
       setConnected(Boolean(conn));
       setNodeUrl(conn?.nodeUrl ?? null);
+      if (!conn) setIsSyncing(false);
     }
     refresh();
     const timer = setInterval(refresh, 2000);
@@ -143,7 +60,7 @@ export default function Nav() {
 
   // Poll Plex sync status — fast while syncing, slow at idle
   useEffect(() => {
-    if (!connected) { setIsSyncing(false); return; }
+    if (!connected) return;
     const conn = loadCreatorConnection();
     if (!conn) return;
     let active = true;
@@ -206,11 +123,6 @@ export default function Nav() {
           </Box>
 
           <Box sx={{ flex: 1 }} />
-
-          {/* Search — right-aligned */}
-          <Suspense fallback={null}>
-            <SearchBox />
-          </Suspense>
 
           {/* Plex background sync indicator */}
           {isSyncing && (

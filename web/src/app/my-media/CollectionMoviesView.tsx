@@ -21,11 +21,12 @@ import ArtworkMetadataTooltip from "@/components/ArtworkMetadataTooltip";
 import type { ArtworkMeta } from "@/components/ArtworkMetadataTooltip";
 import PosterCard from "@/components/PosterCard";
 import PosterSubscribeMenu from "@/components/PosterSubscribeMenu";
+import { loadPosterSearchResults } from "./posterSearch";
+import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
 import type { PosterEntry } from "@/lib/types";
 import type { ThemeSubscription } from "@/lib/subscriptions";
 import { getSubscriptions } from "@/lib/subscriptions";
 import { applyToPlexPoster } from "@/lib/plex";
-import { getArtworkSettings } from "@/lib/artwork-tracking";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
 import { thumbUrl } from "@/lib/media-server";
 import type { MediaItem } from "@/lib/media-server";
@@ -179,15 +180,10 @@ export default function CollectionMoviesView({
   const [altLoadedForId, setAltLoadedForId] = useState<string | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
-  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
+  const autoUpdateEnabled = useArtworkAutoUpdate(conn.nodeUrl, conn.adminToken);
   const [snack, setSnack] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
     open: false, message: "", severity: "success",
   });
-
-  useEffect(() => {
-    getArtworkSettings(conn.nodeUrl, conn.adminToken)
-      .then((s) => setAutoUpdateEnabled(s.auto_update_artwork));
-  }, [conn.nodeUrl, conn.adminToken]);
 
   // Auto-select first movie when children arrive; don't reset on re-render.
   useEffect(() => {
@@ -213,14 +209,9 @@ export default function CollectionMoviesView({
       return;
     }
     setAltLoading(true);
-    fetch(`/api/search?tmdb_id=${selectedMovie.tmdb_id}&type=movie&limit=50`)
-      .then((r) => r.json())
-      .then((d: { results: PosterEntry[] }) => {
-        setAltPosters(
-          d.results.filter(
-            (p) => typeof p.assets?.preview?.url === "string" && p.assets.preview.url.length > 0,
-          ),
-        );
+    loadPosterSearchResults(`/api/search?tmdb_id=${selectedMovie.tmdb_id}&type=movie&limit=50`)
+      .then((results) => {
+        setAltPosters(results);
         setAltLoadedForId(selectedMovieId);
       })
       .catch(() => { setAltPosters([]); setAltLoadedForId(selectedMovieId); })

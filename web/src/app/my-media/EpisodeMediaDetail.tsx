@@ -19,18 +19,19 @@ import Typography from "@mui/material/Typography";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
 import ReplayIcon from "@mui/icons-material/Replay";
-import StarBorderIcon from "@mui/icons-material/StarBorder";
-import StarIcon from "@mui/icons-material/Star";
 import UploadIcon from "@mui/icons-material/Upload";
 
 import AltArtworkDrawer from "@/components/AltArtworkDrawer";
 import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
-import CardTitleStrip from "@/components/CardTitleStrip";
 import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
+import CreatorSubscriptionToolbarAction from "./CreatorSubscriptionToolbarAction";
+import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
+import { useCreatorSubscriptions } from "./useCreatorSubscriptions";
+import { useArtworkDrawer } from "./useArtworkDrawer";
 import type { PosterEntry } from "@/lib/types";
-import { getSubscriptions, getCreatorSubscriptions, subscribeCreator, unsubscribeCreator } from "@/lib/subscriptions";
+import { getSubscriptions } from "@/lib/subscriptions";
 import { applyToPlexPoster } from "@/lib/plex";
-import { getArtworkSettings, untrackArtwork } from "@/lib/artwork-tracking";
+import { untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
 import { thumbUrl, artUrl } from "@/lib/media-server";
 import type { MediaItem } from "@/lib/media-server";
@@ -146,15 +147,13 @@ export default function EpisodeMediaDetail({
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
 
   // ── Alt artwork drawer ─────────────────────────────────────────────────────
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerEpisodeId, setDrawerEpisodeId] = useState<string | null>(null);
-  const [drawerPosters, setDrawerPosters] = useState<PosterEntry[]>([]);
-  const [drawerLoading, setDrawerLoading] = useState(false);
+  const { drawerOpen, drawerPosters, drawerLoading, closeDrawer, openDrawer: openArtworkDrawer } = useArtworkDrawer();
 
   // ── Apply ──────────────────────────────────────────────────────────────────
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
-  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
+  const autoUpdateEnabled = useArtworkAutoUpdate(conn.nodeUrl, conn.adminToken);
 
   // Single preview map for all artwork slots, keyed by episode.id (no :bg suffix ever).
   const [appliedPreviews, setAppliedPreviews] = useState<Map<string, string>>(new Map());
@@ -181,9 +180,7 @@ export default function EpisodeMediaDetail({
   const [applyProgress, setApplyProgress] = useState<{ done: number; total: number; current: string } | null>(null);
 
   // ── Creator subscriptions ──────────────────────────────────────────────────
-  const [creatorSubs, setCreatorSubs] = useState<Set<string>>(
-    () => new Set(getCreatorSubscriptions().map((s) => s.creatorId)),
-  );
+  const { creatorSubs, toggleCreatorSubscription } = useCreatorSubscriptions();
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
   const subs = useMemo(() => getSubscriptions(), []);
@@ -197,11 +194,6 @@ export default function EpisodeMediaDetail({
       return real ? { type: "real", episode: real } : { type: "missing", episodeNumber: te.episode_number, airDate: te.air_date };
     });
   }, [episodes, tmdbEpisodes]);
-
-  useEffect(() => {
-    getArtworkSettings(conn.nodeUrl, conn.adminToken)
-      .then((s) => setAutoUpdateEnabled(s.auto_update_artwork));
-  }, [conn.nodeUrl, conn.adminToken]);
 
   // Clicking outside the grid deselects the current episode.
   const gridRef = useRef<HTMLDivElement>(null);
@@ -265,7 +257,7 @@ export default function EpisodeMediaDetail({
         plex_label: null,
       });
       setAppliedIds((prev) => new Set([...prev, poster.poster_id]));
-      setDrawerOpen(false);
+      closeDrawer();
       setSnack({ open: true, message: t("applySuccess"), severity: "success" });
       if (poster.creator.creator_id) {
         checkCreatorMatches(
@@ -324,22 +316,15 @@ export default function EpisodeMediaDetail({
   // ── Open drawer for an episode ─────────────────────────────────────────────
   function openDrawer(episode: MediaItem) {
     setDrawerEpisodeId(episode.id);
-    setDrawerPosters([]);
-    setDrawerOpen(true);
-    if (showTmdbId) {
-      setDrawerLoading(true);
-      fetch(`/api/search?tmdb_id=${showTmdbId}&type=episode&limit=200`)
-        .then((r) => r.json())
-        .then((d: { results: PosterEntry[] }) => {
-          let results = d.results.filter((p) => typeof p.assets?.preview?.url === "string" && p.assets.preview.url.length > 0);
-          if (seasonIndex != null && episode.index != null) {
-            results = results.filter((p) => p.media.season_number === seasonIndex && p.media.episode_number === episode.index);
-          }
-          setDrawerPosters(results);
-        })
-        .catch(() => setDrawerPosters([]))
-        .finally(() => setDrawerLoading(false));
-    }
+    openArtworkDrawer(showTmdbId ? `/api/search?tmdb_id=${showTmdbId}&type=episode&limit=200` : null, {
+      mapResults: (initialResults) => {
+        let results = initialResults;
+        if (seasonIndex != null && episode.index != null) {
+          results = results.filter((p) => p.media.season_number === seasonIndex && p.media.episode_number === episode.index);
+        }
+        return results;
+      },
+    });
   }
 
   // ── Creator suggestion ─────────────────────────────────────────────────────
@@ -505,17 +490,11 @@ export default function EpisodeMediaDetail({
 
             const handleCreatorSubscribe = () => {
               if (!tracked?.creator_id) return;
-              if (isCreatorSubscribed) {
-                unsubscribeCreator(tracked.creator_id);
-                setCreatorSubs((prev) => { const s = new Set(prev); s.delete(tracked.creator_id!); return s; });
-              } else {
-                subscribeCreator({
-                  creatorId: tracked.creator_id,
-                  creatorDisplayName: tracked.creator_display_name ?? tracked.creator_id,
-                  nodeBase: tracked.node_base ?? "",
-                });
-                setCreatorSubs((prev) => new Set([...prev, tracked.creator_id!]));
-              }
+              toggleCreatorSubscription({
+                creatorId: tracked.creator_id,
+                creatorDisplayName: tracked.creator_display_name ?? tracked.creator_id,
+                nodeBase: tracked.node_base ?? "",
+              });
             };
 
             const imageUrl = failed
@@ -527,6 +506,8 @@ export default function EpisodeMediaDetail({
                 <MediaCard
                   image={imageUrl}
                   alt={episode.title ?? epLabel}
+                  title={episode.index != null ? `Episode ${String(episode.index).padStart(2, "0")}` : (episode.title ?? "Episode")}
+                  subtitle={episode.title && !/^episode\s+\d+$/i.test(episode.title.trim()) ? episode.title : undefined}
                   aspectRatio="16 / 9"
                   imageFailed={failed}
                   imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
@@ -542,14 +523,12 @@ export default function EpisodeMediaDetail({
                     <MediaCardOverlay>
                       <Box sx={{ gridColumn: "span 4", display: "flex", gap: 0.75 }}>
                         <Box sx={{ flex: 1 }}>
-                          <ToolbarButton
-                            icon={isCreatorSubscribed ? <StarIcon sx={{ fontSize: "1.1rem" }} /> : <StarBorderIcon sx={{ fontSize: "1.1rem" }} />}
+                          <CreatorSubscriptionToolbarAction
+                            creatorId={tracked?.creator_id}
+                            isSubscribed={isCreatorSubscribed}
                             disabled={!tracked}
-                            active={isCreatorSubscribed}
-                            tooltip={isCreatorSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
-                            menuItems={tracked?.creator_id ? [
-                              { label: isCreatorSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"), onClick: () => { handleCreatorSubscribe(); setTimeout(() => setSelectedEpisodeId(null), 500); } },
-                            ] : undefined}
+                            onToggle={handleCreatorSubscribe}
+                            onAfterToggle={() => setTimeout(() => setSelectedEpisodeId(null), 500)}
                           />
                         </Box>
                         <Box sx={{ flex: 1 }}>
@@ -578,10 +557,6 @@ export default function EpisodeMediaDetail({
                     </MediaCardOverlay>
                   }
                 />
-                <CardTitleStrip
-                  title={episode.index != null ? `Episode ${String(episode.index).padStart(2, "0")}` : (episode.title ?? "Episode")}
-                  subtitle={episode.title && !/^episode\s+\d+$/i.test(episode.title.trim()) ? episode.title : undefined}
-                />
               </Box>
             );
           })}
@@ -591,7 +566,7 @@ export default function EpisodeMediaDetail({
       {/* Alt artwork drawer */}
       <AltArtworkDrawer
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={closeDrawer}
         title={showTitle}
         subtitle={
           drawerEpisode?.index != null

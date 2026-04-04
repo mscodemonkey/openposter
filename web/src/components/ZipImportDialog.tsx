@@ -405,9 +405,13 @@ async function uploadItem(
     form.append("media_type", "movie");
     form.append("tmdb_id", String(k.tmdbId));
     form.append("collection_tmdb_id", String(k.collectionTmdbId));
+    form.append("title", k.title);
+    form.append("year", String(k.year));
   } else if (k.tag === "showPoster") {
     form.append("media_type", "show");
     form.append("tmdb_id", String(k.tmdbId));
+    form.append("title", k.title);
+    form.append("year", String(k.year));
   } else if (k.tag === "showBackdrop") {
     form.append("media_type", "backdrop");
     form.append("tmdb_id", String(k.tmdbId));
@@ -539,10 +543,8 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
 
   function handleClose() {
     if (phase === "importing") return;
-    const wasImporting = phase === "done";
     reset();
     onClose();
-    if (wasImporting) onComplete();
   }
 
   async function handleFile(file: File) {
@@ -624,6 +626,11 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
     }
 
     void onComplete({ language: activeLanguage || undefined });
+    if (errors === 0) {
+      reset();
+      onClose();
+      return;
+    }
     setPhase("done");
   }
 

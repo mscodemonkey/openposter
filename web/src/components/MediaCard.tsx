@@ -15,6 +15,10 @@ import ImageIcon from "@mui/icons-material/Image";
 
 import { useTranslations } from "next-intl";
 
+import ArtworkCardFrame from "@/components/ArtworkCardFrame";
+
+const CHECKER = "repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px";
+
 // =============================================================
 // CardChip
 // =============================================================
@@ -25,13 +29,13 @@ import { useTranslations } from "next-intl";
 type ChipColor = "primary" | "secondary" | "error" | "warning" | "info" | "success" | "default" | "light";
 
 const CHIP_BG: Record<ChipColor, string> = {
-  primary:   "#1e3a8a",
-  secondary: "#1e3a8a",
-  error:     "#1e3a8a",
-  warning:   "#1e3a8a",
-  info:      "#1e3a8a",
-  success:   "#1e3a8a",
-  default:   "#1e3a8a",
+  primary:   "#1d4ed8",
+  secondary: "#7c3aed",
+  error:     "#1d4ed8",
+  warning:   "#ea580c",
+  info:      "#0f766e",
+  success:   "#2f855a",
+  default:   "#334155",
   light:     "#dddddd",
 };
 
@@ -320,6 +324,10 @@ interface MediaCardProps {
   overlayChip?: React.ReactNode;
   /** Creator name shown top-right when the overlay is open — slides down mirroring the overlayChip. */
   creatorName?: string | null;
+  /** Optional shared title strip below the media surface. */
+  title?: string;
+  /** Optional shared subtitle below the media surface. */
+  subtitle?: string | null;
 }
 
 export default function MediaCard({
@@ -342,6 +350,8 @@ export default function MediaCard({
   imageBackground,
   overlayChip,
   creatorName,
+  title,
+  subtitle,
 }: MediaCardProps) {
   const t = useTranslations("posterCard");
   const [keyboardFocused, setKeyboardFocused] = useState(false);
@@ -377,37 +387,18 @@ export default function MediaCard({
     }
   };
 
-  const card = (
+  const media = (
     <Box
-      tabIndex={onClick ? 0 : undefined}
-      role={onClick ? "button" : undefined}
-      aria-pressed={onClick ? selected : undefined}
-      aria-label={tooltip ?? alt}
-      title={tooltip && !isOverlayVisible ? tooltip : undefined}
-      onClick={onClick}
-      onMouseDown={handleMouseDown}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
       sx={{
         position: "relative",
-        cursor: onClick ? "pointer" : "default",
-        borderRadius: 1,
-        overflow: "hidden",
-        // Force a persistent GPU compositing layer so the overlay's translateY
-        // animation doesn't cause mid-animation layer promotion, which produces
-        // sub-pixel rounding shifts in the card contents.
         willChange: "transform",
         userSelect: "none",
-        boxShadow: "0 8px 24px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.4)",
-        outline: selected ? "3px solid" : "none",
-        outlineColor: "primary.main",
-        outlineOffset: "-1px",
-        "&:focus-visible": { outline: "none" },
+        width: "100%",
+        "&:focus-visible": { outline: "none" },        
       }}
     >
       {/* Image — always full opacity, never animated */}
-      <Box sx={{ aspectRatio, ...(imageBackground ? { background: imageBackground } : { bgcolor: imageBgColor ?? "action.hover" }), position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Box sx={{ aspectRatio, ...((imageFailed || !image || placeholder) ? { background: imageBackground ?? CHECKER } : (imageBackground ? { background: imageBackground } : { bgcolor: imageBgColor ?? "action.hover" })), position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
         {!imageFailed && image && (
           <Box
             component="img"
@@ -420,9 +411,9 @@ export default function MediaCard({
         )}
         {(imageFailed || !image || placeholder) && (
           <Box sx={{ position: placeholder ? "absolute" : undefined, inset: placeholder ? 0 : undefined, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0.5, pointerEvents: "none" }}>
-            <ImageIcon sx={{ fontSize: "2.5rem", color: imageBackground ? "rgba(255,255,255,0.6)" : "text.primary", opacity: imageBackground ? 1 : 0.6 }} />
-            <Typography sx={{ fontSize: "0.55rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: imageBackground ? "rgba(255,255,255,0.7)" : "text.primary", opacity: imageBackground ? 1 : 0.7, lineHeight: 1 }}>
-              {t("noArtwork")}
+            <ImageIcon sx={{ fontSize: "2.5rem", color: "rgba(255,255,255,0.65)" }} />
+            <Typography sx={{ fontSize: "0.58rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.78)", lineHeight: 1.2, textAlign: "center", px: 1 }}>
+              Missing artwork
             </Typography>
           </Box>
         )}
@@ -577,5 +568,23 @@ export default function MediaCard({
     </Box>
   );
 
-  return card;
+  return (
+    <ArtworkCardFrame
+      media={media}
+      title={title}
+      subtitle={subtitle}
+      selected={selected}
+      ariaLabel={tooltip ?? alt}
+      surfaceSx={{ overflow: "hidden" }}
+      onClick={onClick}
+      surfaceTabIndex={onClick ? 0 : undefined}
+      surfaceRole={onClick ? "button" : undefined}
+      surfaceAriaPressed={onClick ? selected : undefined}
+      surfaceTitle={tooltip && !isOverlayVisible ? tooltip : undefined}
+      onSurfaceMouseDown={handleMouseDown}
+      onSurfaceFocus={handleFocus}
+      onSurfaceBlur={handleBlur}
+      onSurfaceKeyDown={handleKeyDown}
+    />
+  );
 }
