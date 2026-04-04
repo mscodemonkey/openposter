@@ -23,14 +23,11 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
-import Checkbox from "@mui/material/Checkbox";
-import FormControlLabel from "@mui/material/FormControlLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
-import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import UnarchiveOutlinedIcon from "@mui/icons-material/UnarchiveOutlined";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 
@@ -133,13 +130,13 @@ type ImportItem = {
   blob: Blob;
   label: string;
   kind: ItemKind;
-  status: "pending" | "uploading" | "done" | "error" | "duplicate";
+  status: "pending" | "uploading" | "done" | "error";
   error?: string;
 };
 
 type SkippedItem = { filename: string; reason: string };
 
-type Phase = "select" | "parsing" | "preview" | "confirm" | "importing" | "done";
+type Phase = "select" | "parsing" | "preview" | "importing" | "done";
 
 // Matches the colour scheme used by PosterCard
 const KIND_CHIP: Record<string, { label: string; color: "error" | "success" | "warning" | "info" | "primary" | "default" }> = {
@@ -386,7 +383,6 @@ async function uploadItem(
   conn: { nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string },
   themeId?: string,
   language?: string,
-  force?: boolean,
 ): Promise<void> {
   const fullFile = new File([item.blob], item.filename, { type: "image/jpeg" });
   const preview = await generatePreview(fullFile);
@@ -436,7 +432,6 @@ async function uploadItem(
   form.append("published", "false");
   if (themeId) form.append("theme_id", themeId);
   if (language) form.append("language", language);
-  if (force) form.append("force", "true");
 
   // Files last (python-multipart drops text fields that come after file parts)
   form.append("full", fullFile);
@@ -448,11 +443,6 @@ async function uploadItem(
     body: form,
   });
 
-  if (res.status === 409) {
-    const err = new Error("duplicate");
-    (err as Error & { isDuplicate: boolean }).isDuplicate = true;
-    throw err;
-  }
   if (!res.ok) {
     const data = await res.json().catch(() => ({})) as { error?: { message?: string } };
     throw new Error(data.error?.message ?? `HTTP ${res.status}`);
@@ -480,7 +470,6 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
   const [skipped, setSkipped] = useState<SkippedItem[]>([]);
   const [doneCount, setDoneCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
-  const [forceSameTheme, setForceSameTheme] = useState(false);
   const [activeThemeId, setActiveThemeId] = useState<string>(config.themeId ?? "");
   const [activeLanguage, setActiveLanguage] = useState<string>(config.language ?? "");
 
@@ -513,13 +502,6 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
     items.filter((_, idx) => conflictMap.get(idx)?.isCrossTheme === true),
   [items, conflictMap]);
 
-  const sameThemeItems = useMemo(() =>
-    items.filter((_, idx) => {
-      const c = conflictMap.get(idx);
-      return c !== undefined && !c.isCrossTheme;
-    }),
-  [items, conflictMap]);
-
   // All unique existing-theme names for cross-theme conflicts
   const crossThemeNames = useMemo(() => {
     const ids = new Set<string>();
@@ -537,7 +519,6 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
     setSkipped([]);
     setDoneCount(0);
     setErrorCount(0);
-    setForceSameTheme(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -588,14 +569,6 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
     }
   }
 
-  function requestImport() {
-    if (crossThemeItems.length > 0) {
-      setPhase("confirm");
-    } else {
-      void executeImport();
-    }
-  }
-
   async function executeImport() {
     if (!conn) return;
     setPhase("importing");
@@ -604,22 +577,14 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
 
     for (let i = 0; i < items.length; i++) {
       setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "uploading" } : it));
-      const conflict = conflictMap.get(i);
-      // Force upload if: cross-theme conflict (confirmed by user) OR same-theme and user opted in
-      const force = conflict?.isCrossTheme || (conflict !== undefined && !conflict.isCrossTheme && forceSameTheme);
       try {
-        await uploadItem(items[i], conn, activeThemeId || undefined, activeLanguage || undefined, force);
+        await uploadItem(items[i], conn, activeThemeId || undefined, activeLanguage || undefined);
         setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "done" } : it));
         done++;
       } catch (e) {
-        const isDup = e instanceof Error && (e as Error & { isDuplicate?: boolean }).isDuplicate;
-        if (isDup) {
-          setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "duplicate" } : it));
-        } else {
-          const msg = e instanceof Error ? e.message : "upload failed";
-          setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "error", error: msg } : it));
-          errors++;
-        }
+        const msg = e instanceof Error ? e.message : "upload failed";
+        setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "error", error: msg } : it));
+        errors++;
       }
       setDoneCount(done);
       setErrorCount(errors);
@@ -634,11 +599,9 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
     setPhase("done");
   }
 
-  const nonDuplicates = items.filter((it) => it.status !== "duplicate");
   const progressPct = items.length > 0
-    ? (items.filter((it) => ["done", "error", "duplicate"].includes(it.status)).length / items.length) * 100
+    ? (items.filter((it) => ["done", "error"].includes(it.status)).length / items.length) * 100
     : 0;
-  const dupCount = items.filter((it) => it.status === "duplicate").length;
 
   const contextLabel = config.contextType === "collection" ? t("zipImportCollection") : t("zipImportShow");
 
@@ -721,48 +684,6 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
           </Stack>
         )}
 
-        {/* ── Confirm phase: cross-theme conflict ── */}
-        {phase === "confirm" && (
-          <Stack spacing={2}>
-            <Alert severity="warning" icon={<WarningAmberIcon />}>
-              {t("zipImportConfirmBody", {
-                count: crossThemeItems.length,
-                theme: crossThemeNames.join(", "),
-                targetTheme: themeName(targetThemeId),
-              })}
-            </Alert>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 700 }}>{t("zipImportColFile")}</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>{t("zipImportColType")}</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>{t("zipImportColExistingTheme")}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {crossThemeItems.map((item, i) => {
-                  const origIdx = items.indexOf(item);
-                  const conflict = conflictMap.get(origIdx);
-                  return (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Typography variant="body2" noWrap sx={{ maxWidth: 260 }}>{item.label}</Typography>
-                        <Typography variant="caption" color="text.disabled" sx={{ display: "block" }} noWrap>{item.filename}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip label={KIND_CHIP[item.kind.tag]?.label ?? item.kind.tag} color={KIND_CHIP[item.kind.tag]?.color ?? "default"} size="small" sx={{ fontSize: "0.7rem" }} />
-                      </TableCell>
-                      <TableCell>
-                        <Chip label={themeName(conflict?.existingThemeId ?? "")} size="small" color="warning" sx={{ fontSize: "0.7rem" }} />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </Stack>
-        )}
-
         {(phase === "preview" || phase === "importing" || phase === "done") && (
           <Stack spacing={2}>
             {phase === "importing" && <LinearProgress variant="determinate" value={progressPct} />}
@@ -771,8 +692,7 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
               <Alert severity={errorCount > 0 ? "warning" : "success"}>
                 {t("zipImportDone", {
                   done: doneCount,
-                  total: nonDuplicates.length,
-                  dups: dupCount,
+                  total: items.length,
                   errors: errorCount,
                 })}
               </Alert>
@@ -839,12 +759,6 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
                             {item.status === "done" && (
                               <CheckCircleOutlineIcon sx={{ fontSize: "1.1rem", color: "success.main" }} />
                             )}
-                            {item.status === "duplicate" && (
-                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                <RemoveCircleOutlineIcon sx={{ fontSize: "1rem", color: "text.disabled" }} />
-                                <Typography variant="caption" color="text.disabled">{t("zipImportDuplicate")}</Typography>
-                              </Box>
-                            )}
                             {item.status === "error" && (
                               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                                 <ErrorOutlineIcon sx={{ fontSize: "1rem", color: "error.main" }} />
@@ -869,33 +783,17 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
         )}
       </DialogContent>
 
-      <DialogActions sx={{ justifyContent: "space-between" }}>
-        <Box sx={{ display: "flex", alignItems: "center" }}>
-          {phase === "preview" && sameThemeItems.length > 0 && (
-            <FormControlLabel
-              sx={{ m: 0 }}
-              control={<Checkbox size="small" checked={forceSameTheme} onChange={(e) => setForceSameTheme(e.target.checked)} />}
-              label={<Typography variant="body2">{t("zipImportForceLabel", { count: sameThemeItems.length })}</Typography>}
-            />
-          )}
-        </Box>
-        <Box sx={{ display: "flex", gap: 1 }}>
-          {phase !== "importing" && (
-            <Button onClick={phase === "confirm" ? () => setPhase("preview") : handleClose}>
-              {phase === "done" ? t("zipImportClose") : t("zipImportCancel")}
-            </Button>
-          )}
-          {phase === "preview" && items.length > 0 && conn && (
-            <Button variant="contained" onClick={requestImport}>
-              {t("zipImportImportButton", { count: items.length - (forceSameTheme ? 0 : sameThemeItems.length) })}
-            </Button>
-          )}
-          {phase === "confirm" && (
-            <Button variant="contained" color="warning" onClick={() => void executeImport()}>
-              {t("zipImportConfirmButton", { theme: themeName(targetThemeId) })}
-            </Button>
-          )}
-        </Box>
+      <DialogActions>
+        {phase !== "importing" && (
+          <Button onClick={handleClose}>
+            {phase === "done" ? t("zipImportClose") : t("zipImportCancel")}
+          </Button>
+        )}
+        {phase === "preview" && items.length > 0 && conn && (
+          <Button variant="contained" onClick={() => void executeImport()}>
+            {t("zipImportImportButton", { count: items.length })}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );

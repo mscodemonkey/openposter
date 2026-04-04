@@ -583,11 +583,10 @@ async def admin_upload_poster(
     preview_hash, preview_bytes, preview_mime = await _save_upload_to_blob(cfg.data_dir, preview)
     full_hash, full_bytes, full_mime = await _save_upload_to_blob(cfg.data_dir, full)
 
-    # Local id derived from content + slot metadata.
+    # Local id derived from content + slot metadata — always deterministic.
     # Include slot-defining fields so that uploads in different kinds/themes/languages
     # do not collide, while a re-upload of the same deleted artwork for the same slot
     # can still resurrect the original row.
-    # When force=True, add a random salt so a forced duplicate gets its own unique ID.
     id_components = ":".join([
         str(tmdb_id),
         creator_id,
@@ -600,7 +599,6 @@ async def admin_upload_poster(
         theme_id or "",
         language or "",
         full_hash,
-        os.urandom(4).hex() if force_flag else "",
     ])
     local_id = "pst_" + hashlib.sha256(id_components.encode("utf-8")).hexdigest()[:8]
     poster_id = f"op:v1:{node_id}:{local_id}"
@@ -611,28 +609,37 @@ async def admin_upload_poster(
     now = _now_rfc3339()
 
     async with request.app.state.Session() as session:
-        # Semantic duplicate check: same creator, same artwork slot, same file content.
-        # Artwork slot includes kind/theme/language and the relevant media hierarchy fields,
-        # so a poster upload is not incorrectly blocked by the same image being used for a
-        # different slot.
-        if not force_flag:
-            dup_stmt = _select(Poster).where(
-                Poster.creator_id == creator_id,
-                Poster.media_type == media_type,
-                Poster.kind == kind,
-                Poster.tmdb_id == tmdb_id,
-                Poster.show_tmdb_id == show_tmdb_id,
-                Poster.collection_tmdb_id == collection_tmdb_id,
-                Poster.theme_id == theme_id,
-                Poster.language == language,
-                Poster.full_hash == full_hash,
-                Poster.deleted_at.is_(None),
-            )
-            dup_stmt = dup_stmt.where(Poster.season_number == season_number)
-            dup_stmt = dup_stmt.where(Poster.episode_number == episode_number)
-            existing = (await session.execute(dup_stmt)).scalars().first()
-            if existing is not None:
-                raise http_error(409, "invalid_request", "poster_id conflict")
+        # Idempotent upsert: if a non-deleted poster already exists for this exact
+        # slot + file content, update its mutable metadata and return its ID.
+        # This prevents ghost duplicates (previously created by a "force" upload path)
+        # and makes re-uploading after deletion work cleanly via the resurrection path below.
+        dup_stmt = _select(Poster).where(
+            Poster.creator_id == creator_id,
+            Poster.media_type == media_type,
+            Poster.kind == kind,
+            Poster.tmdb_id == tmdb_id,
+            Poster.show_tmdb_id == show_tmdb_id,
+            Poster.collection_tmdb_id == collection_tmdb_id,
+            Poster.theme_id == theme_id,
+            Poster.language == language,
+            Poster.full_hash == full_hash,
+            Poster.deleted_at.is_(None),
+        )
+        dup_stmt = dup_stmt.where(Poster.season_number == season_number)
+        dup_stmt = dup_stmt.where(Poster.episode_number == episode_number)
+        existing = (await session.execute(dup_stmt)).scalars().first()
+        if existing is not None:
+            existing.title = title
+            existing.year = year
+            existing.creator_display_name = creator_display_name
+            existing.creator_home_node = cfg.base_url or str(request.base_url).rstrip("/")
+            existing.attribution_license = attribution_license
+            existing.attribution_redistribution = attribution_redistribution
+            existing.links_json = None if not links_json else links_json
+            existing.published = published
+            existing.updated_at = now
+            await session.commit()
+            return {"ok": True, "poster_id": existing.poster_id}
 
         # Enforce links point to other posters by same creator.
         if links_value:

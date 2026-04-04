@@ -134,7 +134,6 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
   const [searching, setSearching] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [duplicateWarning, setDuplicateWarning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Apply pre-fill when drawer opens
@@ -159,7 +158,6 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
     setStatus(null);
     setUploading(false);
     setPublished(false);
-    setDuplicateWarning(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -206,11 +204,10 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
     setPreviewUrl(f ? URL.createObjectURL(f) : null);
   }
 
-  async function handleUpload(force = false) {
+  async function handleUpload() {
     if (!conn || !fullFile) return;
     setUploading(true);
     setStatus(t("uploading"));
-    setDuplicateWarning(false);
 
     try {
       let preview: File;
@@ -238,7 +235,6 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
       fd.set("attribution_redistribution", redistribution);
       fd.set("attribution_license", license);
       fd.set("published", String(published));
-      if (force) fd.set("force", "true");
       fd.set("preview", preview);
       fd.set("full", fullFile);
 
@@ -256,12 +252,7 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
 
       const json = await r.json().catch(() => null);
       if (!r.ok) {
-        if (r.status === 409) {
-          setDuplicateWarning(true);
-          setStatus(null);
-        } else {
-          setStatus(t("uploadFailed", { status: String(r.status), details: JSON.stringify(json) }));
-        }
+        setStatus(t("uploadFailed", { status: String(r.status), details: JSON.stringify(json) }));
         return;
       }
 
@@ -501,19 +492,6 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
               </Stack>
             </Stack>
 
-            {duplicateWarning && (
-              <Alert
-                severity="warning"
-                action={
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Button size="small" color="inherit" onClick={() => setDuplicateWarning(false)}>Cancel</Button>
-                    <Button size="small" color="inherit" variant="outlined" onClick={() => void handleUpload(true)}>Upload anyway</Button>
-                  </Stack>
-                }
-              >
-                This looks like artwork you&apos;ve already uploaded. Upload a duplicate anyway?
-              </Alert>
-            )}
             {status && (
               <Alert severity={status.includes("ailed") ? "error" : "info"}>{status}</Alert>
             )}
