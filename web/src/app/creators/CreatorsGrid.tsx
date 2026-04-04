@@ -63,14 +63,6 @@ export default function CreatorsGrid({ creators }: { creators: Creator[] }) {
                   {t("viewCreator")}
                 </Typography>
               </Link>
-              <Link
-                href={`/browse?creator_id=${encodeURIComponent(c.creator_id)}`}
-                style={{ textDecoration: "none" }}
-              >
-                <Typography variant="body2" sx={{ px: 1 }}>
-                  {t("browsePosters")}
-                </Typography>
-              </Link>
             </CardActions>
           </Card>
         ))}

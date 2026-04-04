@@ -29,7 +29,6 @@
   },
   "nav": {
     "openPoster": "OpenPoster",
-    "posters": "Posters",
     "creators": "Creators",
     "myMedia": "My Media",
     "studio": "Studio",
@@ -47,18 +46,6 @@
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
     "syncInProgress": "Syncing library\u2026"
-  },
-  "quickSearch": {
-    "placeholder": "Quick search posters\u2026",
-    "ariaLabel": "Quick search posters",
-    "search": "Search",
-    "clear": "Clear"
-  },
-  "browse": {
-    "title": "Posters",
-    "searchPlaceholder": "Search title or TMDB ID\u2026",
-    "searchAriaLabel": "Search title or TMDB ID",
-    "creatorLabel": "Creator"
   },
   "posterCard": {
     "boxSet": "BOX SET",
@@ -112,10 +99,8 @@
     "totalPosters": "Total posters",
     "nodesOnline": "Nodes online",
     "quickLinks": "Quick links",
-    "browsePosters": "Browse posters",
     "creatorOnboarding": "Creator onboarding",
     "searchPosters": "Search posters",
-    "browse": "Browse",
     "searchHint": "Search by TMDB id or title keyword (MVP substring match on indexed titles).",
     "titleContains": "Title contains",
     "mediaType": "Media type",
@@ -123,7 +108,6 @@
     "tmdbId": "TMDB id",
     "resultCount": "{count} result(s)",
     "recentUploads": "Recent uploads",
-    "browseAll": "Browse all",
     "noRecentPosters": "No recent posters.",
     "indexerNodeStatus": "Indexer node status",
     "url": "URL",
@@ -296,8 +280,7 @@
     "findCreator": "Find a creator",
     "searchPlaceholder": "Search creator names\u2026",
     "posterCount": "{count} poster(s)",
-    "viewCreator": "View creator \u2192",
-    "browsePosters": "Browse posters \u2192"
+    "viewCreator": "View creator \u2192"
   },
   "poster": {
     "title": "Poster",
@@ -311,7 +294,6 @@
     "backdropForSeason": "BACKDROP FOR SEASON {season}",
     "backdropForShow": "BACKDROP FOR SHOW",
     "backdropForMovie": "BACKDROP FOR MOVIE",
-    "backToPosters": "Back to posters",
     "tmdbIdLabel": "TMDB ID",
     "creatorLabel": "Creator",
     "artworkIdLabel": "Artwork ID",

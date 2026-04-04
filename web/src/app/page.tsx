@@ -202,9 +202,6 @@ export default function Home() {
                   {t("quickLinks")}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  <Link href="/browse">{t("browsePosters")}</Link>
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
                   <Link href="/onboarding">{t("creatorOnboarding")}</Link>
                 </Typography>
               </Box>
@@ -220,9 +217,6 @@ export default function Home() {
               <Typography variant="h6" sx={{ fontWeight: 800 }}>
                 {t("searchPosters")}
               </Typography>
-              <Button component={Link} href="/browse" variant="outlined" size="small">
-                {t("browse")}
-              </Button>
             </Stack>
 
             <Typography variant="body2" color="text.secondary">
@@ -268,9 +262,6 @@ export default function Home() {
               <Typography variant="h6" sx={{ fontWeight: 800 }}>
                 {t("recentUploads")}
               </Typography>
-              <Button component={Link} href="/browse" variant="outlined" size="small">
-                {t("browseAll")}
-              </Button>
             </Stack>
 
             {recent ? (

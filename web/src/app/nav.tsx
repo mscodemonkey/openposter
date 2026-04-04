@@ -31,7 +31,6 @@ import { fetchSyncStatus } from "@/lib/media-server";
 import OPLogo from "@/components/OPLogo";
 
 const NAV_ITEMS = [
-  { key: "posters",   href: "/browse" },
   { key: "creators",  href: "/creators" },
   { key: "myMedia",   href: "/my-media" },
   { key: "studio",    href: "/studio" },

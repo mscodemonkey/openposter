@@ -321,9 +321,6 @@ export default function PosterView({
               </Typography>
             </Box>
 
-            <Button component={Link} href="/browse" variant="outlined">
-              {t("backToPosters")}
-            </Button>
           </Stack>
 
           <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-start">

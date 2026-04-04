@@ -288,7 +288,7 @@ export default function OnboardingPage() {
                     } catch {
                       // ignore
                     }
-                    window.location.href = "/browse";
+                    window.location.href = "/";
                   }}
                 >
                   {t("justBrowsing")}
