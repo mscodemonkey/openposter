@@ -1,4 +1,7 @@
-# OpenPoster — full-stack dev compose
+# OpenPoster — canonical dev compose (repo root)
+#
+# This is the single compose file for the whole stack.
+# The old reference-node/compose.multi.yml is superseded by this file.
 #
 # Services:
 #   node-a    :8081  — creator node (Studio / upload)
@@ -30,11 +33,18 @@ services:
       OPENPOSTER_NODE_NAME: "Node A (Creator)"
       OPENPOSTER_OPERATOR_NAME: "OpenPoster Dev"
       OPENPOSTER_OPERATOR_CONTACT: "mailto:dev@openposter.local"
+      OPENPOSTER_ADMIN_TOKEN: "dev-admin"
       OPENPOSTER_ALLOW_PRIVATE_NODES: "true"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
     volumes:
       - node-a-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   # ── Node B (consumer) ─────────────────────────────────────────────────────
   node-b:
@@ -47,11 +57,18 @@ services:
       OPENPOSTER_NODE_NAME: "Node B (Consumer)"
       OPENPOSTER_OPERATOR_NAME: "OpenPoster Dev"
       OPENPOSTER_OPERATOR_CONTACT: "mailto:dev@openposter.local"
+      OPENPOSTER_ADMIN_TOKEN: "dev-admin"
       OPENPOSTER_ALLOW_PRIVATE_NODES: "true"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
     volumes:
       - node-b-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   # ── Indexer ───────────────────────────────────────────────────────────────
   indexer:
@@ -60,9 +77,20 @@ services:
       - "8090:8090"
     environment:
       PORT: "8090"
+      # Seed from Node A via Docker internal network so the indexer can crawl it
+      OPENPOSTER_INDEXER_SEEDS: "http://node-a:8080"
+      OPENPOSTER_INDEXER_POLL_SECONDS: "10"
     volumes:
       - indexer-data:/data
+    depends_on:
+      node-a:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/v1/health').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   # ── Issuer ────────────────────────────────────────────────────────────────
   issuer:
@@ -78,6 +106,11 @@ services:
     volumes:
       - issuer-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8085/v1/health').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   # ── Web UI (Studio + My Media) ────────────────────────────────────────────
   web:
@@ -85,15 +118,21 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # These are browser-visible — use localhost so client-side fetches work
+      # NEXT_PUBLIC_ vars are browser-visible — must use localhost so client fetches work
       NEXT_PUBLIC_INDEXER_BASE_URL: "http://localhost:8090"
       NEXT_PUBLIC_ISSUER_BASE_URL: "http://localhost:8085"
+      # Server-side vars use Docker internal DNS for server component fetches
+      INDEXER_BASE_URL: "http://indexer:8090"
+      ISSUER_BASE_URL: "http://issuer:8085"
       TMDB_READ_ACCESS_TOKEN: "${TMDB_READ_ACCESS_TOKEN}"
       NEXT_TELEMETRY_DISABLED: "1"
     depends_on:
-      - node-a
-      - indexer
-      - issuer
+      node-a:
+        condition: service_healthy
+      indexer:
+        condition: service_healthy
+      issuer:
+        condition: service_healthy
     restart: unless-stopped
 
   # ── Diagnostics UI ────────────────────────────────────────────────────────
@@ -104,10 +143,14 @@ services:
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
     depends_on:
-      - node-a
-      - node-b
-      - indexer
-      - issuer
+      node-a:
+        condition: service_healthy
+      node-b:
+        condition: service_healthy
+      indexer:
+        condition: service_healthy
+      issuer:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
