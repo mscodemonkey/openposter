@@ -8,7 +8,8 @@
 #   node-b    :8082  — consumer node (My Media / Plex)
 #   indexer   :8090  — crawls nodes, powers search
 #   issuer    :8085  — identity, creator handles, node directory
-#   web       :3000  — Studio + My Media UI
+#   web       :3000  — Web UI pointed at Node A (creator)
+#   web-b     :3002  — Web UI pointed at Node B (consumer testing)
 #   diag      :3001  — Diagnostics UI
 #
 # First-time setup:
@@ -59,7 +60,7 @@ services:
       OPENPOSTER_OPERATOR_CONTACT: "mailto:dev@openposter.local"
       OPENPOSTER_ADMIN_TOKEN: "dev-admin"
       OPENPOSTER_ALLOW_PRIVATE_NODES: "true"
-      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
     volumes:
       - node-b-data:/data
@@ -128,6 +129,27 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
     depends_on:
       node-a:
+        condition: service_healthy
+      indexer:
+        condition: service_healthy
+      issuer:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Web UI B (consumer testing — Node B) ─────────────────────────────────
+  web-b:
+    build: ./web
+    ports:
+      - "3002:3000"
+    environment:
+      NEXT_PUBLIC_INDEXER_BASE_URL: "http://localhost:8090"
+      NEXT_PUBLIC_ISSUER_BASE_URL: "http://localhost:8085"
+      INDEXER_BASE_URL: "http://indexer:8090"
+      ISSUER_BASE_URL: "http://issuer:8085"
+      TMDB_READ_ACCESS_TOKEN: "${TMDB_READ_ACCESS_TOKEN}"
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      node-b:
         condition: service_healthy
       indexer:
         condition: service_healthy
