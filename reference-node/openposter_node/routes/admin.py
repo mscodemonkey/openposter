@@ -629,13 +629,11 @@ async def admin_upload_poster(
         dup_stmt = dup_stmt.where(Poster.episode_number == episode_number)
         existing = (await session.execute(dup_stmt)).scalars().first()
         if existing is not None:
-            existing.title = title
-            existing.year = year
-            existing.creator_display_name = creator_display_name
-            existing.creator_home_node = cfg.base_url or str(request.base_url).rstrip("/")
+            # Only update fields the uploader legitimately controls.
+            # Title/year come from TMDB (not user input), links have their own endpoint,
+            # and slot fields are fixed by definition (they're in the match criteria).
             existing.attribution_license = attribution_license
             existing.attribution_redistribution = attribution_redistribution
-            existing.links_json = None if not links_json else links_json
             existing.published = published
             existing.updated_at = now
             await session.commit()
