@@ -44,7 +44,11 @@ async def changes(
     session_maker = request.app.state.Session
 
     async with session_maker() as session:
-        stmt = select(Poster)
+        # Only expose published posters (or deleted ones so indexers can remove them).
+        # Unpublished drafts must never leave the node via public endpoints.
+        stmt = select(Poster).where(
+            Poster.published.is_(True) | Poster.deleted_at.isnot(None)
+        )
 
         if since_updated_at:
             # (updated_at, poster_id) > (since_updated_at, since_poster_id)

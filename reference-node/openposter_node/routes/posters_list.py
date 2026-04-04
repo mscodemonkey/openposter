@@ -46,7 +46,7 @@ async def list_posters(
 
     session_maker = request.app.state.Session
     async with session_maker() as session:
-        stmt = select(Poster).where(Poster.deleted_at.is_(None))
+        stmt = select(Poster).where(Poster.deleted_at.is_(None), Poster.published.is_(True))
         if creator_id:
             stmt = stmt.where(Poster.creator_id == creator_id)
         if kind:
