@@ -64,6 +64,8 @@ export default function NodePanel({ config, onEvent }: Props) {
   const seenApplied = useRef<Set<string>>(new Set());
   // ISO timestamp of last seen indexed item
   const lastIndexedAt = useRef<string | null>(null);
+  // Cache of poster_id → {title, creator} to enrich events
+  const posterCache = useRef<Map<string, { title: string | null; creator: string | null }>>(new Map());
 
   const isConfigured = Boolean(url);
 
@@ -113,6 +115,24 @@ export default function NodePanel({ config, onEvent }: Props) {
     }
   }, [url, adminToken]);
 
+  const fetchAndCache = useCallback(async (posterId: string) => {
+    if (posterCache.current.has(posterId)) return;
+    try {
+      const r = await fetch(`${url}/v1/posters/${posterId}`, { signal: AbortSignal.timeout(3000) });
+      if (r.ok) {
+        const p = await r.json() as { media?: { title?: string }; creator?: { display_name?: string } };
+        posterCache.current.set(posterId, {
+          title: p.media?.title ?? null,
+          creator: p.creator?.display_name ?? null,
+        });
+      } else {
+        posterCache.current.set(posterId, { title: null, creator: null });
+      }
+    } catch {
+      // ignore — cache miss is fine
+    }
+  }, [url]);
+
   const pollEvents = useCallback(async () => {
     if (!url || !adminToken) return;
     const newEvents: DiagEvent[] = [];
@@ -126,15 +146,19 @@ export default function NodePanel({ config, onEvent }: Props) {
       if (r.ok) {
         const j = await r.json() as { changes: Array<{ poster_id: string; kind: string; changed_at: string }>; next_since: string | null };
         if (j.next_since) changeCursor.current = j.next_since;
+        // Pre-fetch details for upserts (published posters) in parallel
+        const upsertIds = j.changes.filter(c => c.kind !== "delete").map(c => c.poster_id);
+        await Promise.all(upsertIds.map(id => fetchAndCache(id)));
         for (const c of j.changes) {
           const type = c.kind === "delete" ? "delete" : "upload";
+          const cached = posterCache.current.get(c.poster_id);
           newEvents.push({
             id: makeEventId(type, label, c.poster_id, c.changed_at),
             type,
             service: label,
             posterId: c.poster_id,
-            title: null,
-            detail: null,
+            title: cached?.title ?? null,
+            detail: cached?.creator ? `by ${cached.creator}` : null,
             at: c.changed_at,
           });
         }
@@ -156,13 +180,15 @@ export default function NodePanel({ config, onEvent }: Props) {
             seenApplied.current.add(item.media_item_id);
             // Only emit as an event if we've been running for a bit (skip initial load)
             if (lastIndexedAt.current !== null) {
+              await fetchAndCache(item.poster_id);
+              const cached = posterCache.current.get(item.poster_id);
               newEvents.push({
                 id: makeEventId("applied", label, item.poster_id, item.applied_at),
                 type: "applied",
                 service: label,
                 posterId: item.poster_id,
-                title: null,
-                detail: `Applied to ${item.media_type} item`,
+                title: cached?.title ?? null,
+                detail: `Applied to ${item.media_type} item${cached?.creator ? ` — by ${cached.creator}` : ""}`,
                 at: item.applied_at,
               });
             }
@@ -176,7 +202,7 @@ export default function NodePanel({ config, onEvent }: Props) {
     }
 
     if (newEvents.length > 0) onEvent(newEvents);
-  }, [url, adminToken, label, onEvent]);
+  }, [url, adminToken, label, onEvent, fetchAndCache]);
 
   // Health + info polling
   useEffect(() => {

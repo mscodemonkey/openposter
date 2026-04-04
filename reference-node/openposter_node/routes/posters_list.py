@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from ..crypto.signing import sign_poster_entry
 from ..db import Poster
+from .admin import _require_admin
 
 router = APIRouter()
 
@@ -33,11 +34,16 @@ async def list_posters(
     cursor: str | None = Query(None),
     creator_id: str | None = Query(None),
     kind: str | None = Query(None),
+    include_drafts: bool = Query(False),
 ):
     """List posters on this node.
 
     This is primarily for creator tooling and indexers.
+    Pass include_drafts=true with a valid admin token to include draft (unpublished) posters.
     """
+
+    if include_drafts:
+        await _require_admin(request)
 
     cfg = request.app.state.cfg
 
@@ -46,7 +52,10 @@ async def list_posters(
 
     session_maker = request.app.state.Session
     async with session_maker() as session:
-        stmt = select(Poster).where(Poster.deleted_at.is_(None), Poster.published.is_(True))
+        if include_drafts:
+            stmt = select(Poster).where(Poster.deleted_at.is_(None))
+        else:
+            stmt = select(Poster).where(Poster.deleted_at.is_(None), Poster.published.is_(True))
         if creator_id:
             stmt = stmt.where(Poster.creator_id == creator_id)
         if kind:

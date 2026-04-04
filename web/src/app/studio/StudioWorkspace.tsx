@@ -2289,7 +2289,7 @@ export default function StudioWorkspace() {
 
     try {
       // Load all posters from node
-      const postersRes = await fetch(`${c.nodeUrl}/v1/posters?limit=200`, {
+      const postersRes = await fetch(`${c.nodeUrl}/v1/posters?limit=200&include_drafts=true`, {
         headers: { Authorization: `Bearer ${c.adminToken}` },
       });
       const postersJson = postersRes.ok ? (await postersRes.json()) as { results: PosterEntry[] } : { results: [] };
