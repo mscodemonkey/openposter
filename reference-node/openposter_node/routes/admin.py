@@ -583,17 +583,22 @@ async def admin_upload_poster(
     preview_hash, preview_bytes, preview_mime = await _save_upload_to_blob(cfg.data_dir, preview)
     full_hash, full_bytes, full_mime = await _save_upload_to_blob(cfg.data_dir, full)
 
-    # Local id derived from content + metadata; stable-ish.
-    # Include media_type, season_number, episode_number so that e.g. a backdrop
-    # and a poster for the same show (same file, tmdb_id, creator) get distinct IDs.
+    # Local id derived from content + slot metadata.
+    # Include slot-defining fields so that uploads in different kinds/themes/languages
+    # do not collide, while a re-upload of the same deleted artwork for the same slot
+    # can still resurrect the original row.
     # When force=True, add a random salt so a forced duplicate gets its own unique ID.
     id_components = ":".join([
         str(tmdb_id),
         creator_id,
         media_type,
         kind,
+        str(show_tmdb_id) if show_tmdb_id is not None else "",
         str(season_number) if season_number is not None else "",
         str(episode_number) if episode_number is not None else "",
+        str(collection_tmdb_id) if collection_tmdb_id is not None else "",
+        theme_id or "",
+        language or "",
         full_hash,
         os.urandom(4).hex() if force_flag else "",
     ])
@@ -606,22 +611,25 @@ async def admin_upload_poster(
     now = _now_rfc3339()
 
     async with request.app.state.Session() as session:
-        # Semantic duplicate check: same creator, media type, TMDB id, and file content.
-        # This is robust against ID-formula changes — the old hash-based ID check would
-        # produce false conflicts (cross-type uploads with the same file) or miss duplicates
-        # (old IDs vs new formula).
+        # Semantic duplicate check: same creator, same artwork slot, same file content.
+        # Artwork slot includes kind/theme/language and the relevant media hierarchy fields,
+        # so a poster upload is not incorrectly blocked by the same image being used for a
+        # different slot.
         if not force_flag:
             dup_stmt = _select(Poster).where(
                 Poster.creator_id == creator_id,
                 Poster.media_type == media_type,
+                Poster.kind == kind,
                 Poster.tmdb_id == tmdb_id,
+                Poster.show_tmdb_id == show_tmdb_id,
+                Poster.collection_tmdb_id == collection_tmdb_id,
+                Poster.theme_id == theme_id,
+                Poster.language == language,
                 Poster.full_hash == full_hash,
                 Poster.deleted_at.is_(None),
             )
-            if season_number is not None:
-                dup_stmt = dup_stmt.where(Poster.season_number == season_number)
-            if episode_number is not None:
-                dup_stmt = dup_stmt.where(Poster.episode_number == episode_number)
+            dup_stmt = dup_stmt.where(Poster.season_number == season_number)
+            dup_stmt = dup_stmt.where(Poster.episode_number == episode_number)
             existing = (await session.execute(dup_stmt)).scalars().first()
             if existing is not None:
                 raise http_error(409, "invalid_request", "poster_id conflict")
