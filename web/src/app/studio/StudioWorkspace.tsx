@@ -23,7 +23,6 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Checkbox from "@mui/material/Checkbox";
-import Chip from "@mui/material/Chip";
 import Container from "@mui/material/Container";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -569,24 +568,29 @@ function StudioMoviePlaceholder({ tmdbData, movieTmdbId, cleanTitle, year, aspec
   const t = useTranslations("studio");
   const tp = useTranslations("posterCard");
 
-  const [asyncImgUrl, setAsyncImgUrl] = useState<string | null>(null);
-  const [asyncSource, setAsyncSource] = useState<"THEMOVIEDB.ORG" | "FANART.TV" | null>(null);
+  type AsyncPlaceholderResult = { key: string; url: string | null; source: "THEMOVIEDB.ORG" | "FANART.TV" | null };
+  const [asyncResult, setAsyncResult] = useState<AsyncPlaceholderResult | null>(null);
+
+  // Compute request key — null means no async fetch needed for this kind
+  const requestKey =
+    uploadKind === "logo" ? `logo:${movieTmdbId}`
+    : uploadKind === "square" ? `square:${movieTmdbId}`
+    : null;
 
   useEffect(() => {
-    setAsyncImgUrl(null);
-    setAsyncSource(null);
+    if (!requestKey) return;
     let cancelled = false;
     if (uploadKind === "logo") {
-      cachedFetch(`logo:${movieTmdbId}`, () => fetchMovieLogo(movieTmdbId)).then((url) => {
-        if (!cancelled && url) { setAsyncImgUrl(url); setAsyncSource("THEMOVIEDB.ORG"); }
+      void cachedFetch(requestKey, () => fetchMovieLogo(movieTmdbId)).then((url) => {
+        if (!cancelled) setAsyncResult({ key: requestKey, url: url ?? null, source: url ? "THEMOVIEDB.ORG" : null });
       });
     } else if (uploadKind === "square") {
-      cachedFetch(`square:${movieTmdbId}`, () => fetchMovieSquare(movieTmdbId)).then((url) => {
-        if (!cancelled && url) { setAsyncImgUrl(url); setAsyncSource("FANART.TV"); }
+      void cachedFetch(requestKey, () => fetchMovieSquare(movieTmdbId)).then((url) => {
+        if (!cancelled) setAsyncResult({ key: requestKey, url: url ?? null, source: url ? "FANART.TV" : null });
       });
     }
     return () => { cancelled = true; };
-  }, [movieTmdbId, uploadKind]);
+  }, [requestKey, movieTmdbId, uploadKind]);
 
   const chipLabel = uploadKind === "square" ? tp("square")
     : uploadKind === "logo" ? tp("logo")
@@ -597,9 +601,11 @@ function StudioMoviePlaceholder({ tmdbData, movieTmdbId, cleanTitle, year, aspec
   const isTransparent = uploadKind === "logo" || uploadKind === "square";
   const rawImgPath = uploadType === "backdrop" ? tmdbData?.backdrop_path : tmdbData?.poster_path;
   const syncImgUrl = isTransparent || !rawImgPath ? null : tmdbImageUrl(rawImgPath);
-  const imgUrl = asyncImgUrl ?? syncImgUrl;
+  // Treat async result as stale if its key doesn't match current request — avoids synchronous reset in effect
+  const resolvedAsync = asyncResult?.key === requestKey ? asyncResult : null;
+  const imgUrl = (resolvedAsync?.url) ?? syncImgUrl;
   const placeholderSource: "THEMOVIEDB.ORG" | "FANART.TV" | null =
-    asyncSource ?? (syncImgUrl ? "THEMOVIEDB.ORG" : null);
+    (resolvedAsync?.source) ?? (syncImgUrl ? "THEMOVIEDB.ORG" : null);
 
   return (
     <ArtworkCardFrame
@@ -641,8 +647,13 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
   const locale = useLocale();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [tmdbEpisodes, setTmdbEpisodes] = useState<TmdbEpisode[]>([]);
-  const [episodesState, setEpisodesState] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  type EpisodeResult = { key: string; episodes: TmdbEpisode[]; status: "ok" | "error" };
+  const [episodeResult, setEpisodeResult] = useState<EpisodeResult | null>(null);
+
+  const episodesRequestKey = `${showTmdbId}:${seasonNumber}`;
+  // Derive loading: result hasn't resolved for the current request key yet
+  const episodesLoading = episodeResult?.key !== episodesRequestKey;
+  const tmdbEpisodes = episodeResult?.key === episodesRequestKey ? episodeResult.episodes : [];
 
   const tmdbSeason = (tmdbData?.seasons ?? []).find((s) => s.season_number === seasonNumber);
 
@@ -657,11 +668,16 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
   const epPostersForSeason = [...uploadedEpisodePosters.values()];
 
   useEffect(() => {
-    setEpisodesState("loading");
+    let cancelled = false;
     fetchTmdbTvSeason(showTmdbId, seasonNumber)
-      .then((data) => { setTmdbEpisodes(data?.episodes ?? []); setEpisodesState("ok"); })
-      .catch(() => setEpisodesState("error"));
-  }, [showTmdbId, seasonNumber]);
+      .then((data) => {
+        if (!cancelled) setEpisodeResult({ key: episodesRequestKey, episodes: data?.episodes ?? [], status: "ok" });
+      })
+      .catch(() => {
+        if (!cancelled) setEpisodeResult({ key: episodesRequestKey, episodes: [], status: "error" });
+      });
+    return () => { cancelled = true; };
+  }, [showTmdbId, seasonNumber, episodesRequestKey]);
 
   function toggleSelect(posterId: string) {
     setSelected((prev) => { const next = new Set(prev); next.has(posterId) ? next.delete(posterId) : next.add(posterId); return next; });
@@ -717,7 +733,7 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
 
   return (
     <Stack spacing={3}>
-      {episodesState === "loading" && (
+      {episodesLoading && (
         <Typography variant="caption" color="text.disabled">{t("loadingEpisodes")}</Typography>
       )}
       {(tmdbEpisodes.length > 0 || epPostersForSeason.length > 0) && (
@@ -813,14 +829,19 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks,
   const [confirmDelete, setConfirmDelete] = useState(false);
   const showYear = tmdbData?.first_air_date?.slice(0, 4) ?? undefined;
 
-  const [tvLogoUrl, setTvLogoUrl] = useState<string | null>(null);
-  const [tvSquareUrl, setTvSquareUrl] = useState<string | null>(null);
+  type TvAsyncArt = { key: number; logoUrl: string | null; squareUrl: string | null };
+  const [tvAsyncArt, setTvAsyncArt] = useState<TvAsyncArt | null>(null);
+  // Treat as stale if key doesn't match — avoids synchronous reset in effect
+  const tvLogoUrl = tvAsyncArt?.key === showTmdbId ? tvAsyncArt.logoUrl : null;
+  const tvSquareUrl = tvAsyncArt?.key === showTmdbId ? tvAsyncArt.squareUrl : null;
   useEffect(() => {
-    setTvLogoUrl(null);
-    setTvSquareUrl(null);
     let cancelled = false;
-    fetchTvLogo(showTmdbId).then((url) => { if (!cancelled && url) setTvLogoUrl(url); });
-    fetchTvSquare(showTmdbId).then((url) => { if (!cancelled && url) setTvSquareUrl(url); });
+    Promise.all([
+      fetchTvLogo(showTmdbId),
+      fetchTvSquare(showTmdbId),
+    ]).then(([logo, square]) => {
+      if (!cancelled) setTvAsyncArt({ key: showTmdbId, logoUrl: logo ?? null, squareUrl: square ?? null });
+    });
     return () => { cancelled = true; };
   }, [showTmdbId]);
 
