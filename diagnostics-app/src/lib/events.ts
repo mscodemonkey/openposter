@@ -24,6 +24,6 @@ export function mergeEvents(existing: DiagEvent[], incoming: DiagEvent[], cap = 
     }
   }
   // Sort descending by timestamp, cap at `cap`
-  next.sort((a, b) => b.at.localeCompare(a.at));
+  next.sort((a, b) => (b.at ?? "").localeCompare(a.at ?? ""));
   return next.slice(0, cap);
 }

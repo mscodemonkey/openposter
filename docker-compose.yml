@@ -81,6 +81,7 @@ services:
       # Seed from Node A via Docker internal network so the indexer can crawl it
       OPENPOSTER_INDEXER_SEEDS: "http://node-a:8080"
       OPENPOSTER_INDEXER_POLL_SECONDS: "10"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
     volumes:
       - indexer-data:/data
     depends_on:
@@ -104,6 +105,7 @@ services:
       OPENPOSTER_ISSUER_JWT_ISSUER: "openposter-issuer"
       OPENPOSTER_ISSUER_JWT_EXP_SECONDS: "31536000"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
     volumes:
       - issuer-data:/data
     restart: unless-stopped
