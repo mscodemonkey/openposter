@@ -14,7 +14,6 @@ import UploadIcon from "@mui/icons-material/Upload";
 
 import AltArtworkDrawer from "@/components/AltArtworkDrawer";
 import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
-import CardTitleStrip from "@/components/CardTitleStrip";
 import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
 import CreatorSubscriptionToolbarAction from "./CreatorSubscriptionToolbarAction";
 import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
@@ -27,7 +26,7 @@ import { getTrackedArtwork, fetchPosterFromNode, untrackArtwork } from "@/lib/ar
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
 import { thumbUrl, artUrl, logoUrl, squareUrl } from "@/lib/media-server";
 import type { MediaItem } from "@/lib/media-server";
-import { POSTER_GRID_COLS, BACKDROP_GRID_COLS, CHIP_HEIGHT } from "@/lib/grid-sizes";
+import { POSTER_GRID_COLS, BACKDROP_GRID_COLS } from "@/lib/grid-sizes";
 
 // ─── MovieMediaDetail ─────────────────────────────────────────────────────────
 
@@ -39,6 +38,7 @@ interface MovieMediaDetailProps {
 
 export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaDetailProps) {
   const t = useTranslations("myMedia");
+  const artworkCardMaxWidth = "var(--op-backdrop-width, 340px)";
 
   // ── Drawer ────────────────────────────────────────────────────────────────
   const [drawerMode, setDrawerMode] = useState<"poster" | "backdrop" | "square" | "logo">("poster");
@@ -366,188 +366,195 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
       <Box sx={{ position: "relative", zIndex: 1 }}>
 
 
-        {/* ── Posters section ──────────────────────────────────────────── */}
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          {t("poster")}
-        </Typography>
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 3,
+            alignItems: "start",
+            justifyContent: { xs: "stretch", lg: "flex-start" },
+            mb: 4,
+          }}
+        >
+          <Box sx={{ flex: `0 1 ${artworkCardMaxWidth}`, width: { xs: "100%", sm: artworkCardMaxWidth }, maxWidth: "100%" }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              {t("poster")}
+            </Typography>
+            <MediaCard
+              image={failedThumb ? null : posterSrc}
+              alt={item.title}
+              title={item.title}
+              subtitle={item.year ? String(item.year) : undefined}
+              aspectRatio="2 / 3"
+              selected={posterSelected}
+              resetting={isPosterResetting}
+              imageFailed={failedThumb}
+              onImageError={() => setFailedThumb(true)}
+              onClick={() => { setPosterSelected(true); setBackdropSelected(false); }}
+              onClose={() => setPosterSelected(false)}
+              tooltip={t("tooltipViewAltArtwork")}
+              creatorName={trackedItem?.creator_display_name}
+              badge={<ArtworkSourceBadge source={trackedItem ? "openposter" : failedThumb ? null : "plex"} creatorName={trackedItem?.creator_display_name} mediaServer={serverName} />}
+              chip={<CardChip label="MOVIE" color="success" />}
+              overlayChip={<CardChip label="POSTER" color="warning" />}
+              overlay={
+                <MediaCardOverlay title={item.title} subtitle={item.year ? String(item.year) : ""}>
+                  <CreatorSubscriptionToolbarAction
+                    creatorId={trackedItem?.creator_id}
+                    isSubscribed={isPosterCreatorSubscribed}
+                    disabled={!trackedItem}
+                    onToggle={handlePosterCreatorSubscribe}
+                    onAfterToggle={() => setTimeout(() => setPosterSelected(false), 500)}
+                  />
+                  <ToolbarButton
+                    icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                    disabled={!trackedItem}
+                    tooltip={t("tooltipResetToDefault")}
+                    onClick={(e) => { e.stopPropagation(); setPosterSelected(false); handleReset(); }}
+                  />
+                  <ToolbarButton
+                    icon={<UploadIcon fontSize="small" />}
+                    tooltip={t("tooltipUploadOwnPoster")}
+                    onClick={(e) => { e.stopPropagation(); setPosterSelected(false); }}
+                  />
+                  <ToolbarButton
+                    icon={<PhotoLibraryIcon fontSize="small" />}
+                    tooltip={t("tooltipSelectPoster")}
+                    onClick={(e) => { e.stopPropagation(); setPosterSelected(false); openDrawer("poster"); }}
+                  />
+                </MediaCardOverlay>
+              }
+            />
+          </Box>
 
-        <Box sx={{ width: "var(--op-backdrop-width, 340px)", mb: 5 }}>
-          <MediaCard
-            image={failedThumb ? null : posterSrc}
-            alt={item.title}
-            aspectRatio="2 / 3"
-            selected={posterSelected}
-            resetting={isPosterResetting}
-            imageFailed={failedThumb}
-            onImageError={() => setFailedThumb(true)}
-            onClick={() => { setPosterSelected(true); setBackdropSelected(false); }}
-            onClose={() => setPosterSelected(false)}
-            tooltip={t("tooltipViewAltArtwork")}
-            creatorName={trackedItem?.creator_display_name}
-            badge={<ArtworkSourceBadge source={trackedItem ? "openposter" : failedThumb ? null : "plex"} creatorName={trackedItem?.creator_display_name} mediaServer={serverName} />}
-            chip={<CardChip label="MOVIE" color="success" />}
-            overlayChip={<CardChip label="POSTER" color="warning" />}
-            overlay={
-              <MediaCardOverlay title={item.title} subtitle={item.year ? String(item.year) : ""}>
-                <CreatorSubscriptionToolbarAction
-                  creatorId={trackedItem?.creator_id}
-                  isSubscribed={isPosterCreatorSubscribed}
-                  disabled={!trackedItem}
-                  onToggle={handlePosterCreatorSubscribe}
-                  onAfterToggle={() => setTimeout(() => setPosterSelected(false), 500)}
-                />
-                <ToolbarButton
-                  icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
-                  disabled={!trackedItem}
-                  tooltip={t("tooltipResetToDefault")}
-                  onClick={(e) => { e.stopPropagation(); setPosterSelected(false); handleReset(); }}
-                />
-                <ToolbarButton
-                  icon={<UploadIcon fontSize="small" />}
-                  tooltip={t("tooltipUploadOwnPoster")}
-                  onClick={(e) => { e.stopPropagation(); setPosterSelected(false); }}
-                />
-                <ToolbarButton
-                  icon={<PhotoLibraryIcon fontSize="small" />}
-                  tooltip={t("tooltipSelectPoster")}
-                  onClick={(e) => { e.stopPropagation(); setPosterSelected(false); openDrawer("poster"); }}
-                />
-              </MediaCardOverlay>
-            }
-          />
-          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
-        </Box>
+          <Box sx={{ flex: `0 1 ${artworkCardMaxWidth}`, width: { xs: "100%", sm: artworkCardMaxWidth }, maxWidth: "100%" }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              {t("backdrop")}
+            </Typography>
+            <MediaCard
+              image={failedShowBg ? null : backdropSrc}
+              alt={`${item.title} backdrop`}
+              title={item.title}
+              subtitle={item.year ? String(item.year) : undefined}
+              aspectRatio="16 / 9"
+              selected={backdropSelected}
+              resetting={isBackdropResetting}
+              imageFailed={failedShowBg}
+              onImageError={() => setFailedShowBg(true)}
+              onClick={() => { setBackdropSelected(true); setPosterSelected(false); }}
+              onClose={() => setBackdropSelected(false)}
+              tooltip={t("tooltipViewAltBackdrops")}
+              creatorName={trackedBackdrop?.creator_display_name}
+              badge={<ArtworkSourceBadge source={(trackedBackdrop || opAppliedKeys.has(item.id + ":bg")) ? "openposter" : failedShowBg ? null : "plex"} creatorName={trackedBackdrop?.creator_display_name} mediaServer={serverName} />}
+              chip={<CardChip label="MOVIE" color="success" />}
+              overlayChip={<CardChip label="BACKDROP" color="warning" />}
+              overlay={
+                <MediaCardOverlay>
+                  <CreatorSubscriptionToolbarAction
+                    creatorId={trackedBackdrop?.creator_id}
+                    isSubscribed={isBackdropCreatorSubscribed}
+                    disabled={!trackedBackdrop}
+                    onToggle={handleBackdropCreatorSubscribe}
+                    onAfterToggle={() => setBackdropSelected(false)}
+                  />
+                  <ToolbarButton
+                    icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                    disabled={!trackedBackdrop}
+                    tooltip={t("tooltipResetToDefaultBackdrop")}
+                    onClick={(e) => { e.stopPropagation(); setBackdropSelected(false); handleResetBackdrop(); }}
+                  />
+                  <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnBackdrop")} onClick={(e) => { e.stopPropagation(); setBackdropSelected(false); }} />
+                  <ToolbarButton
+                    icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                    tooltip={t("tooltipSelectBackdrop")}
+                    onClick={(e) => { e.stopPropagation(); setBackdropSelected(false); openDrawer("backdrop"); }}
+                  />
+                </MediaCardOverlay>
+              }
+            />
+          </Box>
 
-        {/* ── Backdrops section ─────────────────────────────────────────── */}
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          {t("backdrop")}
-        </Typography>
+          <Box sx={{ flex: `0 1 ${artworkCardMaxWidth}`, width: { xs: "100%", sm: artworkCardMaxWidth }, maxWidth: "100%" }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              {t("squareArtwork")}
+            </Typography>
+            <MediaCard
+              image={failedSquare ? null : squareSrc}
+              alt={`${item.title} square`}
+              title={item.title}
+              subtitle={item.year ? String(item.year) : undefined}
+              aspectRatio="1 / 1"
+              selected={squareSelected}
+              resetting={isSquareResetting}
+              imageFailed={failedSquare}
+              onImageError={() => setFailedSquare(true)}
+              onClick={() => { setSquareSelected(true); setPosterSelected(false); setBackdropSelected(false); setLogoSelected(false); }}
+              onClose={() => setSquareSelected(false)}
+              tooltip={t("tooltipViewAltSquare")}
+              imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
+              creatorName={trackedSquare?.creator_display_name}
+              badge={<ArtworkSourceBadge source={(trackedSquare || opAppliedKeys.has(item.id + ":square")) ? "openposter" : failedSquare ? null : "plex"} creatorName={trackedSquare?.creator_display_name} mediaServer={serverName} />}
+              chip={<CardChip label="MOVIE" color="success" />}
+              overlayChip={<CardChip label="SQUARE" color="warning" />}
+              overlay={
+                <MediaCardOverlay>
+                  <ToolbarButton
+                    icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                    disabled={!trackedSquare}
+                    tooltip={t("tooltipResetSquare")}
+                    onClick={(e) => { e.stopPropagation(); setSquareSelected(false); handleResetSquare(); }}
+                  />
+                  <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnSquare")} onClick={(e) => { e.stopPropagation(); setSquareSelected(false); }} />
+                  <ToolbarButton
+                    icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                    tooltip={t("tooltipSelectSquare")}
+                    onClick={(e) => { e.stopPropagation(); setSquareSelected(false); openDrawer("square"); }}
+                  />
+                </MediaCardOverlay>
+              }
+            />
+          </Box>
 
-        <Box sx={{ width: "var(--op-backdrop-width, 340px)", mb: 4 }}>
-          <MediaCard
-            image={failedShowBg ? null : backdropSrc}
-            alt={`${item.title} backdrop`}
-            aspectRatio="16 / 9"
-            selected={backdropSelected}
-            resetting={isBackdropResetting}
-            imageFailed={failedShowBg}
-            onImageError={() => setFailedShowBg(true)}
-            onClick={() => { setBackdropSelected(true); setPosterSelected(false); }}
-            onClose={() => setBackdropSelected(false)}
-            tooltip={t("tooltipViewAltBackdrops")}
-            creatorName={trackedBackdrop?.creator_display_name}
-            badge={<ArtworkSourceBadge source={(trackedBackdrop || opAppliedKeys.has(item.id + ":bg")) ? "openposter" : failedShowBg ? null : "plex"} creatorName={trackedBackdrop?.creator_display_name} mediaServer={serverName} />}
-            chip={<CardChip label="MOVIE" color="success" />}
-            overlayChip={<CardChip label="BACKDROP" color="warning" />}
-            overlay={
-              <MediaCardOverlay>
-                <CreatorSubscriptionToolbarAction
-                  creatorId={trackedBackdrop?.creator_id}
-                  isSubscribed={isBackdropCreatorSubscribed}
-                  disabled={!trackedBackdrop}
-                  onToggle={handleBackdropCreatorSubscribe}
-                  onAfterToggle={() => setBackdropSelected(false)}
-                />
-                <ToolbarButton
-                  icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
-                  disabled={!trackedBackdrop}
-                  tooltip={t("tooltipResetToDefaultBackdrop")}
-                  onClick={(e) => { e.stopPropagation(); setBackdropSelected(false); handleResetBackdrop(); }}
-                />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnBackdrop")} onClick={(e) => { e.stopPropagation(); setBackdropSelected(false); }} />
-                <ToolbarButton
-                  icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                  tooltip={t("tooltipSelectBackdrop")}
-                  onClick={(e) => { e.stopPropagation(); setBackdropSelected(false); openDrawer("backdrop"); }}
-                />
-              </MediaCardOverlay>
-            }
-          />
-          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
-        </Box>
-
-        {/* ── Square section ────────────────────────────────────────────── */}
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          {t("squareArtwork")}
-        </Typography>
-
-        <Box sx={{ width: "var(--op-backdrop-width, 340px)", mb: 4 }}>
-          <MediaCard
-            image={failedSquare ? null : squareSrc}
-            alt={`${item.title} square`}
-            aspectRatio="1 / 1"
-            selected={squareSelected}
-            resetting={isSquareResetting}
-            imageFailed={failedSquare}
-            onImageError={() => setFailedSquare(true)}
-            onClick={() => { setSquareSelected(true); setPosterSelected(false); setBackdropSelected(false); setLogoSelected(false); }}
-            onClose={() => setSquareSelected(false)}
-            tooltip={t("tooltipViewAltSquare")}
-            imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
-            creatorName={trackedSquare?.creator_display_name}
-            badge={<ArtworkSourceBadge source={(trackedSquare || opAppliedKeys.has(item.id + ":square")) ? "openposter" : failedSquare ? null : "plex"} creatorName={trackedSquare?.creator_display_name} mediaServer={serverName} />}
-            chip={<CardChip label="MOVIE" color="success" />}
-            overlayChip={<CardChip label="SQUARE" color="warning" />}
-            overlay={
-              <MediaCardOverlay>
-                <ToolbarButton
-                  icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
-                  disabled={!trackedSquare}
-                  tooltip={t("tooltipResetSquare")}
-                  onClick={(e) => { e.stopPropagation(); setSquareSelected(false); handleResetSquare(); }}
-                />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnSquare")} onClick={(e) => { e.stopPropagation(); setSquareSelected(false); }} />
-                <ToolbarButton
-                  icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                  tooltip={t("tooltipSelectSquare")}
-                  onClick={(e) => { e.stopPropagation(); setSquareSelected(false); openDrawer("square"); }}
-                />
-              </MediaCardOverlay>
-            }
-          />
-          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
-        </Box>
-
-        {/* ── Logo section ──────────────────────────────────────────────── */}
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          {t("logo")}
-        </Typography>
-
-        <Box sx={{ width: "var(--op-backdrop-width, 340px)", mb: 4 }}>
-          <MediaCard
-            image={failedLogo ? null : logoSrc}
-            alt={`${item.title} logo`}
-            aspectRatio="16 / 9"
-            selected={logoSelected}
-            resetting={isLogoResetting}
-            imageFailed={failedLogo}
-            onImageError={() => setFailedLogo(true)}
-            onClick={() => { setLogoSelected(true); setPosterSelected(false); setBackdropSelected(false); setSquareSelected(false); }}
-            onClose={() => setLogoSelected(false)}
-            tooltip={t("tooltipViewAltLogos")}
-            imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
-            creatorName={trackedLogo?.creator_display_name}
-            badge={<ArtworkSourceBadge source={(trackedLogo || opAppliedKeys.has(item.id + ":logo")) ? "openposter" : failedLogo ? null : "plex"} creatorName={trackedLogo?.creator_display_name} mediaServer={serverName} />}
-            chip={<CardChip label="MOVIE" color="success" />}
-            overlayChip={<CardChip label="LOGO" color="warning" />}
-            overlay={
-              <MediaCardOverlay>
-                <ToolbarButton
-                  icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
-                  disabled={!trackedLogo}
-                  tooltip={t("tooltipResetLogo")}
-                  onClick={(e) => { e.stopPropagation(); setLogoSelected(false); handleResetLogo(); }}
-                />
-                <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnLogo")} onClick={(e) => { e.stopPropagation(); setLogoSelected(false); }} />
-                <ToolbarButton
-                  icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                  tooltip={t("tooltipSelectLogo")}
-                  onClick={(e) => { e.stopPropagation(); setLogoSelected(false); openDrawer("logo"); }}
-                />
-              </MediaCardOverlay>
-            }
-          />
-          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
+          <Box sx={{ flex: `0 1 ${artworkCardMaxWidth}`, width: { xs: "100%", sm: artworkCardMaxWidth }, maxWidth: "100%" }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              {t("logo")}
+            </Typography>
+            <MediaCard
+              image={failedLogo ? null : logoSrc}
+              alt={`${item.title} logo`}
+              title={item.title}
+              subtitle={item.year ? String(item.year) : undefined}
+              aspectRatio="16 / 9"
+              selected={logoSelected}
+              resetting={isLogoResetting}
+              imageFailed={failedLogo}
+              onImageError={() => setFailedLogo(true)}
+              onClick={() => { setLogoSelected(true); setPosterSelected(false); setBackdropSelected(false); setSquareSelected(false); }}
+              onClose={() => setLogoSelected(false)}
+              tooltip={t("tooltipViewAltLogos")}
+              imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
+              creatorName={trackedLogo?.creator_display_name}
+              badge={<ArtworkSourceBadge source={(trackedLogo || opAppliedKeys.has(item.id + ":logo")) ? "openposter" : failedLogo ? null : "plex"} creatorName={trackedLogo?.creator_display_name} mediaServer={serverName} />}
+              chip={<CardChip label="MOVIE" color="success" />}
+              overlayChip={<CardChip label="LOGO" color="warning" />}
+              overlay={
+                <MediaCardOverlay>
+                  <ToolbarButton
+                    icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
+                    disabled={!trackedLogo}
+                    tooltip={t("tooltipResetLogo")}
+                    onClick={(e) => { e.stopPropagation(); setLogoSelected(false); handleResetLogo(); }}
+                  />
+                  <ToolbarButton icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />} tooltip={t("tooltipUploadOwnLogo")} onClick={(e) => { e.stopPropagation(); setLogoSelected(false); }} />
+                  <ToolbarButton
+                    icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
+                    tooltip={t("tooltipSelectLogo")}
+                    onClick={(e) => { e.stopPropagation(); setLogoSelected(false); openDrawer("logo"); }}
+                  />
+                </MediaCardOverlay>
+              }
+            />
+          </Box>
         </Box>
 
       </Box>

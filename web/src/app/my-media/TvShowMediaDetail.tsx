@@ -29,10 +29,10 @@ import UploadIcon from "@mui/icons-material/Upload";
 import AltArtworkDrawer from "@/components/AltArtworkDrawer";
 import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
 import ArtworkMetadataTooltip from "@/components/ArtworkMetadataTooltip";
-import CardTitleStrip from "@/components/CardTitleStrip";
 import type { ArtworkMeta } from "@/components/ArtworkMetadataTooltip";
 import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
 import CreatorSubscriptionToolbarAction from "./CreatorSubscriptionToolbarAction";
+import { loadPosterSearchResults } from "./posterSearch";
 import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
 import { useCreatorSubscriptions } from "./useCreatorSubscriptions";
 import { useArtworkDrawer } from "./useArtworkDrawer";
@@ -815,6 +815,8 @@ export default function TvShowMediaDetail({
               image={showThumbSrc}
               resetting={isShowResetting}
               alt={item.title}
+              title={item.title}
+              subtitle={item.year ? String(item.year) : undefined}
               selected={selectedShowCard}
               imageFailed={failedThumb}
               onImageError={() => setFailedThumb(true)}
@@ -823,7 +825,7 @@ export default function TvShowMediaDetail({
               tooltip={t("tooltipViewAltArtwork")}
               creatorName={trackedItem?.creator_display_name}
               badge={<ArtworkSourceBadge source={trackedItem ? "openposter" : failedThumb ? null : "plex"} creatorName={trackedItem?.creator_display_name} />}
-              chip={<CardChip label="TV SHOW" color="error" />}
+              chip={<CardChip label="TV SHOW" color="secondary" />}
               overlayChip={<CardChip label="POSTER" color="warning" />}
               overlay={
                 <MediaCardOverlay title={item.title} subtitle={showCardSubtitle}>
@@ -872,7 +874,6 @@ export default function TvShowMediaDetail({
                 </MediaCardOverlay>
               }
             />
-            <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
           </Box>
 
           {/* Season posters */}
@@ -909,6 +910,8 @@ export default function TvShowMediaDetail({
                   resetting={isResetting}
                   image={appliedPreviews.get(season.id) ?? (failed ? null : thumbUrl(conn.nodeUrl, conn.adminToken, season.id))}
                   alt={seasonNum}
+                  title={seasonNum}
+                  subtitle={season.index != null && season.title && !/^season\s+0*\d+$/i.test(season.title.trim()) ? season.title : undefined}
                   selected={isSelected}
                   imageFailed={failed}
                   onImageError={() => onMarkFailed(season.id)}
@@ -977,7 +980,6 @@ export default function TvShowMediaDetail({
                     </MediaCardOverlay>
                   }
                 />
-                <CardTitleStrip title={seasonNum} subtitle={season.index != null && season.title && !/^season\s+0*\d+$/i.test(season.title.trim()) ? season.title : undefined} />
                 </Box>
               );
             })
@@ -993,6 +995,8 @@ export default function TvShowMediaDetail({
           <MediaCard
             image={failedShowBg ? null : (appliedPreviews.get(item.id + ":bg") ?? artUrl(conn.nodeUrl, conn.adminToken, item.id))}
             alt={`${item.title} backdrop`}
+            title={item.title}
+            subtitle={item.year ? String(item.year) : undefined}
             aspectRatio="16 / 9"
             imageFailed={failedShowBg}
             onImageError={() => setFailedShowBg(true)}
@@ -1003,7 +1007,7 @@ export default function TvShowMediaDetail({
             tooltip={t("tooltipViewBackdropOptions")}
             creatorName={trackedArtwork.get(item.id + ":bg")?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedArtwork.get(item.id + ":bg") || opAppliedKeys.has(item.id + ":bg")) ? "openposter" : failedShowBg ? null : "plex"} creatorName={trackedArtwork.get(item.id + ":bg")?.creator_display_name} />}
-            chip={<CardChip label="TV SHOW" color="error" />}
+            chip={<CardChip label="TV SHOW" color="secondary" />}
             overlayChip={<CardChip label="BACKDROP" color="warning" />}
             overlay={
                   <MediaCardOverlay>
@@ -1054,7 +1058,6 @@ export default function TvShowMediaDetail({
               </MediaCardOverlay>
             }
           />
-          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
           </Box>
 
           {/* Season backdrops */}
@@ -1074,6 +1077,8 @@ export default function TvShowMediaDetail({
               <MediaCard
                 image={failedBg ? null : (appliedPreviews.get(season.id + ":bg") ?? artUrl(conn.nodeUrl, conn.adminToken, season.id))}
                 alt={`${seasonNum} backdrop`}
+                title={seasonNum}
+                subtitle={season.index != null && season.title && !/^season\s+0*\d+$/i.test(season.title.trim()) ? season.title : undefined}
                 aspectRatio="16 / 9"
                 imageFailed={failedBg}
                 onImageError={() => onMarkFailed(season.id + ":bg")}
@@ -1135,7 +1140,6 @@ export default function TvShowMediaDetail({
                   </MediaCardOverlay>
                 }
               />
-              <CardTitleStrip title={seasonNum} subtitle={season.index != null && season.title && !/^season\s+0*\d+$/i.test(season.title.trim()) ? season.title : undefined} />
               </Box>
             );
           })}
@@ -1148,6 +1152,8 @@ export default function TvShowMediaDetail({
           <MediaCard
             image={failedShowSquare ? null : showSquareSrc}
             alt={`${item.title} square`}
+            title={item.title}
+            subtitle={item.year ? String(item.year) : undefined}
             aspectRatio="1 / 1"
             selected={selectedBackdropId === item.id + ":square"}
             resetting={resettingIds.has(item.id + ":square")}
@@ -1159,7 +1165,7 @@ export default function TvShowMediaDetail({
             imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
             creatorName={trackedArtwork.get(item.id + ":square")?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedArtwork.get(item.id + ":square") || opAppliedKeys.has(item.id + ":square")) ? "openposter" : failedShowSquare ? null : "plex"} creatorName={trackedArtwork.get(item.id + ":square")?.creator_display_name} />}
-            chip={<CardChip label="TV SHOW" color="error" />}
+            chip={<CardChip label="TV SHOW" color="secondary" />}
             overlayChip={<CardChip label="SQUARE" color="warning" />}
             overlay={
               <MediaCardOverlay>
@@ -1187,7 +1193,6 @@ export default function TvShowMediaDetail({
               </MediaCardOverlay>
             }
           />
-          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
         </Box>
 
         {/* ── Logo section ── */}
@@ -1197,6 +1202,8 @@ export default function TvShowMediaDetail({
           <MediaCard
             image={failedShowLogo ? null : showLogoSrc}
             alt={`${item.title} logo`}
+            title={item.title}
+            subtitle={item.year ? String(item.year) : undefined}
             aspectRatio="16 / 9"
             selected={selectedBackdropId === item.id + ":logo"}
             resetting={resettingIds.has(item.id + ":logo")}
@@ -1208,7 +1215,7 @@ export default function TvShowMediaDetail({
             imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
             creatorName={trackedArtwork.get(item.id + ":logo")?.creator_display_name}
             badge={<ArtworkSourceBadge source={(trackedArtwork.get(item.id + ":logo") || opAppliedKeys.has(item.id + ":logo")) ? "openposter" : failedShowLogo ? null : "plex"} creatorName={trackedArtwork.get(item.id + ":logo")?.creator_display_name} />}
-            chip={<CardChip label="TV SHOW" color="error" />}
+            chip={<CardChip label="TV SHOW" color="secondary" />}
             overlayChip={<CardChip label="LOGO" color="warning" />}
             overlay={
               <MediaCardOverlay>
@@ -1236,7 +1243,6 @@ export default function TvShowMediaDetail({
               </MediaCardOverlay>
             }
           />
-          <CardTitleStrip title={item.title} subtitle={item.year ? String(item.year) : undefined} />
         </Box>
 
       </Box>

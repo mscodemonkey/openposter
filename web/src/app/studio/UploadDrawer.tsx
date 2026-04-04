@@ -278,7 +278,18 @@ export default function UploadDrawer({ open, onClose, onUploaded, themes, conn, 
       anchor="right"
       open={open}
       onClose={onClose}
-      PaperProps={{ sx: { width: { xs: "100vw", sm: 480 }, display: "flex", flexDirection: "column" } }}
+      PaperProps={{
+        sx: {
+          width: { xs: "100vw", sm: 480 },
+          display: "flex",
+          flexDirection: "column",
+          backgroundColor: "rgba(18, 18, 20, 0.28)",
+          backdropFilter: "blur(16px) saturate(150%)",
+          WebkitBackdropFilter: "blur(16px) saturate(150%)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+          backgroundImage: "none",
+        },
+      }}
     >
       {/* Header */}
       <Stack direction="row" alignItems="center" sx={{ px: 2.5, py: 2, borderBottom: 1, borderColor: "divider" }}>

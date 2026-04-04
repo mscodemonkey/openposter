@@ -23,7 +23,6 @@ import UploadIcon from "@mui/icons-material/Upload";
 
 import AltArtworkDrawer from "@/components/AltArtworkDrawer";
 import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
-import CardTitleStrip from "@/components/CardTitleStrip";
 import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
 import CreatorSubscriptionToolbarAction from "./CreatorSubscriptionToolbarAction";
 import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
@@ -507,6 +506,8 @@ export default function EpisodeMediaDetail({
                 <MediaCard
                   image={imageUrl}
                   alt={episode.title ?? epLabel}
+                  title={episode.index != null ? `Episode ${String(episode.index).padStart(2, "0")}` : (episode.title ?? "Episode")}
+                  subtitle={episode.title && !/^episode\s+\d+$/i.test(episode.title.trim()) ? episode.title : undefined}
                   aspectRatio="16 / 9"
                   imageFailed={failed}
                   imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
@@ -555,10 +556,6 @@ export default function EpisodeMediaDetail({
                       </Box>
                     </MediaCardOverlay>
                   }
-                />
-                <CardTitleStrip
-                  title={episode.index != null ? `Episode ${String(episode.index).padStart(2, "0")}` : (episode.title ?? "Episode")}
-                  subtitle={episode.title && !/^episode\s+\d+$/i.test(episode.title.trim()) ? episode.title : undefined}
                 />
               </Box>
             );

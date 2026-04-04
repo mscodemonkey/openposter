@@ -34,7 +34,6 @@ import UploadIcon from "@mui/icons-material/Upload";
 
 import AltArtworkDrawer from "@/components/AltArtworkDrawer";
 import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
-import CardTitleStrip from "@/components/CardTitleStrip";
 import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
 import CreatorSubscriptionToolbarAction from "./CreatorSubscriptionToolbarAction";
 import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
@@ -240,6 +239,7 @@ interface CollectionMediaDetailProps {
   onTrack: (id: string, artwork: TrackedArtwork) => void;
   onNavigateToMovie: (movie: MediaItem) => void;
   serverName?: string;
+  onHeaderStatusChange?: (status: React.ReactNode | null) => void;
 }
 
 /**
@@ -261,6 +261,7 @@ export default function CollectionMediaDetail({
   onTrack,
   onNavigateToMovie,
   serverName,
+  onHeaderStatusChange,
 }: CollectionMediaDetailProps) {
   const t = useTranslations("myMedia");
 
@@ -317,6 +318,108 @@ export default function CollectionMediaDetail({
   // ── Snackbar ──────────────────────────────────────────────────────────────
   const [autoMatchMenuAnchor, setAutoMatchMenuAnchor] = useState<HTMLElement | null>(null);
   const [notMatchedMenuAnchor, setNotMatchedMenuAnchor] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!onHeaderStatusChange) return;
+
+    if (tmdbRes.status === "resolving") {
+      onHeaderStatusChange(
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <CircularProgress size="1.1rem" sx={{ flexShrink: 0 }} />
+          <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            {t("tmdbSearchingCollection")}
+          </Typography>
+        </Stack>,
+      );
+      return;
+    }
+
+    if (tmdbRes.status === "confirmed") {
+      const isAuto = tmdbRes.source === "auto";
+      const { tmdbId: cTmdbId, tmdbName: cTmdbName } = tmdbRes;
+      onHeaderStatusChange(
+        <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap>
+          <IconButton
+            size="small"
+            sx={{ p: 0, color: "success.main", flexShrink: 0, lineHeight: 0 }}
+            onClick={(e) => setAutoMatchMenuAnchor(e.currentTarget)}
+            aria-haspopup="true"
+          >
+            {isAuto
+              ? <CheckCircleOutlineIcon sx={{ fontSize: "1.2rem", display: "block" }} />
+              : <CheckCircleIcon sx={{ fontSize: "1.2rem", display: "block" }} />}
+          </IconButton>
+          <Menu
+            anchorEl={autoMatchMenuAnchor}
+            open={!!autoMatchMenuAnchor}
+            onClose={() => setAutoMatchMenuAnchor(null)}
+          >
+            {isAuto && (
+              <MenuItem onClick={() => {
+                setAutoMatchMenuAnchor(null);
+                saveTmdbMapEntry(item.id, { tmdbId: cTmdbId, tmdbName: cTmdbName, source: "confirmed" });
+                setTmdbRes({ status: "confirmed", tmdbId: cTmdbId, tmdbName: cTmdbName, source: "confirmed" });
+              }}>
+                {t("tmdbConfirmMatch")}
+              </MenuItem>
+            )}
+            <MenuItem onClick={() => {
+              setAutoMatchMenuAnchor(null);
+              setTmdbRes({ status: "pending-confirm", itemId: item.id, tmdbId: cTmdbId, tmdbName: cTmdbName, posterPath: null, movieThumbs: [], openInSearch: true });
+            }}>
+              {t("tmdbIncorrectMatch")}
+            </MenuItem>
+          </Menu>
+          <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            {isAuto ? t("tmdbAutoMatched", { name: cTmdbName, id: cTmdbId }) : t("tmdbMatched", { name: cTmdbName, id: cTmdbId })}
+          </Typography>
+          <Button
+            component="a"
+            href={`https://www.themoviedb.org/collection/${cTmdbId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            size="small"
+            variant="outlined"
+            color="info"
+            endIcon={<OpenInNewIcon sx={{ fontSize: "0.75rem !important" }} />}
+            sx={{ fontSize: "0.65rem", py: 0.25, px: 0.75, minWidth: 0, whiteSpace: "nowrap", flexShrink: 0 }}
+          >
+            {t("tmdbViewInTmdb")}
+          </Button>
+        </Stack>,
+      );
+      return;
+    }
+
+    if (tmdbRes.status === "text-search") {
+      onHeaderStatusChange(
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <IconButton
+            size="small"
+            sx={{ p: 0, color: "warning.main", flexShrink: 0, lineHeight: 0 }}
+            onClick={(e) => setNotMatchedMenuAnchor(e.currentTarget)}
+            aria-haspopup="true"
+          >
+            <CancelOutlinedIcon sx={{ fontSize: "1.2rem", display: "block" }} />
+          </IconButton>
+          <Menu anchorEl={notMatchedMenuAnchor} open={!!notMatchedMenuAnchor} onClose={() => setNotMatchedMenuAnchor(null)}>
+            <MenuItem onClick={() => {
+              setNotMatchedMenuAnchor(null);
+              setTmdbRes({ status: "pending-confirm", itemId: item.id, tmdbId: 0, tmdbName: "", posterPath: null, movieThumbs: [], openInSearch: true });
+            }}>
+              {t("tmdbSearchTmdb")}
+            </MenuItem>
+          </Menu>
+          <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            {t("tmdbNotMatched")}
+          </Typography>
+        </Stack>,
+      );
+      return;
+    }
+
+    onHeaderStatusChange(null);
+  }, [autoMatchMenuAnchor, item.id, notMatchedMenuAnchor, onHeaderStatusChange, t, tmdbRes]);
 
   const [snack, setSnack] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
     open: false, message: "", severity: "success",
@@ -977,93 +1080,6 @@ export default function CollectionMediaDetail({
       {/* Page content above hero */}
       <Box sx={{ position: "relative", zIndex: 1 }}>
 
-
-        {tmdbRes.status === "resolving" && (
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-            <CircularProgress size="1.375rem" sx={{ flexShrink: 0 }} />
-            <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
-              {t("tmdbSearchingCollection")}
-            </Typography>
-          </Stack>
-        )}
-
-        {tmdbRes.status === "confirmed" && (() => {
-          const isAuto = tmdbRes.source === "auto";
-          // captured for menu handlers (avoids stale closure if tmdbRes changes)
-          const { tmdbId: cTmdbId, tmdbName: cTmdbName } = tmdbRes;
-          return (
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-              <IconButton
-                size="small"
-                sx={{ p: 0, color: "success.main", flexShrink: 0, lineHeight: 0 }}
-                onClick={(e) => setAutoMatchMenuAnchor(e.currentTarget)}
-                aria-haspopup="true"
-              >
-                {isAuto
-                  ? <CheckCircleOutlineIcon sx={{ fontSize: "1.375rem", display: "block" }} />
-                  : <CheckCircleIcon sx={{ fontSize: "1.375rem", display: "block" }} />
-                }
-              </IconButton>
-              <Menu
-                anchorEl={autoMatchMenuAnchor}
-                open={!!autoMatchMenuAnchor}
-                onClose={() => setAutoMatchMenuAnchor(null)}
-              >
-                {isAuto && (
-                  <MenuItem onClick={() => {
-                    setAutoMatchMenuAnchor(null);
-                    saveTmdbMapEntry(item.id, { tmdbId: cTmdbId, tmdbName: cTmdbName, source: "confirmed" });
-                    setTmdbRes({ status: "confirmed", tmdbId: cTmdbId, tmdbName: cTmdbName, source: "confirmed" });
-                  }}>
-                    {t("tmdbConfirmMatch")}
-                  </MenuItem>
-                )}
-                <MenuItem onClick={() => {
-                  setAutoMatchMenuAnchor(null);
-                  setTmdbRes({ status: "pending-confirm", itemId: item.id, tmdbId: cTmdbId, tmdbName: cTmdbName, posterPath: null, movieThumbs: [], openInSearch: true });
-                }}>
-                  {t("tmdbIncorrectMatch")}
-                </MenuItem>
-              </Menu>
-              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                {isAuto ? t("tmdbAutoMatched", { name: cTmdbName, id: cTmdbId }) : t("tmdbMatched", { name: cTmdbName, id: cTmdbId })}
-              </Typography>
-              <Button
-                component="a"
-                href={`https://www.themoviedb.org/collection/${cTmdbId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                size="small"
-                variant="outlined"
-                color="info"
-                endIcon={<OpenInNewIcon sx={{ fontSize: "0.75rem !important" }} />}
-                sx={{ fontSize: "0.65rem", py: 0.25, px: 0.75, minWidth: 0, whiteSpace: "nowrap", flexShrink: 0 }}
-              >
-                {t("tmdbViewInTmdb")}
-              </Button>
-            </Stack>
-          );
-        })()}
-        {tmdbRes.status === "text-search" && (
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-            <IconButton size="small" sx={{ p: 0, color: "warning.main", flexShrink: 0, lineHeight: 0 }}
-              onClick={(e) => setNotMatchedMenuAnchor(e.currentTarget)} aria-haspopup="true">
-              <CancelOutlinedIcon sx={{ fontSize: "1.375rem", display: "block" }} />
-            </IconButton>
-            <Menu anchorEl={notMatchedMenuAnchor} open={!!notMatchedMenuAnchor} onClose={() => setNotMatchedMenuAnchor(null)}>
-              <MenuItem onClick={() => {
-                setNotMatchedMenuAnchor(null);
-                setTmdbRes({ status: "pending-confirm", itemId: item.id, tmdbId: 0, tmdbName: "", posterPath: null, movieThumbs: [], openInSearch: true });
-              }}>
-                {t("tmdbSearchTmdb")}
-              </MenuItem>
-            </Menu>
-            <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
-              {t("tmdbNotMatched")}
-            </Typography>
-          </Stack>
-        )}
-
         {/* ── Posters section ── */}
         <Typography variant="h6" sx={{ mb: 2 }}>{t("posters")}</Typography>
 
@@ -1074,6 +1090,8 @@ export default function CollectionMediaDetail({
           <MediaCard
             image={failedThumb ? (tmdbImages?.posterPath ? `https://image.tmdb.org/t/p/w342${tmdbImages.posterPath}` : null) : collPosterSrc}
             alt={item.title}
+            title={item.title}
+            subtitle={collCountLabel || undefined}
             aspectRatio="2 / 3"
             selected={openCardKey === "coll-poster"}
             resetting={isCollPosterResetting}
@@ -1132,7 +1150,6 @@ export default function CollectionMediaDetail({
               </MediaCardOverlay>
             }
           />
-          <CardTitleStrip title={item.title} subtitle={collCountLabel || undefined} />
           </Box>
 
           {/* Movie poster cards */}
@@ -1159,6 +1176,8 @@ export default function CollectionMediaDetail({
                   <MediaCard
                     image={failed ? null : (appliedPreviews.get(movie.id) ?? thumbUrl(conn.nodeUrl, conn.adminToken, movie.id))}
                     alt={movie.title}
+                    title={movie.title}
+                    subtitle={movie.year ? String(movie.year) : undefined}
                     aspectRatio="2 / 3"
                     selected={openCardKey === cardKey}
                     resetting={isResetting}
@@ -1219,7 +1238,6 @@ export default function CollectionMediaDetail({
                       </MediaCardOverlay>
                     }
                   />
-                  <CardTitleStrip title={movie.title} subtitle={movie.year ? String(movie.year) : undefined} />
                   </Box>
                 );
               })}
@@ -1235,6 +1253,8 @@ export default function CollectionMediaDetail({
             <MediaCard
               image={failedShowBg ? (tmdbImages?.backdropPath ? `https://image.tmdb.org/t/p/w780${tmdbImages.backdropPath}` : null) : collBackdropSrc}
               alt={`${item.title} backdrop`}
+              title={item.title}
+              subtitle={collCountLabel || undefined}
               aspectRatio="16 / 9"
               selected={openCardKey === "coll-backdrop"}
               resetting={isCollBackdropResetting}
@@ -1292,7 +1312,6 @@ export default function CollectionMediaDetail({
                 </MediaCardOverlay>
               }
             />
-            <CardTitleStrip title={item.title} subtitle={collCountLabel || undefined} />
           </Box>
 
           {/* Movie backdrop cards */}
@@ -1311,6 +1330,8 @@ export default function CollectionMediaDetail({
                     <MediaCard
                       image={backdropSrc}
                       alt={`${movie.title} backdrop`}
+                      title={movie.title}
+                      subtitle={movie.year ? String(movie.year) : undefined}
                       aspectRatio="16 / 9"
                       selected={openCardKey === backdropCardKey}
                       resetting={isBgResetting}
@@ -1360,7 +1381,6 @@ export default function CollectionMediaDetail({
                         </MediaCardOverlay>
                       }
                     />
-                    <CardTitleStrip title={movie.title} subtitle={movie.year ? String(movie.year) : undefined} />
                   </Box>
                 );
               })}
@@ -1376,6 +1396,8 @@ export default function CollectionMediaDetail({
             <MediaCard
               image={failedSquare ? null : collSquareSrc}
               alt={`${item.title} square`}
+              title={item.title}
+              subtitle={collCountLabel || undefined}
               aspectRatio="1 / 1"
               selected={openCardKey === "coll-square"}
               resetting={isCollSquareResetting}
@@ -1413,7 +1435,6 @@ export default function CollectionMediaDetail({
                 </MediaCardOverlay>
               }
             />
-            <CardTitleStrip title={item.title} subtitle={collCountLabel || undefined} />
           </Box>
 
           {/* Movie square cards */}
@@ -1432,6 +1453,8 @@ export default function CollectionMediaDetail({
                     <MediaCard
                       image={failedMovieSquares.has(movie.id) ? null : movieSquareSrc}
                       alt={`${movie.title} square`}
+                      title={movie.title}
+                      subtitle={movie.year ? String(movie.year) : undefined}
                       aspectRatio="1 / 1"
                       selected={openCardKey === squareCardKey}
                       resetting={isMovieSquareResetting}
@@ -1463,7 +1486,6 @@ export default function CollectionMediaDetail({
                         </MediaCardOverlay>
                       }
                     />
-                    <CardTitleStrip title={movie.title} subtitle={movie.year ? String(movie.year) : undefined} />
                   </Box>
                 );
               })}
@@ -1479,6 +1501,8 @@ export default function CollectionMediaDetail({
             <MediaCard
               image={failedLogo ? null : collLogoSrc}
               alt={`${item.title} logo`}
+              title={item.title}
+              subtitle={collCountLabel || undefined}
               aspectRatio="16 / 9"
               selected={openCardKey === "coll-logo"}
               resetting={isCollLogoResetting}
@@ -1516,7 +1540,6 @@ export default function CollectionMediaDetail({
                 </MediaCardOverlay>
               }
             />
-            <CardTitleStrip title={item.title} subtitle={collCountLabel || undefined} />
           </Box>
 
           {/* Movie logo cards */}
@@ -1535,6 +1558,8 @@ export default function CollectionMediaDetail({
                     <MediaCard
                       image={failedMovieLogos.has(movie.id) ? null : movieLogoSrc}
                       alt={`${movie.title} logo`}
+                      title={movie.title}
+                      subtitle={movie.year ? String(movie.year) : undefined}
                       aspectRatio="16 / 9"
                       selected={openCardKey === logoCardKey}
                       resetting={isMovieLogoResetting}
@@ -1566,7 +1591,6 @@ export default function CollectionMediaDetail({
                         </MediaCardOverlay>
                       }
                     />
-                    <CardTitleStrip title={movie.title} subtitle={movie.year ? String(movie.year) : undefined} />
                   </Box>
                 );
               })}

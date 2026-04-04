@@ -3,17 +3,17 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
-import Link from "next/link";
-
 import Box from "@mui/material/Box";
-import Card from "@mui/material/Card";
 import CardMedia from "@mui/material/CardMedia";
+import Typography from "@mui/material/Typography";
 
 
 import type { PosterEntry } from "@/lib/types";
-import CardTitleStrip from "./CardTitleStrip";
 import { CardChip } from "./MediaCard";
-import OPLogo from "./OPLogo";
+import ImageIcon from "@mui/icons-material/Image";
+import ArtworkCardFrame from "./ArtworkCardFrame";
+
+const CHECKER = "repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px";
 
 export type CardAction = {
   label: string;
@@ -100,17 +100,15 @@ export default function PosterCard({
       ? `Season ${String(poster.media.season_number).padStart(2, "0")}`
       : poster.media.title || tc("untitled")
     : null;
-  const episodeMeta = null; // replaced by title strip below
-
   const autoChipProps: { label: string; color: "primary" | "success" | "error" | "secondary" | "warning" | "default" | "info" } | null =
     poster.kind === "square" ? { label: t("square"), color: "warning" }
     : poster.kind === "logo" ? { label: t("logo"), color: "warning" }
     : (poster.kind === "background" || poster.media.type === "backdrop") ? { label: t("backdrop"), color: "warning" }
-    : poster.media.type === "collection" ? { label: t("movieBoxSet"), color: "error" }
+    : poster.media.type === "collection" ? { label: t("movieBoxSet"), color: "primary" }
     : poster.media.type === "movie" ? { label: t("movie"), color: "success" }
-    : poster.media.type === "show" ? { label: t("tvBoxSet"), color: "error" }
+    : poster.media.type === "show" ? { label: t("tvBoxSet"), color: "secondary" }
     : poster.media.type === "season" ? { label: t("season"), color: "info" }
-    : poster.media.type === "episode" ? { label: t("episode"), color: "success" }
+    : poster.media.type === "episode" ? { label: t("episode"), color: "warning" }
     : null;
   // chip prop: false = suppress, object = override, undefined = use auto
   const typeChipProps = chip === false ? null : (chip ?? autoChipProps);
@@ -127,66 +125,46 @@ export default function PosterCard({
       ].filter(Boolean);
   const subtitleLine = subtitle ?? subtitleParts.join(" · ");
 
-  const titleStrip = (
-    <CardTitleStrip
-      title={titleLine}
-      subtitle={subtitleSlot ? undefined : subtitleLine || undefined}
-      subtitleSlot={subtitleSlot}
-      subscribeSlot={subscribeSlot}
-      menuSlot={menuSlot}
-      sx={{ mt: 0, px: 1, pt: 0.75, pb: 0.75 }}
-    />
-  );
-
   const primary = actions?.[0];
   const [imgFailed, setImgFailed] = useState(false);
   const showPlaceholder = imageFailed_prop || imgFailed;
 
-  const imageArea = (
-    <Box sx={{ position: "relative", ...(selected && { outline: "3px solid", outlineColor: "primary.main" }) }}>
-      {showPlaceholder ? (
-        <Box sx={{ aspectRatio, bgcolor: "action.hover", display: "block" }} />
-      ) : (
-        <CardMedia
-          component="img"
-          image={poster.assets.preview.url}
-          alt={poster.media.title || poster.poster_id}
-          loading="lazy"
-          onError={() => { setImgFailed(true); onImageError?.(); }}
-          sx={{ aspectRatio, objectFit: "contain", display: "block" }}
-        />
-      )}
-      {typeChipProps && (
-        <Box data-type-chip sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
-          <CardChip label={typeChipProps.label} color={typeChipProps.color} />
-        </Box>
-      )}
-      {managed && (
-        <Box sx={{ position: "absolute", top: 0, right: 6, pointerEvents: "none" }}>
-          <OPLogo size={20} />
-        </Box>
-      )}
+  const imageArea = showPlaceholder ? (
+    <Box sx={{ position: "relative", aspectRatio, background: CHECKER, display: "block" }}>
+      <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0.75, px: 1, pointerEvents: "none" }}>
+        <ImageIcon sx={{ fontSize: "2.25rem", color: "rgba(255,255,255,0.7)" }} />
+        <Typography sx={{ fontSize: "0.58rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", lineHeight: 1.2, color: "rgba(255,255,255,0.78)", textAlign: "center" }}>
+          Missing artwork
+        </Typography>
+      </Box>
     </Box>
+  ) : (
+    <CardMedia
+      component="img"
+      image={poster.assets.preview.url}
+      alt={poster.media.title || poster.poster_id}
+      loading="lazy"
+      onError={() => { setImgFailed(true); onImageError?.(); }}
+      sx={{ aspectRatio, objectFit: "contain", display: "block" }}
+    />
   );
 
-  const wrappedImageArea = imageWrapper ? imageWrapper(imageArea) : imageArea;
-
   return (
-    <Card sx={{ height: "100%", border: 0, boxShadow: "none", bgcolor: "transparent", backgroundImage: "none" }}>
-      {primary ? (
-        primary.external ? (
-          <a href={primary.href} target="_blank" rel="noreferrer" style={{ display: "block" }}>{wrappedImageArea}</a>
-        ) : (
-          <Link href={primary.href} style={{ display: "block" }}>{wrappedImageArea}</Link>
-        )
-      ) : (
-        <Box sx={{ cursor: onClick ? "pointer" : "default" }} onClick={onClick}>
-          {wrappedImageArea}
-        </Box>
-      )}
-      {statusBar}
-      {episodeMeta}
-      {titleStrip}
-    </Card>
+    <ArtworkCardFrame
+      media={imageArea}
+      title={titleLine}
+      subtitle={subtitleSlot ? undefined : subtitleLine || undefined}
+      subtitleSlot={subtitleSlot}
+      subscribeSlot={subscribeSlot}
+      statusBar={statusBar}
+      topLeftSlot={typeChipProps ? <CardChip label={typeChipProps.label} color={typeChipProps.color} /> : undefined}
+      menuSlot={menuSlot}
+      managed={managed}
+      selected={selected}
+      href={primary?.href}
+      external={primary?.external}
+      onClick={!primary ? onClick : undefined}
+      imageWrapper={imageWrapper}
+    />
   );
 }

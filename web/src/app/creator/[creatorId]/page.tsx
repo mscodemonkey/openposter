@@ -1,9 +1,7 @@
-import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
-import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Container from "@mui/material/Container";
 import Stack from "@mui/material/Stack";
@@ -15,6 +13,7 @@ import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import PersonIcon from "@mui/icons-material/Person";
 
 import { fetchCreatorName, fetchCreatorPosters, fetchCreatorProfile, fetchCreatorThemes } from "@/lib/server-api";
+import ArtworkCardFrame from "@/components/ArtworkCardFrame";
 import SectionedPosterView from "@/components/SectionedPosterView";
 import SubscribeButton from "@/components/SubscribeButton";
 import type { CreatorTheme } from "@/lib/types";
@@ -96,29 +95,28 @@ export default async function CreatorPage({
               <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
                 {themes.map((theme) => (
                   <Box key={theme.theme_id}>
-                    <Card sx={{ height: "100%" }}>
-                      <Link href={`/creator/${encodeURIComponent(creatorId)}/themes/${encodeURIComponent(theme.theme_id)}`} style={{ display: "block", textDecoration: "none" }}>
+                    <ArtworkCardFrame
+                      media={
                         <Box
                           sx={{
                             aspectRatio: "2 / 3",
                             bgcolor: "action.hover",
                             overflow: "hidden",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
                           }}
                         >
                           {theme.cover_url ? (
                             <Box component="img" src={theme.cover_url} alt={theme.name} sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                           ) : (
-                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
-                              <LayersOutlinedIcon sx={{ color: "text.disabled", fontSize: "2rem" }} />
-                            </Box>
+                            <LayersOutlinedIcon sx={{ color: "text.disabled", fontSize: "2rem" }} />
                           )}
                         </Box>
-                      </Link>
-                      <Box sx={{ px: 1.5, pt: 0.75, pb: 1 }}>
-                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block", fontWeight: 700 }}>
-                          {theme.name}
-                        </Typography>
-                        <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="space-between" sx={{ mt: 0.5 }}>
+                      }
+                      title={theme.name}
+                      subtitleSlot={
+                        <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="space-between" sx={{ width: "100%", px: 0.5 }}>
                           <Chip
                             label={t("posterCountShort", { count: theme.poster_count ?? 0 })}
                             size="small"
@@ -133,8 +131,9 @@ export default async function CreatorPage({
                             nodeBase={homeNode ?? ""}
                           />
                         </Stack>
-                      </Box>
-                    </Card>
+                      }
+                      href={`/creator/${encodeURIComponent(creatorId)}/themes/${encodeURIComponent(theme.theme_id)}`}
+                    />
                   </Box>
                 ))}
               </Box>

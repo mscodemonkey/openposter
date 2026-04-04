@@ -21,7 +21,7 @@ import Typography from "@mui/material/Typography";
 import ImageIcon from "@mui/icons-material/Image";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 
-import CardTitleStrip from "@/components/CardTitleStrip";
+import ArtworkCardFrame from "@/components/ArtworkCardFrame";
 import { fetchTmdbMovie } from "@/lib/tmdb";
 import { POSTER_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
 
@@ -51,15 +51,16 @@ type MovieResolution =
   | { kind: "collection"; collectionId: number; collectionName: string }
   | { kind: "standalone" };
 
-function TrendingCardMenu({ tmdbId, mediaType, title, year, actions }: {
+function TrendingCardMenu({ tmdbId, mediaType, title, year, actions, preloadedMovieRes }: {
   tmdbId: number;
   mediaType: "movie" | "tv";
   title: string;
   year: string;
   actions: TrendingActions;
+  preloadedMovieRes?: MovieResolution | null;
 }) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [movieRes, setMovieRes] = useState<MovieResolution | null>(null);
+  const [movieRes, setMovieRes] = useState<MovieResolution | null>(preloadedMovieRes ?? null);
   const [loading, setLoading] = useState(false);
 
   function handleOpen(e: React.MouseEvent<HTMLElement>) {
@@ -148,13 +149,37 @@ function TrendingCard({ item, mediaType, actions }: {
   const year = (item.release_date ?? item.first_air_date ?? "").slice(0, 4);
   const imgUrl = item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null;
 
-  // Determine if this item is already in Studio (card-level check, no fetch)
+  // Pre-fetch collection membership for movie cards so we can detect "in studio via collection"
+  const [movieRes, setMovieRes] = useState<MovieResolution | null>(null);
+  const needsCollectionCheck = mediaType === "movie" && !!actions && actions.pinnedCollections.length > 0
+    && !actions.pinnedMovies.some((m) => m.tmdbId === item.id);
+  useEffect(() => {
+    if (!needsCollectionCheck) return;
+    let cancelled = false;
+    fetchTmdbMovie(item.id)
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.belongs_to_collection?.id) {
+          setMovieRes({ kind: "collection", collectionId: data.belongs_to_collection.id, collectionName: data.belongs_to_collection.name });
+        } else {
+          setMovieRes({ kind: "standalone" });
+        }
+      })
+      .catch(() => { if (!cancelled) setMovieRes({ kind: "standalone" }); });
+    return () => { cancelled = true; };
+  }, [item.id, needsCollectionCheck]);
+
+  // Determine if this item is already in Studio
   let inStudioKey: string | null = null;
   if (actions) {
     if (mediaType === "tv" && actions.pinnedTvShows.some((s) => s.tmdbId === item.id)) {
       inStudioKey = `show:${item.id}`;
-    } else if (mediaType === "movie" && actions.pinnedMovies.some((m) => m.tmdbId === item.id)) {
-      inStudioKey = `movie:${item.id}`;
+    } else if (mediaType === "movie") {
+      if (actions.pinnedMovies.some((m) => m.tmdbId === item.id)) {
+        inStudioKey = `movie:${item.id}`;
+      } else if (movieRes?.kind === "collection" && actions.pinnedCollections.some((c) => c.tmdbId === movieRes.collectionId)) {
+        inStudioKey = `collection:${movieRes.collectionId}`;
+      }
     }
   }
 
@@ -172,28 +197,36 @@ function TrendingCard({ item, mediaType, actions }: {
           <ImageIcon sx={{ fontSize: "3rem", color: "text.disabled" }} />
         </Box>
       )}
-      {actions && !inStudioKey && (
-        <TrendingCardMenu tmdbId={item.id} mediaType={mediaType} title={label} year={year} actions={actions} />
+      {inStudioKey && (
+        <Box sx={{
+          position: "absolute", top: 0, left: 0,
+          bgcolor: "#16a34a", color: "#ffffff",
+          fontSize: "0.6rem", fontWeight: 700, lineHeight: 1,
+          px: "6px", py: "4px",
+          borderRadius: "0 0 6px 0",
+          letterSpacing: "0.05em",
+          pointerEvents: "none",
+        }}>
+          IN STUDIO
+        </Box>
       )}
     </Box>
   );
 
-  if (inStudioKey) {
-    return (
-      <Tooltip title="View in Studio" placement="top">
-        <Box sx={{ cursor: "pointer" }} onClick={() => actions!.onNavigate(inStudioKey!)}>
-          {imageArea}
-          <CardTitleStrip title={label} subtitle={year || undefined} />
-        </Box>
-      </Tooltip>
-    );
-  }
-
   return (
-    <Box>
-      {imageArea}
-      <CardTitleStrip title={label} subtitle={year || undefined} />
-    </Box>
+    <Tooltip title={inStudioKey ? "View in Studio" : ""} placement="top" disableHoverListener={!inStudioKey}>
+      <Box>
+        <ArtworkCardFrame
+          media={imageArea}
+          title={label}
+          subtitle={year || undefined}
+          menuSlot={actions && !inStudioKey ? (
+            <TrendingCardMenu tmdbId={item.id} mediaType={mediaType} title={label} year={year} actions={actions} preloadedMovieRes={movieRes} />
+          ) : undefined}
+          onClick={inStudioKey ? () => actions!.onNavigate(inStudioKey) : undefined}
+        />
+      </Box>
+    </Tooltip>
   );
 }
 

@@ -16,6 +16,7 @@ import Button from "@mui/material/Button";
 import Container from "@mui/material/Container";
 import Snackbar from "@mui/material/Snackbar";
 import CircularProgress from "@mui/material/CircularProgress";
+import InputAdornment from "@mui/material/InputAdornment";
 
 
 import { POSTER_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
@@ -29,6 +30,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
 import { alpha } from "@mui/material/styles";
@@ -39,6 +41,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import MovieOutlinedIcon from "@mui/icons-material/MovieOutlined";
+import SearchIcon from "@mui/icons-material/Search";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 
 import PlexMark from "@/components/PlexMark";
@@ -97,6 +100,12 @@ function makeArtworkMeta(
 
 function sortedByTitle<T extends { title: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => sortKey(a.title).localeCompare(sortKey(b.title)));
+}
+
+function matchesListSearch(item: { title: string }, query: string, aliases: string[] = []): boolean {
+  const term = query.trim().toLowerCase();
+  if (!term) return true;
+  return [item.title, ...aliases].some((value) => value.toLowerCase().includes(term));
 }
 
 function groupByLetter<T extends { title: string }>(items: T[]): [string, T[]][] {
@@ -265,10 +274,10 @@ function makeTVShowGroup(item: MediaItem, src: string, failed = false, creatorNa
 // ---------------------------------------------------------------------------
 
 type Nav =
-  | { view: "collections" | "movies" | "shows" }
-  | { view: "collection" | "show"; id: string; title: string }
-  | { view: "season"; showId: string; showTitle: string; showTmdbId: number | null; seasonId: string; seasonIndex: number | null; title: string }
-  | { view: "movie"; item: MediaItem; fromCollectionId?: string; fromCollectionTitle?: string };
+  | { view: "collections" | "movies" | "shows"; library?: string | null }
+  | { view: "collection" | "show"; id: string; title: string; library?: string | null }
+  | { view: "season"; showId: string; showTitle: string; showTmdbId: number | null; seasonId: string; seasonIndex: number | null; title: string; library?: string | null }
+  | { view: "movie"; item: MediaItem; fromCollectionId?: string; fromCollectionTitle?: string; library?: string | null };
 
 // ---------------------------------------------------------------------------
 // URL ↔ Nav serialisation (module-level, no hooks)
@@ -278,11 +287,12 @@ type RawSearchParams = ReturnType<typeof useSearchParams>;
 
 function navFromParams(p: RawSearchParams): Nav {
   const view = p.get("view") ?? "movies";
+  const library = p.get("library");
   switch (view) {
-    case "collections":        return { view: "collections" };
-    case "shows":              return { view: "shows" };
-    case "collection":         return { view: "collection", id: p.get("id") ?? "", title: p.get("title") ?? "" };
-    case "show":               return { view: "show", id: p.get("id") ?? "", title: p.get("title") ?? "" };
+    case "collections":        return { view: "collections", library };
+    case "shows":              return { view: "shows", library };
+    case "collection":         return { view: "collection", id: p.get("id") ?? "", title: p.get("title") ?? "", library };
+    case "show":               return { view: "show", id: p.get("id") ?? "", title: p.get("title") ?? "", library };
     case "season": {
       const showTmdbStr = p.get("showTmdbId");
       const seasonIdxStr = p.get("seasonIndex");
@@ -294,6 +304,7 @@ function navFromParams(p: RawSearchParams): Nav {
         seasonId: p.get("seasonId") ?? "",
         seasonIndex: seasonIdxStr ? parseInt(seasonIdxStr, 10) : null,
         title: p.get("title") ?? "",
+        library,
       };
     }
     case "movie": {
@@ -315,25 +326,30 @@ function navFromParams(p: RawSearchParams): Nav {
         },
         fromCollectionId: p.get("fromCollectionId") ?? undefined,
         fromCollectionTitle: p.get("fromCollectionTitle") ?? undefined,
+        library,
       };
     }
-    default: return { view: "movies" };
+    default: return { view: "movies", library };
   }
 }
 
 function navToSearch(nav: Nav): string {
   const p = new URLSearchParams();
   switch (nav.view) {
-    case "movies": break; // clean default URL
+    case "movies":
+      if (nav.library) p.set("library", nav.library);
+      break; // clean default URL
     case "collections":
     case "shows":
       p.set("view", nav.view);
+      if (nav.library) p.set("library", nav.library);
       break;
     case "collection":
     case "show":
       p.set("view", nav.view);
       p.set("id", nav.id);
       p.set("title", nav.title);
+      if (nav.library) p.set("library", nav.library);
       break;
     case "season":
       p.set("view", "season");
@@ -343,6 +359,7 @@ function navToSearch(nav: Nav): string {
       p.set("seasonId", nav.seasonId);
       if (nav.seasonIndex != null) p.set("seasonIndex", String(nav.seasonIndex));
       p.set("title", nav.title);
+      if (nav.library) p.set("library", nav.library);
       break;
     case "movie":
       p.set("view", "movie");
@@ -353,6 +370,7 @@ function navToSearch(nav: Nav): string {
       if (nav.item.collection_ids?.length) p.set("collectionIds", JSON.stringify(nav.item.collection_ids));
       if (nav.fromCollectionId) p.set("fromCollectionId", nav.fromCollectionId);
       if (nav.fromCollectionTitle) p.set("fromCollectionTitle", nav.fromCollectionTitle);
+      if (nav.library) p.set("library", nav.library);
       break;
   }
   const str = p.toString();
@@ -481,16 +499,14 @@ export default function MyMediaContent() {
   }
 
   const scrollContainerRef = useRef<HTMLElement>(null);
-
+  const [conn, setConn] = useState<{ nodeUrl: string; adminToken: string } | null>(null);
   const [library, setLibrary] = useState<MediaLibrary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [conn, setConn] = useState<{ nodeUrl: string; adminToken: string } | null>(null);
   const [servers, setServers] = useState<MediaServerConfig[]>([]);
 
   const [children, setChildren] = useState<MediaItem[]>([]);
   const [childrenForId, setChildrenForId] = useState<string | null>(null);
-  const [childrenLoading, setChildrenLoading] = useState(false);
   const [failedThumbs, setFailedThumbs] = useState<Set<string>>(new Set());
   const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
   // media_item_id → TrackedArtwork (loaded in parallel with library)
@@ -500,8 +516,10 @@ export default function MyMediaContent() {
     open: false, message: "", severity: "success",
   });
 
-  const [activeLibrary, setActiveLibrary] = useState<string | null>(null);
   const [collMenuAnchor, setCollMenuAnchor] = useState<null | HTMLElement>(null);
+  const [appliedListSearchByScope, setAppliedListSearchByScope] = useState<Record<string, string>>({});
+  const [collectionHeaderStatus, setCollectionHeaderStatus] = useState<React.ReactNode | null>(null);
+  const searchDebounceRef = useRef<number | null>(null);
 
   function markFailed(id: string) {
     setFailedThumbs((prev) => prev.has(id) ? prev : new Set([...prev, id]));
@@ -530,74 +548,89 @@ export default function MyMediaContent() {
     }
   }
 
-  const missingChip = { label: "MISSING", color: "error" as const };
-
   useEffect(() => {
-    const connection = loadCreatorConnection();
-    setConn(connection);
-    if (!connection) { setLoading(false); return; }
-    setLoading(true);
-    Promise.all([
-      fetchMediaLibrary(),
-      getTrackedArtwork(connection.nodeUrl, connection.adminToken),
-      listMediaServers(connection.nodeUrl, connection.adminToken).catch(() => [] as typeof servers),
-    ])
-      .then(([lib, tracked, srvList]) => {
-        setServers(srvList);
-        setLibrary(lib);
-        const artworkMap = new Map(tracked.map((t) => [t.media_item_id, t]));
-        setTrackedArtwork(artworkMap);
+    let cancelled = false;
+    const frameId = requestAnimationFrame(() => {
+      if (cancelled) return;
+      const connection = loadCreatorConnection();
+      setConn(connection);
+      if (!connection) {
+        setLoading(false);
+        return;
+      }
+      Promise.all([
+        fetchMediaLibrary(),
+        getTrackedArtwork(connection.nodeUrl, connection.adminToken),
+        listMediaServers(connection.nodeUrl, connection.adminToken).catch(() => [] as typeof servers),
+      ])
+        .then(([lib, tracked, srvList]) => {
+          if (cancelled) return;
+          setServers(srvList);
+          setLibrary(lib);
+          const artworkMap = new Map(tracked.map((t) => [t.media_item_id, t]));
+          setTrackedArtwork(artworkMap);
 
-        // Fallback: for legacy records that predate the creator_display_name column,
-        // fetch the missing name from the source node (one request per legacy item).
-        const legacy = tracked.filter((t) => !t.creator_display_name && t.node_base && t.poster_id);
-        if (legacy.length > 0) {
-          Promise.all(
-            legacy.map((t) =>
-              fetchPosterFromNode(t.node_base!, t.poster_id).then((p) => ({
-                id: t.media_item_id,
-                name: p?.creator.display_name ?? null,
-              })),
-            ),
-          ).then((results) => {
-            setTrackedArtwork((prev) => {
-              const next = new Map(prev);
-              for (const { id, name } of results) {
-                const existing = next.get(id);
-                if (existing && name) next.set(id, { ...existing, creator_display_name: name });
-              }
-              return next;
-            });
-          }).catch(() => {});
-        }
+          const legacy = tracked.filter((t) => !t.creator_display_name && t.node_base && t.poster_id);
+          if (legacy.length > 0) {
+            Promise.all(
+              legacy.map((t) =>
+                fetchPosterFromNode(t.node_base!, t.poster_id).then((p) => ({
+                  id: t.media_item_id,
+                  name: p?.creator.display_name ?? null,
+                })),
+              ),
+            ).then((results) => {
+              if (cancelled) return;
+              setTrackedArtwork((prev) => {
+                const next = new Map(prev);
+                for (const { id, name } of results) {
+                  const existing = next.get(id);
+                  if (existing && name) next.set(id, { ...existing, creator_display_name: name });
+                }
+                return next;
+              });
+            }).catch(() => {});
+          }
 
-        setError(null);
-        // Trigger artwork update check after library loads
-        runArtworkUpdateCheck(
-          connection.nodeUrl,
-          connection.adminToken,
-          (p) => setUpdateProgress(p),
-          async (item, poster) => {
-            await applyToPlexPoster(connection.nodeUrl, connection.adminToken, {
-              imageUrl: poster.assets.full.url,
-              tmdbId: item.tmdb_id ?? undefined,
-              plexRatingKey: item.media_item_id,
-              mediaType: item.media_type,
-              posterId: item.poster_id,
-              assetHash: poster.assets.full.hash,
-              creatorId: item.creator_id ?? undefined,
-              creatorDisplayName: item.creator_display_name ?? undefined,
-              themeId: item.theme_id ?? undefined,
-              nodeBase: item.node_base ?? undefined,
-              autoUpdate: true,
-            });
-          },
-        ).then((count) => {
-          setTimeout(() => setUpdateProgress(null), count > 0 ? 3000 : 1500);
-        }).catch(() => setUpdateProgress(null));
-      })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
+          setError(null);
+          runArtworkUpdateCheck(
+            connection.nodeUrl,
+            connection.adminToken,
+            (p) => setUpdateProgress(p),
+            async (item, poster) => {
+              await applyToPlexPoster(connection.nodeUrl, connection.adminToken, {
+                imageUrl: poster.assets.full.url,
+                tmdbId: item.tmdb_id ?? undefined,
+                plexRatingKey: item.media_item_id,
+                mediaType: item.media_type,
+                posterId: item.poster_id,
+                assetHash: poster.assets.full.hash,
+                creatorId: item.creator_id ?? undefined,
+                creatorDisplayName: item.creator_display_name ?? undefined,
+                themeId: item.theme_id ?? undefined,
+                nodeBase: item.node_base ?? undefined,
+                autoUpdate: true,
+              });
+            },
+          ).then((count) => {
+            if (cancelled) return;
+            setTimeout(() => setUpdateProgress(null), count > 0 ? 3000 : 1500);
+          }).catch(() => {
+            if (!cancelled) setUpdateProgress(null);
+          });
+        })
+        .catch((e: unknown) => {
+          if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frameId);
+    };
   }, []);
 
   useEffect(() => {
@@ -607,16 +640,18 @@ export default function MyMediaContent() {
     else if (nav.view === "season") itemId = nav.seasonId;
     if (!itemId) return;
     const id = itemId;
-    setChildrenLoading(true);
     fetchMediaChildren(conn.nodeUrl, conn.adminToken, id)
       .then((items) => { setChildren(items); setChildrenForId(id); })
-      .catch(() => { setChildren([]); setChildrenForId(id); })
-      .finally(() => setChildrenLoading(false));
+      .catch(() => { setChildren([]); setChildrenForId(id); });
   }, [nav, conn]);
 
   const sortedMovies = useMemo(() => sortedByTitle(library?.movies ?? []), [library]);
   const sortedShows = useMemo(() => sortedByTitle(library?.shows ?? []), [library]);
   const sortedCollections = useMemo(() => sortedByTitle(library?.collections ?? []), [library]);
+  const collectionTitlesById = useMemo(
+    () => new Map((library?.collections ?? []).map((item) => [item.id, item.title])),
+    [library?.collections],
+  );
 
   type SidebarLibrary = { name: string; type: "movie" | "show"; hasCollections: boolean };
 
@@ -631,6 +666,9 @@ export default function MyMediaContent() {
         movieLibsWithCollections.add(movie.library_title);
       }
     }
+    const collectionLibs = new Set(
+      library.collections.map((c) => c.library_title).filter(Boolean) as string[],
+    );
     // TV libraries: has collections if any collection item has a matching library_title.
     const tvCollectionLibs = new Set(
       library.collections.map((c) => c.library_title).filter(Boolean) as string[]
@@ -639,7 +677,7 @@ export default function MyMediaContent() {
       ...srv.movie_libraries.map((name) => ({
         name,
         type: "movie" as const,
-        hasCollections: movieLibsWithCollections.has(name),
+        hasCollections: movieLibsWithCollections.has(name) || collectionLibs.has(name),
       })),
       ...srv.tv_libraries.map((name) => ({
         name,
@@ -649,15 +687,76 @@ export default function MyMediaContent() {
     ];
   }, [servers, library]);
 
-  const visibleMovies = useMemo(() =>
+  const activeLibrary = useMemo(() => {
+    if (nav.library) return nav.library;
+
+    if (nav.view === "movies" || nav.view === "shows" || nav.view === "collections") {
+      if (nav.library) return nav.library;
+      if (nav.view === "collections") {
+        const collectionLibraries = sidebarLibraries.filter((lib) => lib.hasCollections);
+        if (collectionLibraries.length === 1) return collectionLibraries[0].name;
+      }
+      return null;
+    }
+
+    if (nav.view === "collection") {
+      return library?.collections.find((item) => item.id === nav.id)?.library_title ?? null;
+    }
+    if (nav.view === "show") {
+      return library?.shows.find((item) => item.id === nav.id)?.library_title ?? null;
+    }
+    if (nav.view === "season") {
+      return library?.shows.find((item) => item.id === nav.showId)?.library_title ?? null;
+    }
+    if (nav.view === "movie") {
+      return library?.movies.find((item) => item.id === nav.item.id)?.library_title ?? null;
+    }
+    return null;
+  }, [nav, sidebarLibraries, library]);
+
+  const libraryMovies = useMemo(() =>
     activeLibrary ? sortedMovies.filter((m) => m.library_title === activeLibrary) : sortedMovies,
   [sortedMovies, activeLibrary]);
-  const visibleShows = useMemo(() =>
+  const libraryShows = useMemo(() =>
     activeLibrary ? sortedShows.filter((s) => s.library_title === activeLibrary) : sortedShows,
   [sortedShows, activeLibrary]);
-  const visibleCollections = useMemo(() =>
+  const libraryCollections = useMemo(() =>
     activeLibrary ? sortedCollections.filter((c) => c.library_title === activeLibrary) : sortedCollections,
   [sortedCollections, activeLibrary]);
+  const listSearchScope = `${nav.view}:${activeLibrary ?? ""}`;
+  const listSearch = appliedListSearchByScope[listSearchScope] ?? "";
+  const visibleMovies = useMemo(() =>
+    libraryMovies.filter((item) =>
+      matchesListSearch(
+        item,
+        listSearch,
+        (item.collection_ids ?? [])
+          .map((id) => collectionTitlesById.get(id))
+          .filter((title): title is string => Boolean(title)),
+      ),
+    ),
+  [libraryMovies, listSearch, collectionTitlesById]);
+  const visibleShows = useMemo(() =>
+    libraryShows.filter((item) => matchesListSearch(item, listSearch)),
+  [libraryShows, listSearch]);
+  const visibleCollections = useMemo(() =>
+    libraryCollections.filter((item) => matchesListSearch(item, listSearch, [item.title.replace(/\s+Collection$/i, "")])),
+  [libraryCollections, listSearch]);
+  const requestedChildrenId =
+    nav.view === "collection" || nav.view === "show"
+      ? nav.id
+      : nav.view === "season"
+        ? nav.seasonId
+        : null;
+  const childrenLoading = requestedChildrenId != null && childrenForId !== requestedChildrenId;
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current != null) {
+        window.clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, []);
 
   // Per-collection movie count derived from movies' collection_ids arrays.
   const collectionMovieCounts = useMemo(() => {
@@ -681,15 +780,25 @@ export default function MyMediaContent() {
   }, [nav.view, visibleMovies, visibleShows, visibleCollections]);
 
   const showAZRail = nav.view === "movies" || nav.view === "shows" || nav.view === "collections";
+  const showListSearch = showAZRail;
 
   function goToLibrary(lib: SidebarLibrary) {
-    setActiveLibrary(lib.name);
-    navigate({ view: lib.type === "movie" ? "movies" : "shows" });
+    navigate({ view: lib.type === "movie" ? "movies" : "shows", library: lib.name });
   }
 
   function goToLibraryCollections(lib: SidebarLibrary) {
-    setActiveLibrary(lib.name);
-    navigate({ view: "collections" });
+    navigate({ view: "collections", library: lib.name });
+  }
+
+  function clearListFilter() {
+    if (searchDebounceRef.current != null) {
+      window.clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
+    setAppliedListSearchByScope((prev) => ({ ...prev, [listSearchScope]: "" }));
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
   }
 
   if (!conn) {
@@ -725,35 +834,35 @@ export default function MyMediaContent() {
 
   const homePageCrumb: PageCrumb = {
     label: <HomeIcon sx={{ fontSize: "1rem", verticalAlign: "text-bottom" }} />,
-    onClick: () => { setActiveLibrary(null); navigate({ view: "movies" }); },
+    onClick: () => { navigate({ view: "movies", library: null }); },
   };
 
   const mediaBreadcrumbs: PageCrumb[] = (() => {
     const lib = activeLibrary;
     const moviesLabel = lib ?? t("movies");
     const showsLabel = lib ?? t("tvShows");
-    const moviesBack: PageCrumb = { label: moviesLabel, onClick: () => navigate({ view: "movies" }) };
-    const showsBack: PageCrumb = { label: showsLabel, onClick: () => navigate({ view: "shows" }) };
-    const collectionsBack: PageCrumb = { label: t("collections"), onClick: () => navigate({ view: "collections" }) };
+    const moviesBack: PageCrumb = { label: moviesLabel, onClick: () => navigate({ view: "movies", library: lib }) };
+    const showsBack: PageCrumb = { label: showsLabel, onClick: () => navigate({ view: "shows", library: lib }) };
+    const collectionsBack: PageCrumb = { label: t("collections"), onClick: () => navigate({ view: "collections", library: lib }) };
 
     switch (nav.view) {
       case "movies":      return [homePageCrumb, { label: moviesLabel }];
       case "shows":       return [homePageCrumb, { label: showsLabel }];
       case "collections": return lib
-        ? [homePageCrumb, { label: lib, onClick: () => navigate({ view: "movies" }) }, { label: t("collections") }]
+        ? [homePageCrumb, { label: lib, onClick: () => navigate({ view: "movies", library: lib }) }, { label: t("collections") }]
         : [homePageCrumb, { label: t("collections") }];
       case "collection":  return lib
-        ? [homePageCrumb, { label: lib, onClick: () => navigate({ view: "movies" }) }, collectionsBack, { label: nav.title }]
+        ? [homePageCrumb, { label: lib, onClick: () => navigate({ view: "movies", library: lib }) }, collectionsBack, { label: nav.title }]
         : [homePageCrumb, collectionsBack, { label: nav.title }];
       case "show":        return [homePageCrumb, showsBack, { label: nav.title }];
       case "season":      return [
         homePageCrumb,
         showsBack,
-        { label: nav.showTitle, onClick: () => navigate({ view: "show", id: nav.showId, title: nav.showTitle }) },
+        { label: nav.showTitle, onClick: () => navigate({ view: "show", id: nav.showId, title: nav.showTitle, library: lib }) },
         { label: nav.title },
       ];
       case "movie":       return nav.fromCollectionId
-        ? [homePageCrumb, moviesBack, collectionsBack, { label: nav.fromCollectionTitle ?? "", onClick: () => navigate({ view: "collection", id: nav.fromCollectionId!, title: nav.fromCollectionTitle ?? "" }) }, { label: nav.item.title }]
+        ? [homePageCrumb, moviesBack, collectionsBack, { label: nav.fromCollectionTitle ?? "", onClick: () => navigate({ view: "collection", id: nav.fromCollectionId!, title: nav.fromCollectionTitle ?? "", library: lib }) }, { label: nav.item.title }]
         : [homePageCrumb, moviesBack, { label: nav.item.title }];
       default:            return [homePageCrumb];
     }
@@ -782,8 +891,50 @@ export default function MyMediaContent() {
     }
   })();
 
+  const listSearchTarget = activeLibrary ?? (typeof mediaPageTitle === "string" ? mediaPageTitle : t("title"));
+
   // Subtitle rendered by PageHeader — keeps subtitle/spacing logic out of detail components.
   const mediaSubtitle = (() => {
+    if (nav.view === "movies" || nav.view === "shows" || nav.view === "collections") {
+      const totalCount = nav.view === "movies"
+        ? libraryMovies.length
+        : nav.view === "shows"
+          ? libraryShows.length
+          : libraryCollections.length;
+      const visibleCount = nav.view === "movies"
+        ? visibleMovies.length
+        : nav.view === "shows"
+          ? visibleShows.length
+          : visibleCollections.length;
+      const typeLabel = nav.view === "movies"
+        ? t("movies").toUpperCase()
+        : nav.view === "shows"
+          ? t("tvShows").toUpperCase()
+          : t("collections").toUpperCase();
+      const serverLabel = (servers[0]?.name ?? t("title")).toUpperCase();
+      const hasActiveFilter = listSearch.trim().length > 0;
+
+      return hasActiveFilter ? (
+        <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap>
+          <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            {`Showing ${visibleCount} of the ${totalCount} ${typeLabel} available on ${serverLabel}`}
+          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: "0.6rem", py: 0.25, lineHeight: 1.5 }}
+            onClick={clearListFilter}
+          >
+            Clear filter
+          </Button>
+        </Stack>
+      ) : (
+        <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+          {`${totalCount} ${typeLabel} available on ${serverLabel}`}
+        </Typography>
+      );
+    }
+
     if (nav.view === "movie" && library) {
       const memberColls = (nav.item.collection_ids ?? [])
         .map((id) => sortedCollections.find((c) => c.id === id))
@@ -802,7 +953,7 @@ export default function MyMediaContent() {
               {t("movieMemberOf", { title: memberColls[0].title })}
             </Typography>
             <Button size="small" variant="outlined" sx={btnSx}
-              onClick={() => navigate({ view: "collection", id: memberColls[0].id, title: memberColls[0].title })}>
+              onClick={() => navigate({ view: "collection", id: memberColls[0].id, title: memberColls[0].title, library: activeLibrary })}>
               {nav.fromCollectionTitle ? t("movieBackToCollection") : t("movieViewCollection")}
             </Button>
           </Stack>
@@ -819,7 +970,7 @@ export default function MyMediaContent() {
           </Button>
           <Menu anchorEl={collMenuAnchor} open={Boolean(collMenuAnchor)} onClose={() => setCollMenuAnchor(null)}>
             {memberColls.map((c) => (
-              <MenuItem key={c.id} dense onClick={() => { setCollMenuAnchor(null); navigate({ view: "collection", id: c.id, title: c.title }); }}>
+              <MenuItem key={c.id} dense onClick={() => { setCollMenuAnchor(null); navigate({ view: "collection", id: c.id, title: c.title, library: activeLibrary }); }}>
                 {c.title}
               </MenuItem>
             ))}
@@ -840,6 +991,10 @@ export default function MyMediaContent() {
           })}
         </Typography>
       );
+    }
+
+    if (nav.view === "collection" && collectionHeaderStatus) {
+      return collectionHeaderStatus;
     }
 
     return null;
@@ -869,13 +1024,13 @@ export default function MyMediaContent() {
                 return (
                   <PosterCard
                     poster={makePoster(item, src(item), tracked?.creator_display_name ?? undefined)}
-                    chip={failed ? missingChip : undefined}
+                    chip={false}
                     imageFailed={failed}
                     managed={!!tracked}
                     menuSlot={failed ? <CardRetryMenu onRetry={() => markRetry(item.id)} /> : (tracked ? <CardManageMenu onReset={() => handleReset(item.id)} /> : undefined)}
                     imageWrapper={tracked ? (img) => <ArtworkMetadataTooltip meta={meta}>{img}</ArtworkMetadataTooltip> : undefined}
                     onImageError={() => markFailed(item.id)}
-                    onClick={item.tmdb_id != null ? () => navigate({ view: "movie", item }) : undefined}
+                    onClick={item.tmdb_id != null ? () => navigate({ view: "movie", item, library: activeLibrary }) : undefined}
                   />
                 );
               }}
@@ -895,8 +1050,9 @@ export default function MyMediaContent() {
                 return (
                   <TVShowCard
                     group={makeTVShowGroup(item, src(item), failed, trackedArtwork.get(item.id)?.creator_display_name ?? undefined)}
-                    onClick={() => navigate({ view: "show", id: item.id, title: item.title })}
-                    chip={failed ? missingChip : undefined}
+                    onClick={() => navigate({ view: "show", id: item.id, title: item.title, library: activeLibrary })}
+                    chip={false}
+                    imageFailed={failed}
                     menuSlot={failed ? <CardRetryMenu onRetry={() => markRetry(item.id)} /> : undefined}
                     onImageError={() => markFailed(item.id)}
                   />
@@ -921,8 +1077,9 @@ export default function MyMediaContent() {
                 return (
                   <CollectionCard
                     group={makeCollectionGroup({ ...item, title: item.title.replace(/\s+Collection$/i, "") }, src(item), failed, tracked?.creator_display_name ?? undefined, collectionMovieCounts.get(item.id))}
-                    onClick={() => navigate({ view: "collection", id: item.id, title: item.title })}
-                    chip={failed ? missingChip : undefined}
+                    onClick={() => navigate({ view: "collection", id: item.id, title: item.title, library: activeLibrary })}
+                    chip={false}
+                    imageFailed={failed}
                     managed={!!tracked}
                     menuSlot={failed ? <CardRetryMenu onRetry={() => markRetry(item.id)} /> : (tracked ? <CardManageMenu onReset={() => handleReset(item.id)} /> : undefined)}
                     imageWrapper={tracked ? (img) => <ArtworkMetadataTooltip meta={meta}>{img}</ArtworkMetadataTooltip> : undefined}
@@ -959,8 +1116,9 @@ export default function MyMediaContent() {
             onMarkRetry={markRetry}
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
             onTrack={(id, artwork) => setTrackedArtwork((prev) => new Map(prev).set(id, artwork))}
-            onNavigateToMovie={(movie) => navigate({ view: "movie", item: movie, fromCollectionId: nav.id, fromCollectionTitle: nav.title })}
+            onNavigateToMovie={(movie) => navigate({ view: "movie", item: movie, fromCollectionId: nav.id, fromCollectionTitle: nav.title, library: activeLibrary })}
             serverName={servers[0]?.name}
+            onHeaderStatusChange={setCollectionHeaderStatus}
           />
         ) : <Typography color="text.secondary">{noItems}</Typography>;
       }
@@ -979,7 +1137,7 @@ export default function MyMediaContent() {
             onMarkRetry={markRetry}
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
             onTrack={(id, artwork) => setTrackedArtwork((prev) => new Map(prev).set(id, artwork))}
-            onViewEpisodes={(season) => navigate({ view: "season", showId: nav.id, showTitle: nav.title, showTmdbId: showItem.tmdb_id, seasonId: season.id, seasonIndex: season.index, title: season.title })}
+            onViewEpisodes={(season) => navigate({ view: "season", showId: nav.id, showTitle: nav.title, showTmdbId: showItem.tmdb_id, seasonId: season.id, seasonIndex: season.index, title: season.title, library: activeLibrary })}
             serverName={servers[0]?.name}
           />
         ) : <Typography color="text.secondary">{noItems}</Typography>;
@@ -1084,7 +1242,15 @@ export default function MyMediaContent() {
               <List dense disablePadding>
                 {sidebarLibraries.map((lib) => {
                   const isActive = activeLibrary === lib.name;
-                  const isItemsView = nav.view === "movies" || nav.view === "shows";
+                  const isLibraryView =
+                    nav.view === "movies" ||
+                    nav.view === "shows" ||
+                    nav.view === "movie" ||
+                    nav.view === "show" ||
+                    nav.view === "season";
+                  const isCollectionView =
+                    nav.view === "collections" ||
+                    nav.view === "collection";
                   const icon = lib.type === "movie"
                     ? <MovieOutlinedIcon fontSize="small" />
                     : <TvOutlinedIcon fontSize="small" />;
@@ -1092,7 +1258,7 @@ export default function MyMediaContent() {
                     <Fragment key={lib.name}>
                       <ListItem disablePadding>
                         <ListItemButton
-                          selected={isActive && !lib.hasCollections}
+                          selected={isActive && (!lib.hasCollections ? isLibraryView || isCollectionView : false)}
                           onClick={() => goToLibrary(lib)}
                         >
                           <ListItemIcon sx={{ minWidth: 36 }}>{icon}</ListItemIcon>
@@ -1106,25 +1272,25 @@ export default function MyMediaContent() {
                         <>
                           <ListItem disablePadding>
                             <ListItemButton
-                              selected={isActive && isItemsView}
+                              selected={isActive && isLibraryView}
                               onClick={() => goToLibrary(lib)}
                               sx={{ pl: 6.5 }}
                             >
                               <ListItemText
                                 primary={t("library")}
-                                slotProps={{ primary: { variant: "body2", color: isActive && isItemsView ? "primary" : "text.secondary", fontWeight: isActive && isItemsView ? 600 : 400 } }}
+                                slotProps={{ primary: { variant: "body2", color: isActive && isLibraryView ? "primary" : "text.secondary", fontWeight: isActive && isLibraryView ? 600 : 400 } }}
                               />
                             </ListItemButton>
                           </ListItem>
                           <ListItem disablePadding>
                             <ListItemButton
-                              selected={isActive && nav.view === "collections"}
+                              selected={isActive && isCollectionView}
                               onClick={() => goToLibraryCollections(lib)}
                               sx={{ pl: 6.5 }}
                             >
                               <ListItemText
                                 primary={t("collections")}
-                                slotProps={{ primary: { variant: "body2", color: isActive && nav.view === "collections" ? "primary" : "text.secondary", fontWeight: isActive && nav.view === "collections" ? 600 : 400 } }}
+                                slotProps={{ primary: { variant: "body2", color: isActive && isCollectionView ? "primary" : "text.secondary", fontWeight: isActive && isCollectionView ? 600 : 400 } }}
                               />
                             </ListItemButton>
                           </ListItem>
@@ -1140,33 +1306,110 @@ export default function MyMediaContent() {
       </Box>
 
       {/* Main content — full width, left padding clears the sidebar */}
-      <Box ref={scrollContainerRef} sx={{ height: "100%", overflowY: "auto", p: { xs: 2, md: 3 }, pl: { md: "232px" }, pr: { md: 5 } }}>
-        <PageHeader
-          crumbs={mediaBreadcrumbs}
-          title={mediaPageTitle ?? undefined}
-          subtitle={mediaSubtitle ?? undefined}
-          compact={nav.view === "collection" || nav.view === "season"}
-        />
-
-        {updateProgress && (
-          <Box sx={{ mb: 2 }}>
-            <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
-              <Typography variant="caption" color="text.secondary">
-                {t("checkingArtwork", { checked: updateProgress.checked, total: updateProgress.total })}
-              </Typography>
-              {updateProgress.updated > 0 && (
-                <Typography variant="caption" color="success.main">
-                  {t("artworkUpdated", { count: updateProgress.updated })}
-                </Typography>
-              )}
-            </Stack>
-            <LinearProgress
-              variant="determinate"
-              value={updateProgress.total > 0 ? (updateProgress.checked / updateProgress.total) * 100 : 0}
-            />
+      <Box
+        ref={scrollContainerRef}
+        sx={{
+          height: "100%",
+          overflowY: "auto",
+          pt: 0,
+          pb: { xs: 2, md: 3 },
+          pl: { md: "232px" },
+        }}
+      >
+        <Box
+          sx={{
+            position: "sticky",
+            top: 0,
+            zIndex: 2,
+            mb: 2,
+            pt: { xs: 2, md: 3 },
+            pb: 2,
+            bgcolor: (theme) => alpha(theme.palette.background.default, 0.45),
+            backdropFilter: "blur(12px)",
+          }}
+        >
+          <Box
+            sx={{
+              px: { xs: 2, md: 3 },
+              pr: { md: 5 },
+              display: "flex",
+              flexDirection: { xs: "column", lg: "row" },
+              alignItems: { xs: "stretch", lg: "flex-start" },
+              justifyContent: "space-between",
+              gap: 2,
+            }}
+          >
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <PageHeader
+                crumbs={mediaBreadcrumbs}
+                title={mediaPageTitle ?? undefined}
+                subtitle={mediaSubtitle ?? undefined}
+                compact={nav.view === "collection" || nav.view === "season"}
+              />
+            </Box>
+            {showListSearch && (
+              <TextField
+                key={`${listSearchScope}:${listSearch}`}
+                defaultValue={listSearch}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  if (searchDebounceRef.current != null) {
+                    window.clearTimeout(searchDebounceRef.current);
+                  }
+                  searchDebounceRef.current = window.setTimeout(() => {
+                    setAppliedListSearchByScope((prev) => {
+                      if ((prev[listSearchScope] ?? "") === nextValue) return prev;
+                      return { ...prev, [listSearchScope]: nextValue };
+                    });
+                    if (scrollContainerRef.current) {
+                      scrollContainerRef.current.scrollTop = 0;
+                    }
+                  }, 250);
+                }}
+                placeholder={t("searchLibraryPlaceholder", { name: listSearchTarget })}
+                size="small"
+                fullWidth
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ color: "text.secondary" }} />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  width: { xs: "100%", lg: 320 },
+                  maxWidth: "100%",
+                  "& .MuiOutlinedInput-root": {
+                    bgcolor: (theme) => alpha(theme.palette.background.paper, 0.72),
+                  },
+                }}
+              />
+            )}
           </Box>
-        )}
-        {renderContent()}
+
+          {updateProgress && (
+            <Box sx={{ mt: 1 }}>
+              <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {t("checkingArtwork", { checked: updateProgress.checked, total: updateProgress.total })}
+                </Typography>
+                {updateProgress.updated > 0 && (
+                  <Typography variant="caption" color="success.main">
+                    {t("artworkUpdated", { count: updateProgress.updated })}
+                  </Typography>
+                )}
+              </Stack>
+              <LinearProgress
+                variant="determinate"
+                value={updateProgress.total > 0 ? (updateProgress.checked / updateProgress.total) * 100 : 0}
+              />
+            </Box>
+          )}
+        </Box>
+
+        <Box sx={{ px: { xs: 2, md: 3 }, pr: { md: 5 }, pt: 1 }}>
+          {renderContent()}
+        </Box>
       </Box>
 
       {showAZRail && <AZRail available={activeLetters} scrollContainerRef={scrollContainerRef} />}

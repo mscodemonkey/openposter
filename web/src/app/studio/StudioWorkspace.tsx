@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { ARTWORK_LANGUAGE_CODES, getLanguageLabel, getLanguageFlag } from "@/lib/artwork-languages";
@@ -23,6 +23,7 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Checkbox from "@mui/material/Checkbox";
+import Chip from "@mui/material/Chip";
 import Container from "@mui/material/Container";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -40,11 +41,12 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 
 import AddIcon from "@mui/icons-material/Add";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HomeIcon from "@mui/icons-material/Home";
 import CheckIcon from "@mui/icons-material/Check";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -53,13 +55,14 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
-import ImageIcon from "@mui/icons-material/Image";
+import GridViewOutlinedIcon from "@mui/icons-material/GridViewOutlined";
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import MovieOutlinedIcon from "@mui/icons-material/MovieOutlined";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 import UnarchiveOutlinedIcon from "@mui/icons-material/UnarchiveOutlined";
 import LanguageIcon from "@mui/icons-material/Language";
+import TableRowsOutlinedIcon from "@mui/icons-material/TableRowsOutlined";
 
 import { POSTER_GRID_COLS, EPISODE_GRID_COLS, BACKDROP_GRID_COLS, GRID_GAP, CHIP_HEIGHT } from "@/lib/grid-sizes";
 import { loadCreatorConnection, saveCreatorConnection, clearCreatorConnection } from "@/lib/storage";
@@ -70,10 +73,12 @@ import { adminListThemes, adminCreateTheme, adminDeleteTheme, adminSetPosterThem
 import { fetchTmdbCollection, fetchTmdbTvShow, fetchTmdbTvSeason, fetchTmdbSearchCollection, fetchTmdbSearchTv, fetchTmdbMovie, fetchTmdbSearchMovie, tmdbImageUrl, tmdbStillUrl, type TmdbCollection, type TmdbMovie, type TmdbTvShow, type TmdbEpisode, type TmdbTvSeason, type TmdbSearchResult } from "@/lib/tmdb";
 import { fetchMovieLogo, fetchMovieSquare, fetchTvLogo, fetchTvSquare } from "@/lib/placeholder-images";
 import type { CreatorTheme, PosterEntry } from "@/lib/types";
-import CardTitleStrip from "@/components/CardTitleStrip";
 import { CardChip } from "@/components/MediaCard";
 import PosterCard from "@/components/PosterCard";
 import { CollectionCard, CountBadge, TVShowCard, type CollectionGroup, type TVShowGroup } from "@/components/SectionedPosterView";
+import ArtworkCardFrame from "@/components/ArtworkCardFrame";
+import ArtworkPlaceholder from "@/components/ArtworkPlaceholder";
+import { cardMediaSurfaceSx } from "@/components/cardSurface";
 import StudioWelcome from "./StudioWelcome";
 import ThemeModal from "./ThemeModal";
 import ZipImportDialog, { type ZipImportConfig } from "@/components/ZipImportDialog";
@@ -222,7 +227,65 @@ type StudioCallbacks = {
 
 // ─── Module-scope sub-components ─────────────────────────────────────────────
 
-const CHECKER = "repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px";
+const STUDIO_GLASS_PANEL_SX = {
+  backgroundColor: (theme: { palette: { mode: "light" | "dark" } }) =>
+    theme.palette.mode === "light"
+      ? "rgba(255, 255, 255, 0.1)"
+      : "rgba(18, 18, 20, 0.1)",
+  backdropFilter: "blur(16px) saturate(150%)",
+  WebkitBackdropFilter: "blur(16px) saturate(150%)",
+  boxShadow: (theme: { palette: { mode: "light" | "dark" } }) =>
+    theme.palette.mode === "light"
+      ? "inset 0 1px 0 rgba(255,255,255,0.5)"
+      : "inset 0 1px 0 rgba(255,255,255,0.08)",
+} as const;
+
+function StudioStickySelectionBar({
+  label,
+  checked,
+  indeterminate,
+  selectedCount,
+  onToggle,
+}: {
+  label: string;
+  checked: boolean;
+  indeterminate: boolean;
+  selectedCount: number;
+  onToggle: () => void;
+}) {
+  return (
+    <Box
+      sx={{
+        px: 3,
+        pt: 0,
+        pb: 1.5,
+      }}
+    >
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ minHeight: 24 }}>
+        <Checkbox
+          size="small"
+          checked={checked}
+          indeterminate={indeterminate}
+          onChange={onToggle}
+          sx={{ p: 0 }}
+        />
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ cursor: "pointer", "&:hover": { color: "text.primary" } }}
+          onClick={onToggle}
+        >
+          {label}
+        </Typography>
+        {selectedCount > 0 && (
+          <Typography variant="caption" color="text.disabled">
+            {selectedCount} selected
+          </Typography>
+        )}
+      </Stack>
+    </Box>
+  );
+}
 
 // Session-level cache for placeholder images — avoids re-fetching on every navigation
 const placeholderCache = new Map<string, string | null>();
@@ -234,13 +297,8 @@ async function cachedFetch(key: string, fetcher: () => Promise<string | null>): 
 }
 
 function StudioStatusBar({ published }: { published: boolean }) {
-  const t = useTranslations("studio");
   return (
-    <Box sx={{ bgcolor: published ? "success.main" : "warning.main", px: 1, py: 0.35, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <Typography sx={{ fontSize: "0.55rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", lineHeight: 1, color: published ? "success.contrastText" : "warning.contrastText" }}>
-        {published ? t("published") : t("draft")}
-      </Typography>
-    </Box>
+    <Box sx={{ bgcolor: published ? "success.main" : "warning.main", height: 3 }} />
   );
 }
 
@@ -297,7 +355,11 @@ function StudioPosterCard({ poster, selected, onToggleSelect, callbacks, titleOv
         ) : undefined}
         statusBar={<StudioStatusBar published={published} />}
         imageWrapper={(img) => (
-          <Box sx={{ position: "relative" }}>
+          <Box
+            sx={{
+              ...cardMediaSurfaceSx,
+            }}
+          >
             {img}
             {selectionRing}
             {showCheckbox && (
@@ -363,42 +425,32 @@ function StudioTvPlaceholderCard({ label, imagePath, aspectRatio = "2 / 3", noCh
   /** When set, clicking anywhere on the card (outside the upload menu) navigates. */
   onCardClick?: () => void;
 }) {
-  const t = useTranslations("studio");
   const isLandscape = aspectRatio !== "2 / 3" && aspectRatio !== "1 / 1";
   // imagePath may be a full URL (fanart.tv / TMDB logo) or a TMDB path fragment
   const imgUrl = !imagePath ? null
     : imagePath.startsWith("http") ? imagePath
     : isLandscape ? tmdbStillUrl(imagePath) : tmdbImageUrl(imagePath);
+  const overlaySource = placeholderSource ?? (imgUrl ? null : undefined);
   return (
-    <Card onClick={onCardClick} sx={{ height: "100%", cursor: onCardClick ? "pointer" : "default", ...(noChrome ? { bgcolor: "transparent", backgroundImage: "none", border: 0, boxShadow: "none" } : { border: "1px dashed", borderColor: "divider" }) }}>
-      <Box sx={{ position: "relative" }}>
-        {imgUrl ? (
-          <CardMedia component="img" image={imgUrl} alt={label} sx={{ aspectRatio, objectFit: isTransparent ? "contain" : "cover", display: "block", filter: "grayscale(0.75)", opacity: 0.2 }} />
-        ) : (
-          <Box sx={{ aspectRatio, background: CHECKER, display: "block" }} />
-        )}
-        {placeholderSource && (
-          <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0.5, pointerEvents: "none" }}>
-            <ImageIcon sx={{ fontSize: "2rem", color: "rgba(255,255,255,0.7)" }} />
-            <Typography sx={{ fontSize: "0.5rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", lineHeight: 1, color: "rgba(255,255,255,0.7)", textAlign: "center", px: 1 }}>
-              Placeholder from {placeholderSource}
-            </Typography>
-          </Box>
-        )}
-        {activeLanguage
-          ? <LanguageChip language={activeLanguage} />
-          : <Box data-type-chip sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}><CardChip label={chipLabel} color={chipColor} /></Box>}
-        <Box sx={{ position: "absolute", top: 4, right: 4 }}>
-          <PosterActionsMenu onUpload={onUpload} />
-        </Box>
-      </Box>
-      <Box sx={{ bgcolor: "error.main", px: 1, py: 0.35, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Typography sx={{ fontSize: "0.55rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", lineHeight: 1, color: "error.contrastText" }}>
-          {t("noArtwork")}
-        </Typography>
-      </Box>
-      <CardTitleStrip title={label} subtitle={subtitle} subtitleHref={subtitleHref} />
-    </Card>
+    <ArtworkCardFrame
+      media={
+        <ArtworkPlaceholder
+          aspectRatio={aspectRatio}
+          alt={label}
+          imageUrl={imgUrl}
+          fit={isTransparent ? "contain" : "cover"}
+          source={overlaySource}
+        />
+      }
+      title={label}
+      subtitle={subtitle}
+      subtitleHref={subtitleHref}
+      topLeftSlot={activeLanguage ? <LanguageChip language={activeLanguage} /> : <CardChip label={chipLabel} color={chipColor} />}
+      menuSlot={<PosterActionsMenu onUpload={onUpload} />}
+      statusBar={<Box sx={{ bgcolor: "error.main", height: 3 }} />}
+      onClick={onCardClick}
+      surfaceSx={noChrome ? undefined : undefined}
+    />
   );
 }
 
@@ -418,48 +470,54 @@ function StudioCollectionPlaceholderCard({ movie, aspectRatio = "2 / 3", uploadM
   const year = movie.release_date?.slice(0, 4) ?? "";
   const isTransparent = uploadKind === "logo" || uploadKind === "square";
   const imgUrl = isTransparent ? null : tmdbImageUrl(movie.poster_path);
-  const bgStyle = isTransparent || !imgUrl ? { background: CHECKER } : { bgcolor: "action.hover" };
+  const isMissingArtwork = !imgUrl;
   return (
-    <Box onClick={onCardClick} sx={{ height: "100%", borderRadius: 1, overflow: "hidden", cursor: onCardClick ? "pointer" : "default" }}>
-      <Box sx={{ position: "relative" }}>
-        <Box sx={{ aspectRatio, ...bgStyle, position: "relative" }}>
-          {imgUrl && (
-            <Box component="img" src={imgUrl} alt={movie.title}
-              sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block", filter: "grayscale(0.75)", opacity: 0.2 }} />
-          )}
-        </Box>
-        {callbacks.activeLanguage
-          ? <LanguageChip language={callbacks.activeLanguage} />
-          : <Box data-type-chip sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}><CardChip label={chipLabel} color={chipColor} /></Box>}
-        <Box sx={{ position: "absolute", top: 4, right: 4 }}>
-          <PosterActionsMenu
-            onUpload={() => callbacks.onOpenUpload({ mediaType: uploadMediaType, kind: uploadKind, tmdbId: String(movie.id), title: movie.title, year, collectionTmdbId: String(collectionTmdbId), themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined, drawerLabel })}
-          />
-        </Box>
-        {imgUrl && (
-          <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0.5, pointerEvents: "none" }}>
-            <ImageIcon sx={{ fontSize: "2rem", color: "rgba(255,255,255,0.7)" }} />
-            <Typography sx={{ fontSize: "0.5rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", lineHeight: 1, color: "rgba(255,255,255,0.7)", textAlign: "center", px: 1 }}>
-              Placeholder from THEMOVIEDB.ORG
-            </Typography>
-          </Box>
-        )}
-      </Box>
-      <Box sx={{ bgcolor: "error.main", px: 1, py: 0.35, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Typography sx={{ fontSize: "0.55rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", lineHeight: 1, color: "error.contrastText" }}>
-          No artwork
-        </Typography>
-      </Box>
-      <CardTitleStrip title={movie.title} subtitle={subtitle ?? year ?? undefined} />
-    </Box>
+    <ArtworkCardFrame
+      media={
+        <ArtworkPlaceholder
+          aspectRatio={aspectRatio}
+          alt={movie.title}
+          imageUrl={imgUrl}
+          fit={isTransparent ? "contain" : "cover"}
+          source={imgUrl ? "THEMOVIEDB.ORG" : (isMissingArtwork ? null : undefined)}
+        />
+      }
+      title={movie.title}
+      subtitle={subtitle ?? year ?? undefined}
+      topLeftSlot={callbacks.activeLanguage ? <LanguageChip language={callbacks.activeLanguage} /> : <CardChip label={chipLabel} color={chipColor} />}
+      menuSlot={
+        <PosterActionsMenu
+          onUpload={() => callbacks.onOpenUpload({ mediaType: uploadMediaType, kind: uploadKind, tmdbId: String(movie.id), title: movie.title, year, collectionTmdbId: String(collectionTmdbId), themeId: callbacks.activeThemeId, language: callbacks.activeLanguage || undefined, drawerLabel })}
+        />
+      }
+      statusBar={<Box sx={{ bgcolor: "error.main", height: 3 }} />}
+      onClick={onCardClick}
+    />
   );
 }
 
-function StudioCollectionSectionHeading({ label, ids, selected, setSelected }: { label: string; ids?: string[]; selected: Set<string>; setSelected: React.Dispatch<React.SetStateAction<Set<string>>> }) {
+function StudioCollectionSectionHeading({
+  label,
+  ids,
+  selected,
+  setSelected,
+  stats,
+}: {
+  label: string;
+  ids?: string[];
+  selected: Set<string>;
+  setSelected: React.Dispatch<React.SetStateAction<Set<string>>>;
+  stats?: { published: number; draft: number; missing: number };
+}) {
   const sectionIds = ids ?? [];
   const hasPosters = sectionIds.length > 0;
   const allChecked = hasPosters && sectionIds.every((id) => selected.has(id));
   const someChecked = hasPosters && sectionIds.some((id) => selected.has(id));
+  const statParts = [
+    stats && stats.published > 0 ? { label: `${stats.published} PUBLISHED`, color: "success.main" } : null,
+    stats && stats.draft > 0 ? { label: `${stats.draft} DRAFT`, color: "warning.main" } : null,
+    stats && stats.missing > 0 ? { label: `${stats.missing} MISSING`, color: "error.main" } : null,
+  ].filter(Boolean) as Array<{ label: string; color: string }>;
   function toggle() {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -469,13 +527,31 @@ function StudioCollectionSectionHeading({ label, ids, selected, setSelected }: {
     });
   }
   return (
-    <Stack direction="row" spacing={0.5} alignItems="center">
-      {hasPosters && (
-        <Checkbox size="small" checked={allChecked} indeterminate={someChecked && !allChecked} onChange={toggle} sx={{ p: 0 }} />
+    <Stack spacing={0.35}>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
+        {hasPosters && (
+          <Checkbox size="small" checked={allChecked} indeterminate={someChecked && !allChecked} onChange={toggle} sx={{ p: 0 }} />
+        )}
+        <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+          {label}
+        </Typography>
+      </Stack>
+      {statParts.length > 0 && (
+        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: "wrap", minHeight: 18 }}>
+          {statParts.map((part, index) => (
+            <React.Fragment key={part.label}>
+              {index > 0 && (
+                <Typography variant="caption" color="text.disabled" sx={{ fontWeight: 700 }}>
+                  |
+                </Typography>
+              )}
+              <Typography variant="caption" sx={{ fontWeight: 800, color: part.color, letterSpacing: "0.02em" }}>
+                {part.label}
+              </Typography>
+            </React.Fragment>
+          ))}
+        </Stack>
       )}
-      <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1, fontSize: "0.65rem" }}>
-        {label}
-      </Typography>
     </Stack>
   );
 }
@@ -524,53 +600,40 @@ function StudioMoviePlaceholder({ tmdbData, movieTmdbId, cleanTitle, year, aspec
   const imgUrl = asyncImgUrl ?? syncImgUrl;
   const placeholderSource: "THEMOVIEDB.ORG" | "FANART.TV" | null =
     asyncSource ?? (syncImgUrl ? "THEMOVIEDB.ORG" : null);
-  const bgStyle = !imgUrl ? { background: CHECKER } : { bgcolor: "action.hover" };
 
   return (
-    <Box sx={{ height: "100%", borderRadius: 1, overflow: "hidden" }}>
-      <Box sx={{ position: "relative" }}>
-        <Box sx={{ aspectRatio, ...bgStyle, position: "relative" }}>
-          {imgUrl && (
-            <Box component="img" src={imgUrl} alt={cleanTitle}
-              sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: isTransparent ? "contain" : "cover", display: "block", filter: "grayscale(0.75)", opacity: 0.2 }} />
-          )}
-        </Box>
-        {callbacks.activeLanguage
-          ? <LanguageChip language={callbacks.activeLanguage} />
-          : <Box data-type-chip sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}><CardChip label={chipLabel} color={chipColor} /></Box>}
-        <Box sx={{ position: "absolute", top: 4, right: 4 }}>
-          <PosterActionsMenu
-            onUpload={() => callbacks.onOpenUpload({ mediaType: uploadType, tmdbId: String(movieTmdbId), title: cleanTitle, year, themeId: callbacks.activeThemeId, kind: uploadKind, language: callbacks.activeLanguage || undefined, drawerLabel: uploadKind === "square" ? t("drawerLabelSquareArtwork") : uploadKind === "logo" ? t("drawerLabelLogo") : uploadType === "backdrop" ? t("drawerLabelBackdrop") : t("drawerLabelMoviePoster") })}
-          />
-        </Box>
-        {placeholderSource && (
-          <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0.5, pointerEvents: "none" }}>
-            <ImageIcon sx={{ fontSize: "2rem", color: "rgba(255,255,255,0.7)" }} />
-            <Typography sx={{ fontSize: "0.5rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", lineHeight: 1, color: "rgba(255,255,255,0.7)", textAlign: "center", px: 1 }}>
-              Placeholder from {placeholderSource}
-            </Typography>
-          </Box>
-        )}
-      </Box>
-      <Box sx={{ bgcolor: "error.main", px: 1, py: 0.35, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Typography sx={{ fontSize: "0.55rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", lineHeight: 1, color: "error.contrastText" }}>
-          No artwork
-        </Typography>
-      </Box>
-      <CardTitleStrip title={cleanTitle} subtitle={year ?? undefined} />
-    </Box>
+    <ArtworkCardFrame
+      media={
+        <ArtworkPlaceholder
+          aspectRatio={aspectRatio}
+          alt={cleanTitle}
+          imageUrl={imgUrl}
+          fit={isTransparent ? "contain" : "cover"}
+          source={placeholderSource ?? (imgUrl ? undefined : null)}
+        />
+      }
+      title={cleanTitle}
+      subtitle={year ?? undefined}
+      topLeftSlot={callbacks.activeLanguage ? <LanguageChip language={callbacks.activeLanguage} /> : <CardChip label={chipLabel} color={chipColor} />}
+      menuSlot={
+        <PosterActionsMenu
+          onUpload={() => callbacks.onOpenUpload({ mediaType: uploadType, tmdbId: String(movieTmdbId), title: cleanTitle, year, themeId: callbacks.activeThemeId, kind: uploadKind, language: callbacks.activeLanguage || undefined, drawerLabel: uploadKind === "square" ? t("drawerLabelSquareArtwork") : uploadKind === "logo" ? t("drawerLabelLogo") : uploadType === "backdrop" ? t("drawerLabelBackdrop") : t("drawerLabelMoviePoster") })}
+        />
+      }
+      statusBar={<Box sx={{ bgcolor: "error.main", height: 3 }} />}
+    />
   );
 }
 
 // ─── Detail view components (module scope) ────────────────────────────────────
 
-function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callbacks, onBack }: {
+function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callbacks, setHeaderExtra }: {
   showTmdbId: number;
   seasonNumber: number;
   posters: PosterEntry[];
   tmdbData: TmdbTvShow | null;
   callbacks: StudioCallbacks;
-  onBack: () => void;
+  setHeaderExtra: (node: React.ReactNode | null) => void;
 }) {
   const t = useTranslations("studio");
   const tc = useTranslations("common");
@@ -581,7 +644,6 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
   const [tmdbEpisodes, setTmdbEpisodes] = useState<TmdbEpisode[]>([]);
   const [episodesState, setEpisodesState] = useState<"idle" | "loading" | "ok" | "error">("idle");
 
-  const seasonNum = String(seasonNumber).padStart(2, "0");
   const tmdbSeason = (tmdbData?.seasons ?? []).find((s) => s.season_number === seasonNumber);
 
   function matchesTheme(p: PosterEntry) {
@@ -639,34 +701,34 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
   const publishedEps = epPostersForSeason.filter((p) => p.published !== false).length;
   const draftEps = epPostersForSeason.filter((p) => p.published === false).length;
   const missingEps = episodeCount > 0 ? Math.max(0, episodeCount - epPostersForSeason.length) : 0;
-  const epStatusParts = [
-    publishedEps > 0 ? `${publishedEps} ${t("published")}` : null,
-    draftEps > 0 ? `${draftEps} ${t("draft")}` : null,
-    missingEps > 0 ? `${missingEps} ${t("missing")}` : null,
-  ].filter(Boolean);
-  const episodesHeadingLabel = `${t("sectionEpisodes")}${epStatusParts.length > 0 ? ` — ${epStatusParts.join(", ")}` : ""}`;
   const allSelectedPosters = epPostersForSeason;
+
+  useEffect(() => {
+    setHeaderExtra(epPostersForSeason.length > 0 ? (
+      <StudioStickySelectionBar
+        label={selected.size > 0 && selected.size === epPostersForSeason.length ? t("deselectAll") : t("selectAll")}
+        checked={selected.size > 0 && selected.size === epPostersForSeason.length}
+        indeterminate={selected.size > 0 && selected.size < epPostersForSeason.length}
+        selectedCount={selected.size}
+        onToggle={() => (selected.size > 0 && selected.size === epPostersForSeason.length) ? selectNone() : setSelected(new Set(epPostersForSeason.map((p) => p.poster_id)))}
+      />
+    ) : null);
+  }, [epPostersForSeason.length, selected.size, t, setHeaderExtra]);
 
   return (
     <Stack spacing={3}>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <IconButton size="small" onClick={onBack}>
-          <ArrowBackIcon fontSize="small" />
-        </IconButton>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-          {t("seasonTitle", { n: seasonNum })}
-        </Typography>
-        {tmdbData?.name && (
-          <Typography variant="caption" color="text.secondary">— {tmdbData.name}</Typography>
-        )}
-      </Stack>
-
       {episodesState === "loading" && (
         <Typography variant="caption" color="text.disabled">{t("loadingEpisodes")}</Typography>
       )}
       {(tmdbEpisodes.length > 0 || epPostersForSeason.length > 0) && (
         <Stack spacing={1}>
-          <StudioCollectionSectionHeading label={episodesHeadingLabel} ids={epPostersForSeason.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
+          <StudioCollectionSectionHeading
+            label={t("sectionEpisodes")}
+            ids={epPostersForSeason.map((p) => p.poster_id)}
+            selected={selected}
+            setSelected={setSelected}
+            stats={{ published: publishedEps, draft: draftEps, missing: missingEps }}
+          />
           <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
             {tmdbEpisodes.length > 0
               ? tmdbEpisodes.map((ep: TmdbEpisode) => {
@@ -733,12 +795,13 @@ function SeasonEpisodesView({ showTmdbId, seasonNumber, posters, tmdbData, callb
   );
 }
 
-function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks }: {
+function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks, setHeaderExtra }: {
   showTmdbId: number;
   posters: PosterEntry[];
   tmdbData: TmdbTvShow | null;
   tmdbState: "idle" | "loading" | "ok" | "error";
   callbacks: StudioCallbacks;
+  setHeaderExtra: (node: React.ReactNode | null) => void;
 }) {
   const t = useTranslations("studio");
   const tc = useTranslations("common");
@@ -746,7 +809,6 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
   const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const fromListType = searchParams.get("fromListType");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
   const showYear = tmdbData?.first_air_date?.slice(0, 4) ?? undefined;
@@ -794,25 +856,6 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
 
   function navigateToSeason(sn: number) {
     router.push(seasonHref(sn));
-  }
-
-  function navigateBackToShow() {
-    const p = new URLSearchParams(searchParams.toString());
-    p.delete("season");
-    router.push(`/studio?${p.toString()}`);
-  }
-
-  if (!isNaN(activeSeasonNumber)) {
-    return (
-      <SeasonEpisodesView
-        showTmdbId={showTmdbId}
-        seasonNumber={activeSeasonNumber}
-        posters={posters}
-        tmdbData={tmdbData}
-        callbacks={callbacks}
-        onBack={navigateBackToShow}
-      />
-    );
   }
 
   function matchesTheme(p: PosterEntry) {
@@ -894,38 +937,45 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
   const allSeasonBackdropEntries = [...uploadedSeasonBackdrops.values()].flat();
   const allPosterItems = [...showPosters, ...allSeasonPosterEntries];
   const allBackdropItems = [...backdropPosters, ...allSeasonBackdropEntries];
+  const posterPublished = allPosterItems.filter((p) => p.published !== false).length;
+  const posterDraft = allPosterItems.filter((p) => p.published === false).length;
   const posterMissing = (showPosters.length === 0 ? 1 : 0) + seasons.filter((s) => (uploadedSeasonPosters.get(s.season_number) ?? []).length === 0).length;
+  const backdropPublished = allBackdropItems.filter((p) => p.published !== false).length;
+  const backdropDraft = allBackdropItems.filter((p) => p.published === false).length;
   const backdropMissing = (backdropPosters.length === 0 ? 1 : 0) + seasons.filter((s) => (uploadedSeasonBackdrops.get(s.season_number) ?? []).length === 0).length;
+  const squarePublished = showSquarePosters.filter((p) => p.published !== false).length;
+  const squareDraft = showSquarePosters.filter((p) => p.published === false).length;
+  const logoPublished = showLogoPosters.filter((p) => p.published !== false).length;
+  const logoDraft = showLogoPosters.filter((p) => p.published === false).length;
 
-  function sectionLabel(base: string, items: PosterEntry[], missing: number): string {
-    const pub = items.filter((p) => p.published !== false).length;
-    const dft = items.filter((p) => p.published === false).length;
-    const parts = [
-      pub > 0 ? `${pub} ${t("published")}` : null,
-      dft > 0 ? `${dft} ${t("draft")}` : null,
-      missing > 0 ? `${missing} ${t("missing")}` : null,
-    ].filter(Boolean);
-    return `${base}${parts.length > 0 ? ` — ${parts.join(", ")}` : ""}`;
+  useEffect(() => {
+    setHeaderExtra(allIds.length > 0 ? (
+      <StudioStickySelectionBar
+        label={allSelected ? t("deselectAll") : t("selectAll")}
+        checked={allSelected}
+        indeterminate={selected.size > 0 && !allSelected}
+        selectedCount={selected.size}
+        onToggle={() => allSelected ? selectNone() : selectAll()}
+      />
+    ) : null);
+  }, [allIds.length, allSelected, selected.size, t, setHeaderExtra]);
+
+  if (!isNaN(activeSeasonNumber)) {
+    return (
+      <SeasonEpisodesView
+        showTmdbId={showTmdbId}
+        seasonNumber={activeSeasonNumber}
+        posters={posters}
+        tmdbData={tmdbData}
+        callbacks={callbacks}
+        setHeaderExtra={setHeaderExtra}
+      />
+    );
   }
 
   return (
-    <Stack spacing={3}>
-      {fromListType && showDisplayTitle && (
-        <Typography variant="h5" fontWeight={800}>{showDisplayTitle}</Typography>
-      )}
-      <Stack direction="row" spacing={1} alignItems="center">
-        {allIds.length > 0 && (
-          <>
-            <Checkbox size="small" checked={allSelected} indeterminate={selected.size > 0 && !allSelected} onChange={() => allSelected ? selectNone() : selectAll()} sx={{ p: 0 }} />
-            <Typography variant="caption" color="text.secondary" sx={{ cursor: "pointer", "&:hover": { color: "text.primary" } }} onClick={() => allSelected ? selectNone() : selectAll()}>
-              {allSelected ? t("deselectAll") : t("selectAll")}
-            </Typography>
-            {selected.size > 0 && <Typography variant="caption" color="text.disabled">{t("selectedCount", { count: selected.size })}</Typography>}
-          </>
-        )}
-        <Box sx={{ flex: 1 }} />
-      </Stack>
-
+    <Box>
+    <Stack spacing={3} sx={{ position: "relative", zIndex: 1 }}>
       {tmdbState === "error" && (
         <Alert severity="warning">
           TMDB data couldn&apos;t be loaded for show ID <strong>{showTmdbId}</strong> — placeholders won&apos;t be shown.
@@ -934,7 +984,13 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
 
       {/* POSTERS: show poster + one slot per season (clickable → season detail) */}
       <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={sectionLabel(t("sectionTvShowPoster"), allPosterItems, posterMissing)} ids={allPosterItems.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
+        <StudioCollectionSectionHeading
+          label={t("sectionTvShowPoster")}
+          ids={allPosterItems.map((p) => p.poster_id)}
+          selected={selected}
+          setSelected={setSelected}
+          stats={{ published: posterPublished, draft: posterDraft, missing: posterMissing }}
+        />
         <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
           {showPosters.length > 0
             ? showPosters.map((p) => (
@@ -970,7 +1026,13 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
 
       {/* BACKDROPS: show backdrop + one slot per season */}
       <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={sectionLabel(t("sectionTvShowBackdrop"), allBackdropItems, backdropMissing)} ids={allBackdropItems.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
+        <StudioCollectionSectionHeading
+          label={t("sectionTvShowBackdrop")}
+          ids={allBackdropItems.map((p) => p.poster_id)}
+          selected={selected}
+          setSelected={setSelected}
+          stats={{ published: backdropPublished, draft: backdropDraft, missing: backdropMissing }}
+        />
         <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
           {backdropPosters.length > 0
             ? backdropPosters.map((p) => (
@@ -1005,7 +1067,13 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
 
       {/* SQUARE */}
       <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={sectionLabel(t("sectionSquareArtwork"), showSquarePosters, showSquarePosters.length === 0 ? 1 : 0)} ids={showSquarePosters.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
+        <StudioCollectionSectionHeading
+          label={t("sectionSquareArtwork")}
+          ids={showSquarePosters.map((p) => p.poster_id)}
+          selected={selected}
+          setSelected={setSelected}
+          stats={{ published: squarePublished, draft: squareDraft, missing: showSquarePosters.length === 0 ? 1 : 0 }}
+        />
         <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
           {showSquarePosters.length > 0
             ? showSquarePosters.map((p) => (
@@ -1024,7 +1092,13 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
 
       {/* LOGO */}
       <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={sectionLabel(t("sectionLogo"), showLogoPosters, showLogoPosters.length === 0 ? 1 : 0)} ids={showLogoPosters.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
+        <StudioCollectionSectionHeading
+          label={t("sectionLogo")}
+          ids={showLogoPosters.map((p) => p.poster_id)}
+          selected={selected}
+          setSelected={setSelected}
+          stats={{ published: logoPublished, draft: logoDraft, missing: showLogoPosters.length === 0 ? 1 : 0 }}
+        />
         <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
           {showLogoPosters.length > 0
             ? showLogoPosters.map((p) => (
@@ -1076,17 +1150,16 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks 
         );
       })()}
     </Stack>
+    </Box>
   );
 }
 
-function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData, tmdbState, callbacks }: { collectionTmdbId: number; posters: PosterEntry[]; allPosters: PosterEntry[]; tmdbData: TmdbCollection | null; tmdbState: "idle" | "loading" | "ok" | "error"; callbacks: StudioCallbacks }) {
+function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData, tmdbState, callbacks, setHeaderExtra }: { collectionTmdbId: number; posters: PosterEntry[]; allPosters: PosterEntry[]; tmdbData: TmdbCollection | null; tmdbState: "idle" | "loading" | "ok" | "error"; callbacks: StudioCallbacks; setHeaderExtra: (node: React.ReactNode | null) => void; }) {
   const t = useTranslations("studio");
   const tc = useTranslations("common");
   const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const fromListType = searchParams.get("fromListType");
-  const collectionTitle = tmdbData?.name ?? String(collectionTmdbId);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -1190,44 +1263,35 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
     ? tmdbMovies.filter((m) => uploadedMoviesByTmdbId.has(m.id)).map((m) => uploadedMoviesByTmdbId.get(m.id)!)
     : [...uploadedMoviesByTmdbId.values()];
   const publishedMovieCount = collectionMovieEntries.filter((p) => p.published !== false).length;
+  const draftMovieCount = collectionMovieEntries.filter((p) => p.published === false).length;
   const totalMovieCount = tmdbMovies.length || uploadedMoviesByTmdbId.size;
+  const missingMovieCount = tmdbMovies.length > 0 ? Math.max(0, tmdbMovies.length - collectionMovieEntries.length) : 0;
   const movieCountLabel = totalMovieCount > 0
     ? `${totalMovieCount} MOVIE${totalMovieCount !== 1 ? "S" : ""}`
     : "NO MOVIES";
+  const collectionPosterPublished = collectionPosters.filter((p) => p.published !== false).length;
+  const collectionPosterDraft = collectionPosters.filter((p) => p.published === false).length;
+  const collectionBackdropPublished = backdropPosters.filter((p) => p.published !== false).length;
+  const collectionBackdropDraft = backdropPosters.filter((p) => p.published === false).length;
+  const collectionSquarePublished = collectionSquarePosters.filter((p) => p.published !== false).length;
+  const collectionSquareDraft = collectionSquarePosters.filter((p) => p.published === false).length;
+  const collectionLogoPublished = collectionLogoPosters.filter((p) => p.published !== false).length;
+  const collectionLogoDraft = collectionLogoPosters.filter((p) => p.published === false).length;
+
+  useEffect(() => {
+    setHeaderExtra(allIds.length > 0 ? (
+      <StudioStickySelectionBar
+        label={allSelected ? t("deselectAll") : t("selectAll")}
+        checked={allSelected}
+        indeterminate={selected.size > 0 && !allSelected}
+        selectedCount={selected.size}
+        onToggle={() => allSelected ? selectNone() : selectAll()}
+      />
+    ) : null);
+  }, [allIds.length, allSelected, selected.size, t, setHeaderExtra]);
 
   return (
     <Stack spacing={3}>
-      {fromListType && (
-        <Typography variant="h5" fontWeight={800}>{collectionTitle}</Typography>
-      )}
-      <Stack direction="row" spacing={1} alignItems="center">
-        {allIds.length > 0 && (
-          <>
-            <Checkbox
-              size="small"
-              checked={allSelected}
-              indeterminate={selected.size > 0 && !allSelected}
-              onChange={() => allSelected ? selectNone() : selectAll()}
-              sx={{ p: 0 }}
-            />
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ cursor: "pointer", "&:hover": { color: "text.primary" } }}
-              onClick={() => allSelected ? selectNone() : selectAll()}
-            >
-              {allSelected ? t("deselectAll") : t("selectAll")}
-            </Typography>
-            {selected.size > 0 && (
-              <Typography variant="caption" color="text.disabled">
-                {t("selectedCount", { count: selected.size })}
-              </Typography>
-            )}
-          </>
-        )}
-        <Box sx={{ flex: 1 }} />
-      </Stack>
-
       {tmdbState === "error" && (
         <Alert severity="warning">
           TMDB data couldn&apos;t be loaded for collection ID <strong>{collectionTmdbId}</strong> — the ID on this poster may be wrong.
@@ -1237,7 +1301,13 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
 
       {/* Collection poster */}
       <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={t("sectionCollection")} ids={collectionPosters.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
+        <StudioCollectionSectionHeading
+          label={t("sectionCollection")}
+          ids={collectionPosters.map((p) => p.poster_id)}
+          selected={selected}
+          setSelected={setSelected}
+          stats={{ published: collectionPosterPublished, draft: collectionPosterDraft, missing: collectionPosters.length === 0 ? 1 : 0 }}
+        />
         <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
           {collectionPosters.length > 0
             ? collectionPosters.map((p) => (
@@ -1271,12 +1341,30 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
         return (
           <Stack spacing={1}>
             <StudioCollectionSectionHeading
-              label={totalMovieCount > 0 ? t("moviesPublishedHeading", { published: publishedMovieCount, total: totalMovieCount }) : t("moviesHeading")}
+              label={t("moviesHeading")}
               ids={movieIds}
               selected={selected}
               setSelected={setSelected}
+              stats={{ published: publishedMovieCount, draft: draftMovieCount, missing: missingMovieCount }}
             />
-            <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
+            <Box
+              sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: GRID_GAP,
+                alignItems: "flex-start",
+                "& > *": {
+                  flex: "1 1 180px",
+                  minWidth: 170,
+                  maxWidth: {
+                    xs: "calc(50% - 8px)",
+                    sm: "calc(33.333% - 11px)",
+                    md: "calc(25% - 12px)",
+                    lg: "calc(20% - 13px)",
+                  },
+                },
+              }}
+            >
               {tmdbMovies.length > 0
                 ? tmdbMovies.map((m) => (
                     <Box key={m.id}>
@@ -1299,7 +1387,13 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
 
       {/* Backdrop */}
       <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={t("sectionBackdrop")} ids={backdropPosters.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
+        <StudioCollectionSectionHeading
+          label={t("sectionBackdrop")}
+          ids={backdropPosters.map((p) => p.poster_id)}
+          selected={selected}
+          setSelected={setSelected}
+          stats={{ published: collectionBackdropPublished, draft: collectionBackdropDraft, missing: backdropPosters.length === 0 ? 1 : 0 }}
+        />
         <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
           {backdropPosters.length > 0
             ? backdropPosters.map((p) => (
@@ -1327,7 +1421,13 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
 
       {/* Square */}
       <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={t("sectionSquare")} ids={collectionSquarePosters.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
+        <StudioCollectionSectionHeading
+          label={t("sectionSquareArtwork")}
+          ids={collectionSquarePosters.map((p) => p.poster_id)}
+          selected={selected}
+          setSelected={setSelected}
+          stats={{ published: collectionSquarePublished, draft: collectionSquareDraft, missing: collectionSquarePosters.length === 0 ? 1 : 0 }}
+        />
         <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
           {collectionSquarePosters.length > 0
             ? collectionSquarePosters.map((p) => (
@@ -1356,7 +1456,13 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
 
       {/* Logo */}
       <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={t("sectionLogo")} ids={collectionLogoPosters.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
+        <StudioCollectionSectionHeading
+          label={t("sectionLogo")}
+          ids={collectionLogoPosters.map((p) => p.poster_id)}
+          selected={selected}
+          setSelected={setSelected}
+          stats={{ published: collectionLogoPublished, draft: collectionLogoDraft, missing: collectionLogoPosters.length === 0 ? 1 : 0 }}
+        />
         <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
           {collectionLogoPosters.length > 0
             ? collectionLogoPosters.map((p) => (
@@ -1448,7 +1554,7 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
   );
 }
 
-function MovieDetailView({ movieTmdbId, title, posters, allPosters, tmdbData, tmdbState, callbacks }: {
+function MovieDetailView({ movieTmdbId, title, posters, allPosters, tmdbData, tmdbState, callbacks, setHeaderExtra }: {
   movieTmdbId: number;
   title: string;
   posters: PosterEntry[];
@@ -1456,6 +1562,7 @@ function MovieDetailView({ movieTmdbId, title, posters, allPosters, tmdbData, tm
   tmdbData: import("@/lib/tmdb").TmdbMovieDetail | null;
   tmdbState: "idle" | "loading" | "ok" | "error";
   callbacks: StudioCallbacks;
+  setHeaderExtra: (node: React.ReactNode | null) => void;
 }) {
   const t = useTranslations("studio");
   const tc = useTranslations("common");
@@ -1524,127 +1631,116 @@ function MovieDetailView({ movieTmdbId, title, posters, allPosters, tmdbData, tm
     ? (selectedPosters[0].media.theme_id ?? null) : null;
   const selectableThemes = callbacks.themes.filter((th) => th.theme_id !== currentThemeId);
 
-  const collectionName = tmdbData?.belongs_to_collection?.name ?? null;
-  const heroBackdropUrl = backdropPosters[0]?.assets.preview.url
-    ?? (tmdbData?.backdrop_path ? tmdbImageUrl(tmdbData.backdrop_path) : null);
+  useEffect(() => {
+    setHeaderExtra(allIds.length > 0 ? (
+      <StudioStickySelectionBar
+        label={allSelected ? t("deselectAll") : t("selectAll")}
+        checked={allSelected}
+        indeterminate={selected.size > 0 && !allSelected}
+        selectedCount={selected.size}
+        onToggle={() => allSelected ? selectNone() : selectAll()}
+      />
+    ) : null);
+  }, [allIds.length, allSelected, selected.size, t, setHeaderExtra]);
+
+  const movieArtworkSections = [
+    {
+      key: "posters",
+      label: t("sectionPosters"),
+      ids: moviePosters.map((p) => p.poster_id),
+      content: (
+        moviePosters.length > 0
+          ? moviePosters.map((p) => (
+              <Box key={p.poster_id}>
+                <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={cleanTitle} subtitle={year} />
+              </Box>
+            ))
+          : tmdbState !== "loading" ? [
+              <Box key="movie-placeholder">
+                <StudioMoviePlaceholder tmdbData={tmdbData} movieTmdbId={movieTmdbId} cleanTitle={cleanTitle} year={year} aspectRatio="2 / 3" uploadType="movie" callbacks={callbacks} />
+              </Box>,
+            ] : []
+      ),
+    },
+    {
+      key: "backdrop",
+      label: t("sectionBackdrop"),
+      ids: backdropPosters.map((p) => p.poster_id),
+      content: (
+        backdropPosters.length > 0
+          ? backdropPosters.map((p) => (
+              <Box key={p.poster_id}>
+                <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={cleanTitle} subtitle={year} />
+              </Box>
+            ))
+          : tmdbState !== "loading" ? [
+              <Box key="backdrop-placeholder">
+                <StudioMoviePlaceholder tmdbData={tmdbData} movieTmdbId={movieTmdbId} cleanTitle={cleanTitle} year={year} aspectRatio="16 / 9" uploadType="backdrop" callbacks={callbacks} />
+              </Box>,
+            ] : []
+      ),
+    },
+    {
+      key: "square",
+      label: t("sectionSquareArtwork"),
+      ids: movieSquarePosters.map((p) => p.poster_id),
+      content: (
+        movieSquarePosters.length > 0
+          ? movieSquarePosters.map((p) => (
+              <Box key={p.poster_id}>
+                <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={cleanTitle} subtitle={year} />
+              </Box>
+            ))
+          : tmdbState !== "loading" ? [
+              <Box key="square-placeholder">
+                <StudioMoviePlaceholder tmdbData={tmdbData} movieTmdbId={movieTmdbId} cleanTitle={cleanTitle} year={year} aspectRatio="1 / 1" uploadType="movie" uploadKind="square" callbacks={callbacks} />
+              </Box>,
+            ] : []
+      ),
+    },
+    {
+      key: "logo",
+      label: t("sectionLogo"),
+      ids: movieLogoPosters.map((p) => p.poster_id),
+      content: (
+        movieLogoPosters.length > 0
+          ? movieLogoPosters.map((p) => (
+              <Box key={p.poster_id}>
+                <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={cleanTitle} subtitle={year} />
+              </Box>
+            ))
+          : tmdbState !== "loading" ? [
+              <Box key="logo-placeholder">
+                <StudioMoviePlaceholder tmdbData={tmdbData} movieTmdbId={movieTmdbId} cleanTitle={cleanTitle} year={year} aspectRatio="16 / 9" uploadType="movie" uploadKind="logo" callbacks={callbacks} />
+              </Box>,
+            ] : []
+      ),
+    },
+  ];
 
   return (
     <Box>
-      {/* Hero backdrop */}
-      {heroBackdropUrl && (
-        <Box sx={{ position: "fixed", top: 64, left: 0, right: 0, height: "75vh", zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
-          <Box
-            component="img"
-            src={heroBackdropUrl}
-            alt=""
-            sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.2, filter: "grayscale(0.75)" }}
-          />
-          <Box sx={{ position: "absolute", inset: 0, background: (theme) => `linear-gradient(to bottom, transparent 40%, ${theme.palette.background.default} 95%)` }} />
-        </Box>
-      )}
-
     <Stack spacing={3} sx={{ position: "relative", zIndex: 1 }}>
-      <Box>
-        <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.5 }}>
-          {cleanTitle}{year ? ` (${year})` : ""}
-        </Typography>
-
-        {collectionName ? (
-          <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase", display: "block" }}>
-            {`Member of: ${collectionName}`}
-          </Typography>
-        ) : tmdbState !== "loading" && (
-          <Typography variant="caption" color="text.disabled" sx={{ letterSpacing: "0.05em", textTransform: "uppercase", display: "block" }}>
-            Not a member of any collections
-          </Typography>
-        )}
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 2,
+          alignItems: "flex-start",
+          "& > *": {
+            flex: "1 1 260px",
+            minWidth: 240,
+            maxWidth: 340,
+          },
+        }}
+      >
+        {movieArtworkSections.map((section) => (
+          <Stack key={section.key} spacing={1}>
+            <StudioCollectionSectionHeading label={section.label} ids={section.ids} selected={selected} setSelected={setSelected} />
+            {section.content}
+          </Stack>
+        ))}
       </Box>
-
-      {allIds.length > 0 && (
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Checkbox size="small" checked={allSelected} indeterminate={selected.size > 0 && !allSelected} onChange={() => allSelected ? selectNone() : selectAll()} sx={{ p: 0 }} />
-          <Typography variant="caption" color="text.secondary" sx={{ cursor: "pointer", "&:hover": { color: "text.primary" } }} onClick={() => allSelected ? selectNone() : selectAll()}>
-            {allSelected ? "Deselect all" : "Select all"}
-          </Typography>
-          {selected.size > 0 && <Typography variant="caption" color="text.disabled">{t("selectedCount", { count: selected.size })}</Typography>}
-        </Stack>
-      )}
-
-      {/* Movie poster */}
-      <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={t("sectionPosters")} ids={moviePosters.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
-        <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
-          {moviePosters.length > 0
-            ? moviePosters.map((p) => (
-                <Box key={p.poster_id}>
-                  <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={cleanTitle} subtitle={year} />
-                </Box>
-              ))
-            : tmdbState !== "loading" && (
-                <Box>
-                  <StudioMoviePlaceholder tmdbData={tmdbData} movieTmdbId={movieTmdbId} cleanTitle={cleanTitle} year={year} aspectRatio="2 / 3" uploadType="movie" callbacks={callbacks} />
-                </Box>
-              )
-          }
-        </Box>
-      </Stack>
-
-      {/* Backdrop */}
-      <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={t("sectionBackdrop")} ids={backdropPosters.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
-        <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
-          {backdropPosters.length > 0
-            ? backdropPosters.map((p) => (
-                <Box key={p.poster_id}>
-                  <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={cleanTitle} subtitle={year} />
-                </Box>
-              ))
-            : tmdbState !== "loading" && (
-                <Box>
-                  <StudioMoviePlaceholder tmdbData={tmdbData} movieTmdbId={movieTmdbId} cleanTitle={cleanTitle} year={year} aspectRatio="16 / 9" uploadType="backdrop" callbacks={callbacks} />
-                </Box>
-              )
-          }
-        </Box>
-      </Stack>
-
-      {/* Square */}
-      <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={t("sectionSquare")} ids={movieSquarePosters.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
-        <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
-          {movieSquarePosters.length > 0
-            ? movieSquarePosters.map((p) => (
-                <Box key={p.poster_id}>
-                  <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={cleanTitle} subtitle={year} />
-                </Box>
-              ))
-            : tmdbState !== "loading" && (
-                <Box>
-                  <StudioMoviePlaceholder tmdbData={tmdbData} movieTmdbId={movieTmdbId} cleanTitle={cleanTitle} year={year} aspectRatio="1 / 1" uploadType="movie" uploadKind="square" callbacks={callbacks} />
-                </Box>
-              )
-          }
-        </Box>
-      </Stack>
-
-      {/* Logo */}
-      <Stack spacing={1}>
-        <StudioCollectionSectionHeading label={t("sectionLogo")} ids={movieLogoPosters.map((p) => p.poster_id)} selected={selected} setSelected={setSelected} />
-        <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
-          {movieLogoPosters.length > 0
-            ? movieLogoPosters.map((p) => (
-                <Box key={p.poster_id}>
-                  <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={cleanTitle} subtitle={year} />
-                </Box>
-              ))
-            : tmdbState !== "loading" && (
-                <Box>
-                  <StudioMoviePlaceholder tmdbData={tmdbData} movieTmdbId={movieTmdbId} cleanTitle={cleanTitle} year={year} aspectRatio="16 / 9" uploadType="movie" uploadKind="logo" callbacks={callbacks} />
-                </Box>
-              )
-          }
-        </Box>
-      </Stack>
 
       {(() => {
         return (
@@ -1751,16 +1847,164 @@ function EmptyListState({
   );
 }
 
+// ─── A-Z rail helpers ────────────────────────────────────────────────────────
+
+const STUDIO_RAIL_LETTERS = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")];
+const STUDIO_AZ_SCROLL_MARGIN = 80;
+
+function studioSortKey(title: string) {
+  return title.replace(/^(the|a|an)\s+/i, "").trim().toLowerCase();
+}
+function studioFirstLetter(title: string): string {
+  const ch = studioSortKey(title)[0]?.toUpperCase() ?? "#";
+  return /[A-Z]/.test(ch) ? ch : "#";
+}
+function studioGroupByLetter<T extends { title: string }>(items: T[]): [string, T[]][] {
+  const map = new Map<string, T[]>();
+  for (const item of items) {
+    const letter = studioFirstLetter(item.title);
+    if (!map.has(letter)) map.set(letter, []);
+    map.get(letter)!.push(item);
+  }
+  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+}
+
+function StudioAZRail({ available, scrollContainerRef }: {
+  available: Set<string>;
+  scrollContainerRef: React.RefObject<HTMLElement | null>;
+}) {
+  const [current, setCurrent] = useState<string | null>(null);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const update = () => {
+      const top = container.getBoundingClientRect().top;
+      let found: string | null = null;
+      for (const letter of STUDIO_RAIL_LETTERS) {
+        if (!available.has(letter)) continue;
+        const el = document.getElementById(`studio-az-${letter}`);
+        if (el && el.getBoundingClientRect().top <= top + STUDIO_AZ_SCROLL_MARGIN + 8) found = letter;
+      }
+      setCurrent(found);
+    };
+    let raf: number | null = null;
+    const onScroll = () => { if (raf !== null) return; raf = requestAnimationFrame(() => { raf = null; update(); }); };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => { container.removeEventListener("scroll", onScroll); if (raf !== null) cancelAnimationFrame(raf); };
+  }, [available, scrollContainerRef]);
+
+  return (
+    <Box sx={{ position: "fixed", right: 6, top: "50%", transform: "translateY(-50%)", zIndex: 100, display: { xs: "none", md: "flex" }, flexDirection: "column", alignItems: "center", userSelect: "none" }}>
+      {STUDIO_RAIL_LETTERS.map((letter) => {
+        const active = available.has(letter);
+        const isCurrent = letter === current;
+        return (
+          <Box key={letter} onClick={() => active && document.getElementById(`studio-az-${letter}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            sx={{ width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", fontSize: "0.6rem", fontWeight: isCurrent ? 900 : 700, bgcolor: isCurrent ? "warning.main" : "transparent", color: isCurrent ? "warning.contrastText" : active ? "text.secondary" : "text.disabled", cursor: active ? "pointer" : "default", "&:hover": active && !isCurrent ? { bgcolor: "warning.main", color: "warning.contrastText", opacity: 0.6 } : {} }}>
+            {letter}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+// ─── TMDB placeholder cards for grid view ────────────────────────────────────
+
+/** Strips a trailing "(YYYY)" year from a title, returning the clean title and year separately. */
+function stripYear(title: string): { cleanTitle: string; year: string | null } {
+  const m = title.match(/^(.*)\s+\((\d{4})\)$/);
+  if (m) return { cleanTitle: m[1], year: m[2] };
+  return { cleanTitle: title, year: null };
+}
+
+/** Shared sx for the status icon overlay (bottom-right of image area). */
+const GRID_STATUS_SX = {
+  position: "absolute", bottom: 6, right: 6,
+  lineHeight: 0, pointerEvents: "none",
+  "& svg": {
+    fontSize: "1.2rem",
+    filter: "drop-shadow(0 0 2px rgba(255,255,255,0.9)) drop-shadow(0 1px 4px rgba(0,0,0,0.85))",
+  },
+} as const;
+
+/** Shared sx for the kebab menu button (top-right of image area). */
+const GRID_KEBAB_SX = {
+  position: "absolute", top: 4, right: 4,
+  bgcolor: "rgba(0,0,0,0.55)", color: "common.white",
+  "&:hover": { bgcolor: "rgba(0,0,0,0.8)" },
+  width: 28, height: 28,
+} as const;
+
+function TmdbPosterPlaceholder({ title, subtitle, posterPath, onClick, statusIcon, onMenuOpen }: {
+  title: string;
+  subtitle?: string;
+  posterPath: string | null | undefined;
+  onClick?: () => void;
+  statusIcon?: React.ReactNode;
+  onMenuOpen?: (anchor: HTMLElement) => void;
+}) {
+  const imgUrl = tmdbImageUrl(posterPath ?? null);
+  return (
+    <ArtworkCardFrame
+      media={
+        <ArtworkPlaceholder
+          aspectRatio="2 / 3"
+          alt={title}
+          imageUrl={imgUrl}
+          source={imgUrl ? "THEMOVIEDB.ORG" : null}
+        />
+      }
+      title={title}
+      subtitle={subtitle}
+      statusBar={<Box sx={{ bgcolor: "error.main", height: 3 }} />}
+      bottomRightSlot={statusIcon}
+      menuSlot={onMenuOpen ? (
+        <IconButton size="small" onClick={(e) => { e.stopPropagation(); onMenuOpen(e.currentTarget); }} sx={GRID_KEBAB_SX}>
+          <MoreVertIcon sx={{ fontSize: "1rem" }} />
+        </IconButton>
+      ) : undefined}
+      onClick={onClick}
+    />
+  );
+}
+
+function MovieGridPlaceholder({ tmdbId, title, onClick, statusIcon, onMenuOpen }: { tmdbId: number; title: string; onClick?: () => void; statusIcon?: React.ReactNode; onMenuOpen?: (anchor: HTMLElement) => void }) {
+  const { cleanTitle, year: parsedYear } = stripYear(title);
+  const [posterPath, setPosterPath] = useState<string | null | undefined>(undefined);
+  const [tmdbYear, setTmdbYear] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    fetchTmdbMovie(tmdbId)
+      .then((data) => {
+        if (cancelled) return;
+        setPosterPath(data?.poster_path ?? null);
+        setTmdbYear(data?.release_date?.slice(0, 4) ?? null);
+      })
+      .catch(() => { if (!cancelled) { setPosterPath(null); setTmdbYear(null); } });
+    return () => { cancelled = true; };
+  }, [tmdbId]);
+  const year = parsedYear ?? tmdbYear ?? undefined;
+  return <TmdbPosterPlaceholder title={cleanTitle} subtitle={year} posterPath={posterPath} onClick={onClick} statusIcon={statusIcon} onMenuOpen={onMenuOpen} />;
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function StudioWorkspace() {
   const t = useTranslations("studio");
   const tc = useTranslations("common");
+  const tSections = useTranslations("sections");
   const locale = useLocale();
 
   const [conn, setConn] = useState<{ nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string } | null>(null);
   const [themes, setThemes] = useState<CreatorTheme[]>([]);
   const [allPosters, setAllPosters] = useState<PosterEntry[]>([]);
+  const [listViewMode, setListViewMode] = useState<"table" | "grid">("table");
+  const scrollContentRef = useRef<HTMLElement | null>(null);
+  const stickyHeaderRef = useRef<HTMLDivElement | null>(null);
+  const [stickyHeaderHeight, setStickyHeaderHeight] = useState(0);
   const [loading, setLoading] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
   const router = useRouter();
@@ -1796,6 +2040,12 @@ export default function StudioWorkspace() {
   const [zipContext, setZipContext] = useState<ZipImportConfig | null>(null);
   const [activeLanguage, setActiveLanguage] = useState("en");
   const [languageToast, setLanguageToast] = useState<string | null>(null);
+  const [detailHeaderExtra, setDetailHeaderExtra] = useState<React.ReactNode | null>(null);
+  const [listHeroBackdropUrl, setListHeroBackdropUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (nav.view !== "media") setDetailHeaderExtra(null);
+  }, [nav.view]);
 
   // Pinned collections — persisted on the node so they're available on any device
   const [pinnedCollections, setPinnedCollections] = useState<{ tmdbId: number; title: string }[]>([]);
@@ -1867,6 +2117,16 @@ export default function StudioWorkspace() {
   const [addShowLookup, setAddShowLookup] = useState<{ tmdbId: number; title: string } | null>(null);
   const [addShowState, setAddShowState] = useState<"idle" | "loading" | "found" | "results" | "error">("idle");
   const [addShowResults, setAddShowResults] = useState<TmdbSearchResult[]>([]);
+
+  useEffect(() => {
+    const node = stickyHeaderRef.current;
+    if (!node) return;
+    const update = () => setStickyHeaderHeight(node.getBoundingClientRect().height);
+    update();
+    const observer = new ResizeObserver(() => update());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [nav.view, searchParams, tmdbCollectionData, tmdbTvShowData, tmdbMovieData, themes]);
 
   async function handleLookupShow() {
     const raw = addShowInput.trim();
@@ -2051,13 +2311,15 @@ export default function StudioWorkspace() {
       setConn(fullConn);
 
       // Load pinned collections, TV shows, and standalone movies from node
-      const [pinnedColsFromNode, pinnedShowsFromNode, pinnedMoviesFromNode, defaultLang] = await Promise.all([
+      const [pinnedColsFromNode, pinnedShowsFromNode, pinnedMoviesFromNode, defaultLang, savedViewMode] = await Promise.all([
         fetchSetting<{ tmdbId: number; title: string }[]>(c.nodeUrl, c.adminToken, cid, "studio_pinned_collections"),
         fetchSetting<{ tmdbId: number; title: string }[]>(c.nodeUrl, c.adminToken, cid, "studio_pinned_tv_shows"),
         fetchSetting<{ tmdbId: number; title: string }[]>(c.nodeUrl, c.adminToken, cid, "studio_pinned_movies"),
         fetchSetting<string>(c.nodeUrl, c.adminToken, cid, "studio_default_language"),
+        fetchSetting<string>(c.nodeUrl, c.adminToken, cid, "studio_list_view_mode"),
       ]);
       setActiveLanguage(defaultLang ?? "en");
+      if (savedViewMode === "grid" || savedViewMode === "table") setListViewMode(savedViewMode);
       // Compute media groups from posters so we can auto-pin any untracked ones
       const derivedGroups = groupByMedia(posters);
 
@@ -2206,6 +2468,11 @@ export default function StudioWorkspace() {
     setActiveLanguage(lang);
     const label = lang === "" ? t("languageNeutral") : getLanguageLabel(lang, locale);
     setLanguageToast(t("nowShowingLanguage", { language: label }));
+  }
+
+  function handleListViewMode(mode: "table" | "grid") {
+    setListViewMode(mode);
+    if (conn) void saveSetting(conn.nodeUrl, conn.adminToken, conn.creatorId, "studio_list_view_mode", mode);
   }
 
   const handleChangeLanguage = useCallback(async (posterId: string, lang: string | null) => {
@@ -2432,6 +2699,54 @@ export default function StudioWorkspace() {
     return () => { cancelled = true; };
   }, [nav, sidebarTvShows.length]); // sidebarTvShows.length as proxy for list changes
 
+  useEffect(() => {
+    if (nav.view !== "list") {
+      setListHeroBackdropUrl(null);
+      return;
+    }
+
+    const pickRandom = <T,>(items: T[]): T | null => {
+      if (items.length === 0) return null;
+      return items[Math.floor(Math.random() * items.length)] ?? null;
+    };
+
+    let candidates: string[] = [];
+
+    if (nav.listType === "collections") {
+      candidates = sidebarCollections.flatMap((g) => {
+        const posters = postersForMedia(g.key);
+        const uploadedBackdrop = posters.find((p) => p.media.type === "backdrop" && p.media.collection_tmdb_id === g.tmdbId)?.assets.preview.url;
+        const tmdb = collectionTmdbMap.get(g.tmdbId);
+        const fallback = tmdb?.backdrop_path
+          ? tmdbImageUrl(tmdb.backdrop_path)
+          : tmdb?.poster_path
+            ? tmdbImageUrl(tmdb.poster_path)
+            : null;
+        return [uploadedBackdrop, fallback, ...g.previewUrls].filter(Boolean) as string[];
+      });
+    } else if (nav.listType === "tv") {
+      candidates = sidebarTvShows.flatMap((g) => {
+        const posters = postersForMedia(g.key);
+        const uploadedBackdrop = posters.find((p) => p.media.type === "backdrop" && p.media.show_tmdb_id === g.tmdbId)?.assets.preview.url;
+        const tmdb = showTmdbMap.get(g.tmdbId);
+        const fallback = tmdb?.backdrop_path
+          ? tmdbImageUrl(tmdb.backdrop_path)
+          : tmdb?.poster_path
+            ? tmdbImageUrl(tmdb.poster_path)
+            : null;
+        return [uploadedBackdrop, fallback, ...g.previewUrls].filter(Boolean) as string[];
+      });
+    } else if (nav.listType === "movies") {
+      candidates = sidebarMovies.flatMap((g) => {
+        const posters = postersForMedia(g.key);
+        const uploadedBackdrop = posters.find((p) => p.media.type === "backdrop" && p.media.tmdb_id === g.tmdbId)?.assets.preview.url;
+        return [uploadedBackdrop, ...g.previewUrls].filter(Boolean) as string[];
+      });
+    }
+
+    setListHeroBackdropUrl(pickRandom(candidates));
+  }, [nav, sidebarCollections, sidebarTvShows, sidebarMovies, collectionTmdbMap, showTmdbMap, allPosters]);
+
   function postersForTheme(themeId: string) {
     return allPosters.filter((p) => p.media.theme_id === themeId);
   }
@@ -2600,7 +2915,7 @@ export default function StudioWorkspace() {
         )}
         {collectionGroups.length > 0 && (
           <Box>
-            <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1, fontSize: "0.65rem", display: "block", mb: 1.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
               {t("movies")}
             </Typography>
             <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
@@ -2614,7 +2929,7 @@ export default function StudioWorkspace() {
         )}
         {showGroups.length > 0 && (
           <Box>
-            <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1, fontSize: "0.65rem", display: "block", mb: 1.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
               {t("tv")}
             </Typography>
             <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
@@ -2813,6 +3128,64 @@ export default function StudioWorkspace() {
           </TableCell>
         );
 
+        if (listViewMode === "grid") {
+          const collLetterGroups = studioGroupByLetter(sidebarCollections);
+          const collActiveLetters = new Set(sidebarCollections.map((g) => studioFirstLetter(g.title)));
+          return (
+            <>
+              <StudioAZRail available={collActiveLetters} scrollContainerRef={scrollContentRef} />
+              <Stack spacing={1}>
+                {sidebarCollections.length === 0 ? (
+                  <EmptyListState
+                    icon={<LayersOutlinedIcon sx={{ fontSize: "4rem" }} />}
+                    title={t("noCollections")}
+                    description={t("noCollectionsHint")}
+                    actionLabel={t("addCollection")}
+                    onAction={() => setAddMovieOpen(true)}
+                  />
+                ) : collLetterGroups.map(([letter, group], idx) => (
+                  <Box key={letter} sx={{ pt: idx === 0 ? 0 : "20px" }}>
+                    <Box id={`studio-az-${letter}`} sx={{ scrollMarginTop: STUDIO_AZ_SCROLL_MARGIN }} />
+                    <Typography variant="overline" sx={{ fontSize: "1.1rem", fontWeight: 700, lineHeight: 1, display: "block", mb: 2 }}>{letter}</Typography>
+                    <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
+                      {group.map((g) => {
+                        const tmdb = collectionTmdbMap.get(g.tmdbId);
+                        const stats = collStats(g.tmdbId);
+                        const icon = statusIcon(stats, tmdb?.parts.length ?? null);
+                        const handleMenuOpen = (anchor: HTMLElement) => setRowMenuState({ anchor, group: g });
+                        const gridImageWrapper = (img: React.ReactElement) => (
+                          <Box sx={{ position: "relative" }}>
+                            <Box sx={cardMediaSurfaceSx}>
+                              {img}
+                              <Box sx={GRID_STATUS_SX}>{icon}</Box>
+                              <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleMenuOpen(e.currentTarget); }} sx={GRID_KEBAB_SX}>
+                                <MoreVertIcon sx={{ fontSize: "1rem" }} />
+                              </IconButton>
+                            </Box>
+                          </Box>
+                        );
+                        return (
+                          <Box key={g.key}>
+                            {g.previewUrls.length > 0 ? (
+                              <CollectionCard
+                                group={toCollectionGroup(g)}
+                                onClick={() => navigateToDetail(g.key)}
+                                imageWrapper={gridImageWrapper}
+                              />
+                            ) : (
+                              <TmdbPosterPlaceholder title={g.title} subtitle={tmdb?.parts.length ? tSections("movieCount", { count: tmdb.parts.length }) : undefined} posterPath={tmdb?.poster_path} onClick={() => navigateToDetail(g.key)} statusIcon={icon} onMenuOpen={handleMenuOpen} />
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  </Box>
+                ))}
+              </Stack>
+            </>
+          );
+        }
+
         return (
           <Stack spacing={2}>
             {sidebarCollections.length === 0 ? (
@@ -2918,6 +3291,62 @@ export default function StudioWorkspace() {
           </TableCell>
         );
 
+        if (listViewMode === "grid") {
+          const movieLetterGroups = studioGroupByLetter(sidebarMovies);
+          const movieActiveLetters = new Set(sidebarMovies.map((g) => studioFirstLetter(g.title)));
+          return (
+            <>
+              <StudioAZRail available={movieActiveLetters} scrollContainerRef={scrollContentRef} />
+              <Stack spacing={1}>
+                {sidebarMovies.length === 0 ? (
+                  <EmptyListState
+                    icon={<MovieOutlinedIcon sx={{ fontSize: "4rem" }} />}
+                    title={t("noMovies")}
+                    description={t("noMoviesHint")}
+                    actionLabel={t("addMovie")}
+                    onAction={() => setAddMovieOpen(true)}
+                  />
+                ) : movieLetterGroups.map(([letter, group], idx) => (
+                  <Box key={letter} sx={{ pt: idx === 0 ? 0 : "20px" }}>
+                    <Box id={`studio-az-${letter}`} sx={{ scrollMarginTop: STUDIO_AZ_SCROLL_MARGIN }} />
+                    <Typography variant="overline" sx={{ fontSize: "1.1rem", fontWeight: 700, lineHeight: 1, display: "block", mb: 2 }}>{letter}</Typography>
+                    <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
+                      {group.map((g) => {
+                        const stats = movieStats(g.tmdbId);
+                        const icon = movieStatusIcon(stats);
+                        const poster = allPosters.find((p) =>
+                          p.media.tmdb_id === g.tmdbId && p.media.type === "movie" &&
+                          p.kind !== "logo" && p.kind !== "square" &&
+                          (activeThemeId === "" || p.media.theme_id === activeThemeId)
+                        );
+                        const handleMenuOpen = (anchor: HTMLElement) => setRowMenuState({ anchor, group: g });
+                        const gridImageWrapper = (img: React.ReactElement) => (
+                          <Box sx={{ position: "relative" }}>
+                            {img}
+                            <Box sx={GRID_STATUS_SX}>{icon}</Box>
+                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleMenuOpen(e.currentTarget); }} sx={GRID_KEBAB_SX}>
+                              <MoreVertIcon sx={{ fontSize: "1rem" }} />
+                            </IconButton>
+                          </Box>
+                        );
+                        return (
+                          <Box key={g.key}>
+                            {poster ? (
+                              <PosterCard poster={poster} chip={false} onClick={() => navigateToDetail(g.key)} imageWrapper={gridImageWrapper} />
+                            ) : (
+                              <MovieGridPlaceholder tmdbId={g.tmdbId} title={g.title} onClick={() => navigateToDetail(g.key)} statusIcon={icon} onMenuOpen={handleMenuOpen} />
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  </Box>
+                ))}
+              </Stack>
+            </>
+          );
+        }
+
         return (
           <Stack spacing={2}>
             {sidebarMovies.length === 0 ? (
@@ -3013,6 +3442,66 @@ export default function StudioWorkspace() {
           </TableCell>
         );
 
+        if (listViewMode === "grid") {
+          const tvLetterGroups = studioGroupByLetter(sidebarTvShows);
+          const tvActiveLetters = new Set(sidebarTvShows.map((g) => studioFirstLetter(g.title)));
+          return (
+            <>
+              <StudioAZRail available={tvActiveLetters} scrollContainerRef={scrollContentRef} />
+              <Stack spacing={1}>
+                {sidebarTvShows.length === 0 ? (
+                  <EmptyListState
+                    icon={<TvOutlinedIcon sx={{ fontSize: "4rem" }} />}
+                    title={t("noTvShows")}
+                    description={t("noTvShowsHint")}
+                    actionLabel={t("addShow")}
+                    onAction={() => setAddShowOpen(true)}
+                  />
+                ) : tvLetterGroups.map(([letter, group], idx) => (
+                  <Box key={letter} sx={{ pt: idx === 0 ? 0 : "20px" }}>
+                    <Box id={`studio-az-${letter}`} sx={{ scrollMarginTop: STUDIO_AZ_SCROLL_MARGIN }} />
+                    <Typography variant="overline" sx={{ fontSize: "1.1rem", fontWeight: 700, lineHeight: 1, display: "block", mb: 2 }}>{letter}</Typography>
+                    <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
+                      {group.map((g) => {
+                        const tmdb = showTmdbMap.get(g.tmdbId);
+                        const seasonCount = tmdb ? tmdb.seasons.filter((s) => s.season_number > 0).length : null;
+                        const stats = tvShowStats(g.tmdbId);
+                        const icon = tvStatusIcon(stats, seasonCount);
+                        const { cleanTitle: tvTitle, year: tvParsedYear } = stripYear(g.title);
+                        const tvYear = tvParsedYear ?? tmdb?.first_air_date?.slice(0, 4) ?? undefined;
+                        const tvYearNum = tvYear ? parseInt(tvYear) : undefined;
+                        const handleMenuOpen = (anchor: HTMLElement) => setRowMenuState({ anchor, group: g });
+                        const gridImageWrapper = (img: React.ReactElement) => (
+                          <Box sx={{ position: "relative" }}>
+                            {img}
+                            <Box sx={GRID_STATUS_SX}>{icon}</Box>
+                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleMenuOpen(e.currentTarget); }} sx={GRID_KEBAB_SX}>
+                              <MoreVertIcon sx={{ fontSize: "1rem" }} />
+                            </IconButton>
+                          </Box>
+                        );
+                        return (
+                          <Box key={g.key}>
+                            {g.previewUrls.length > 0 ? (
+                              <TVShowCard
+                                group={{ key: g.key, title: tvTitle, showTmdbId: g.tmdbId, creatorId: "", creatorName: "", hasBoxSet: true, coverPreviews: g.previewUrls, seasonCount: stats.seasonPosterCount, episodeCount: stats.episodeCardCount, year: tvYearNum }}
+                                onClick={() => navigateToDetail(g.key)}
+                                imageWrapper={gridImageWrapper}
+                              />
+                            ) : (
+                              <TmdbPosterPlaceholder title={tvTitle} subtitle={tvYear} posterPath={tmdb?.poster_path} onClick={() => navigateToDetail(g.key)} statusIcon={icon} onMenuOpen={handleMenuOpen} />
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  </Box>
+                ))}
+              </Stack>
+            </>
+          );
+        }
+
         return (
           <Stack spacing={2}>
             {sidebarTvShows.length === 0 ? (
@@ -3095,19 +3584,19 @@ export default function StudioWorkspace() {
       if (group?.type === "show") {
         const showId = Number(nav.mediaKey.split(":")[1]);
         return (
-          <TvShowDetailView showTmdbId={showId} posters={posters} tmdbData={tmdbTvShowData} tmdbState={tmdbTvShowState} callbacks={studioCallbacks} />
+          <TvShowDetailView showTmdbId={showId} posters={posters} tmdbData={tmdbTvShowData} tmdbState={tmdbTvShowState} callbacks={studioCallbacks} setHeaderExtra={setDetailHeaderExtra} />
         );
       }
       if (nav.mediaKey.startsWith("collection:")) {
         const collId = Number(nav.mediaKey.split(":")[1]);
         return (
-          <CollectionDetailView collectionTmdbId={collId} posters={posters} allPosters={visiblePosters} tmdbData={tmdbCollectionData} tmdbState={tmdbCollectionState} callbacks={studioCallbacks} />
+          <CollectionDetailView collectionTmdbId={collId} posters={posters} allPosters={visiblePosters} tmdbData={tmdbCollectionData} tmdbState={tmdbCollectionState} callbacks={studioCallbacks} setHeaderExtra={setDetailHeaderExtra} />
         );
       }
       if (nav.mediaKey.startsWith("movie:")) {
         const movieId = Number(nav.mediaKey.split(":")[1]);
         return (
-          <MovieDetailView movieTmdbId={movieId} title={group?.title ?? ""} posters={posters} allPosters={visiblePosters} tmdbData={tmdbMovieData} tmdbState={tmdbMovieState} callbacks={studioCallbacks} />
+          <MovieDetailView movieTmdbId={movieId} title={group?.title ?? ""} posters={posters} allPosters={visiblePosters} tmdbData={tmdbMovieData} tmdbState={tmdbMovieState} callbacks={studioCallbacks} setHeaderExtra={setDetailHeaderExtra} />
         );
       }
       return (
@@ -3136,10 +3625,21 @@ export default function StudioWorkspace() {
   const isMovieView = nav.view === "media" && nav.mediaKey.startsWith("movie:");
 
   // Back-to-list params — set when navigating from a list view to a detail view
-  const fromListType = searchParams.get("fromListType") as "collections" | "movies" | "tv" | null;
-  const fromListThemeId = searchParams.get("fromListThemeId");
-  // Page title — shown below breadcrumbs in the scrollable area.
-  // When fromListType is set for a media view, the detail view renders its own heading.
+  const activeSeasonNumber = (() => {
+    const season = searchParams.get("season");
+    const parsed = season ? parseInt(season, 10) : NaN;
+    return Number.isNaN(parsed) ? null : parsed;
+  })();
+  const activeSeason = activeSeasonNumber != null
+    ? (tmdbTvShowData?.seasons ?? []).find((season) => season.season_number === activeSeasonNumber) ?? null
+    : null;
+  const activeSeasonName = (() => {
+    const name = activeSeason?.name?.trim();
+    if (!name) return null;
+    if (/^season\s+\d+$/i.test(name)) return null;
+    return name;
+  })();
+
   const toolbarHeading = (() => {
     if (nav.view === "root") return null;
     if (nav.view === "list") {
@@ -3151,17 +3651,78 @@ export default function StudioWorkspace() {
       return themes.find((th) => th.theme_id === nav.themeId)?.name ?? t("title");
     }
     if (nav.view === "media") {
-      if (isMovieView) return null; // MovieDetailView renders its own h5
-      if (fromListType) return null; // detail view renders its own heading when coming from list
       const group = sidebarCollections.find((g) => g.key === nav.mediaKey)
         ?? sidebarTvShows.find((g) => g.key === nav.mediaKey)
         ?? sidebarMovies.find((g) => g.key === nav.mediaKey)
         ?? mediaGroups.find((g) => g.key === nav.mediaKey);
+      if (nav.mediaKey.startsWith("movie:")) {
+        const rawTitle = group?.title || (tmdbMovieData
+          ? `${tmdbMovieData.title}${tmdbMovieData.release_date?.slice(0, 4) ? ` (${tmdbMovieData.release_date.slice(0, 4)})` : ""}`
+          : "");
+        return rawTitle || t("title");
+      }
       if (nav.mediaKey.startsWith("collection:")) return tmdbCollectionData?.name ?? group?.title ?? t("title");
-      if (nav.mediaKey.startsWith("show:")) return tmdbTvShowData?.name ?? group?.title ?? t("title");
+      if (nav.mediaKey.startsWith("show:")) {
+        if (activeSeasonNumber != null) {
+          const seasonLabel = `Season ${String(activeSeasonNumber).padStart(2, "0")}`;
+          return activeSeasonName ? `${seasonLabel} (${activeSeasonName})` : seasonLabel;
+        }
+        const showName = tmdbTvShowData?.name ?? group?.title ?? t("title");
+        const showYear = tmdbTvShowData?.first_air_date?.slice(0, 4);
+        return showYear ? `${showName} (${showYear})` : showName;
+      }
       return group?.title ?? t("title");
     }
     return t("title");
+  })();
+
+  const toolbarSubtitle = (() => {
+    if (nav.view !== "media") return undefined;
+    if (nav.mediaKey.startsWith("movie:")) {
+      const collectionName = tmdbMovieData?.belongs_to_collection?.name ?? null;
+      if (!collectionName && tmdbMovieState === "loading") return undefined;
+      return (
+        <Typography
+          variant="body2"
+          color={collectionName ? "text.secondary" : "text.disabled"}
+          sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}
+        >
+          {collectionName ? `Member of: ${collectionName}` : "Not a member of any collections"}
+        </Typography>
+      );
+    }
+    if (nav.mediaKey.startsWith("collection:")) {
+      const totalMovieCount = tmdbCollectionData?.parts?.length ?? 0;
+      const label = totalMovieCount > 0
+        ? `${totalMovieCount} MOVIE${totalMovieCount !== 1 ? "S" : ""}`
+        : "NO MOVIES";
+      return (
+        <Typography variant="body2" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+          {label}
+        </Typography>
+      );
+    }
+    if (nav.mediaKey.startsWith("show:")) {
+      if (activeSeasonNumber != null) {
+        const episodeCount = activeSeason?.episode_count ?? 0;
+        return (
+          <Typography variant="body2" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            {`${episodeCount} EPISODE${episodeCount !== 1 ? "S" : ""} IN THIS SEASON`}
+          </Typography>
+        );
+      }
+      const seasonCount = (tmdbTvShowData?.seasons ?? []).filter((season) => season.season_number > 0).length;
+      const totalEpisodeCount = (tmdbTvShowData?.seasons ?? []).reduce((sum, season) => sum + (season.episode_count ?? 0), 0);
+      if (seasonCount === 0 && totalEpisodeCount === 0) return undefined;
+      return (
+        <Typography variant="body2" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+          {seasonCount > 0
+            ? `${seasonCount} ${seasonCount === 1 ? "SEASON" : "SEASONS"} AND ${totalEpisodeCount} EPISODES`
+            : `${totalEpisodeCount} EPISODES`}
+        </Typography>
+      );
+    }
+    return undefined;
   })();
 
   // ─── Breadcrumbs ─────────────────────────────────────────────────────────────
@@ -3218,6 +3779,22 @@ export default function StudioWorkspace() {
       }
       if (nav.mediaKey.startsWith("show:")) {
         const name = tmdbTvShowData?.name ?? sidebarTvShows.find((g) => g.key === nav.mediaKey)?.title ?? nav.mediaKey;
+        if (activeSeasonNumber != null) {
+          const seasonLabel = `Season ${String(activeSeasonNumber).padStart(2, "0")}`;
+          return [
+            home,
+            makeCrumb("tv", true),
+            {
+              label: name,
+              onClick: () => {
+                const p = new URLSearchParams(searchParams.toString());
+                p.delete("season");
+                router.push(`/studio?${p.toString()}`);
+              },
+            },
+            { label: seasonLabel },
+          ];
+        }
         return [home, makeCrumb("tv", true), { label: name }];
       }
       const group = sidebarMovies.find((g) => g.key === nav.mediaKey) ?? mediaGroups.find((g) => g.key === nav.mediaKey);
@@ -3227,214 +3804,343 @@ export default function StudioWorkspace() {
     return [homeCurrent];
   })();
 
+  const studioHeroBackdropUrl = (() => {
+    if (nav.view === "list") return listHeroBackdropUrl;
+    if (nav.view !== "media") return null;
+
+    if (nav.mediaKey.startsWith("movie:")) {
+      const movieId = Number(nav.mediaKey.split(":")[1]);
+      const movieBackdrop = postersForMedia(nav.mediaKey).find((p) =>
+        p.media.type === "backdrop" && p.media.tmdb_id === movieId && !p.media.show_tmdb_id
+      );
+      return movieBackdrop?.assets.preview.url
+        ?? (tmdbMovieData?.backdrop_path ? tmdbImageUrl(tmdbMovieData.backdrop_path) : null);
+    }
+
+    if (nav.mediaKey.startsWith("show:")) {
+      const showId = Number(nav.mediaKey.split(":")[1]);
+      const showBackdrop = postersForMedia(nav.mediaKey).find((p) =>
+        p.media.type === "backdrop" && p.media.show_tmdb_id === showId
+      );
+      return showBackdrop?.assets.preview.url
+        ?? (tmdbTvShowData?.backdrop_path ? tmdbImageUrl(tmdbTvShowData.backdrop_path) : null);
+    }
+
+    if (nav.mediaKey.startsWith("collection:")) {
+      const collectionId = Number(nav.mediaKey.split(":")[1]);
+      const collectionBackdrop = postersForMedia(nav.mediaKey).find((p) =>
+        p.media.type === "backdrop" && p.media.collection_tmdb_id === collectionId
+      );
+      return collectionBackdrop?.assets.preview.url
+        ?? (tmdbCollectionData?.backdrop_path ? tmdbImageUrl(tmdbCollectionData.backdrop_path) : null)
+        ?? (tmdbCollectionData?.poster_path ? tmdbImageUrl(tmdbCollectionData.poster_path) : null);
+    }
+
+    return null;
+  })();
+
   return (
-    <Box sx={{ display: "flex", height: "calc(100vh - 64px)", overflow: "hidden" }}>
-      {/* Sidebar */}
+    <Box
+      sx={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        height: "calc(100vh - 64px)",
+        overflow: "hidden",
+        overscrollBehaviorY: "none",
+      }}
+    >
+      {studioHeroBackdropUrl && (
+        <Box sx={{ position: "fixed", top: 64, left: 0, right: 0, height: "75vh", zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
+          <Box
+            component="img"
+            src={studioHeroBackdropUrl}
+            alt=""
+            sx={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", opacity: 0.2, filter: "grayscale(0.75)" }}
+          />
+          <Box sx={{ position: "absolute", inset: 0, background: (theme) => `linear-gradient(to bottom, transparent 40%, ${theme.palette.background.default} 95%)` }} />
+        </Box>
+      )}
+
       <Box
         sx={{
-          width: 220,
+          position: "relative",
+          zIndex: 1,
           flexShrink: 0,
-          borderRight: 1,
-          borderColor: "divider",
-          pt: 2,
-          display: { xs: "none", md: "block" },
-          overflowY: "auto",
+          ...STUDIO_GLASS_PANEL_SX,
+          backgroundColor: (theme) =>
+            theme.palette.mode === "light"
+              ? "rgba(255, 255, 255, 0.5)"
+              : "rgba(18, 18, 20, 0.5)",
+          boxShadow: (theme) =>
+            theme.palette.mode === "light"
+              ? "inset 0 1px 0 rgba(255,255,255,0.55), 0 1px 0 rgba(15,23,42,0.08), 0 10px 22px rgba(15,23,42,0.08)"
+              : "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 0 rgba(0,0,0,0.3), 0 10px 22px rgba(0,0,0,0.22)",
         }}
       >
-        {/* ── NEW THEME button ── */}
-        <Box sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: "divider" }}>
-          <Button
-            startIcon={<AddIcon />}
-            size="small"
-            fullWidth
-            variant="text"
-            sx={{ justifyContent: "flex-start", fontWeight: 700, color: "text.primary" }}
-            onClick={() => { setEditingTheme(null); setThemeModalOpen(true); }}
-          >
-            {t("newTheme")}
-          </Button>
-        </Box>
-
-        {/* ── One accordion per theme ── */}
-        {themes.map((theme) => (
-          <Accordion
-            key={theme.theme_id}
-            disableGutters
-            elevation={0}
-            expanded={expandedSections.has(theme.theme_id)}
-            onChange={() => toggleSection(theme.theme_id)}
-            sx={{ "&:before": { display: "none" }, bgcolor: "transparent" }}
-          >
-            <AccordionSummary
-              expandIcon={<ExpandMoreIcon sx={{ fontSize: "1rem" }} />}
-              sx={{ minHeight: 36, px: 1.5, "& .MuiAccordionSummary-content": { m: 0, alignItems: "center", gap: 1 } }}
-            >
-              <LayersOutlinedIcon sx={{ fontSize: "0.85rem", color: "text.secondary", flexShrink: 0 }} />
-              <Typography variant="body2" fontWeight={700} noWrap sx={{ flex: 1 }}>{theme.name}</Typography>
-            </AccordionSummary>
-            <AccordionDetails sx={{ p: 0 }}>
-              {(() => {
-                const activeList = nav.view === "list" ? nav : null;
-                const isTheme = activeList?.themeId === theme.theme_id;
-                return (
-                  <List dense disablePadding>
-                    <ListItemButton
-                      selected={isTheme && activeList?.listType === "collections"}
-                      onClick={() => navigate({ view: "list", listType: "collections", themeId: theme.theme_id })}
-                      sx={{ pl: 4 }}
-                    >
-                      <MovieOutlinedIcon sx={{ fontSize: "0.85rem", mr: 1, color: "text.secondary", flexShrink: 0 }} />
-                      <ListItemText primary={t("collections")} slotProps={{ primary: { variant: "body2", noWrap: true } }} />
-                      {sidebarCollections.length > 0 && (() => {
-                        const total = sidebarCollections.length;
-                        const active = sidebarCollections.filter((g) =>
-                          allPosters.some((p) =>
-                            ((p.media.type === "collection" && p.media.tmdb_id === g.tmdbId) || p.media.collection_tmdb_id === g.tmdbId) &&
-                            p.media.theme_id === theme.theme_id
-                          )
-                        ).length;
-                        return (
-                          <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, ml: 0.5 }}>{active} / {total}</Typography>
-                        );
-                      })()}
-                    </ListItemButton>
-                    <ListItemButton
-                      selected={isTheme && activeList?.listType === "movies"}
-                      onClick={() => navigate({ view: "list", listType: "movies", themeId: theme.theme_id })}
-                      sx={{ pl: 4 }}
-                    >
-                      <MovieOutlinedIcon sx={{ fontSize: "0.85rem", mr: 1, color: "text.secondary", flexShrink: 0 }} />
-                      <ListItemText primary={t("movies")} slotProps={{ primary: { variant: "body2", noWrap: true } }} />
-                      {(() => {
-                        const total = sidebarMovies.length;
-                        if (total === 0) return null;
-                        const active = sidebarMovies.filter((g) =>
-                          allPosters.some((p) =>
-                            p.media.tmdb_id === g.tmdbId &&
-                            (p.media.type === "movie" || p.media.type === "backdrop") &&
-                            (theme.theme_id === "" || p.media.theme_id === theme.theme_id)
-                          )
-                        ).length;
-                        return <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, ml: 0.5 }}>{active} / {total}</Typography>;
-                      })()}
-                    </ListItemButton>
-                    <ListItemButton
-                      selected={isTheme && activeList?.listType === "tv"}
-                      onClick={() => navigate({ view: "list", listType: "tv", themeId: theme.theme_id })}
-                      sx={{ pl: 4 }}
-                    >
-                      <TvOutlinedIcon sx={{ fontSize: "0.85rem", mr: 1, color: "text.secondary", flexShrink: 0 }} />
-                      <ListItemText primary={t("tvShows")} slotProps={{ primary: { variant: "body2", noWrap: true } }} />
-                      {(() => {
-                        const total = sidebarTvShows.length;
-                        if (total === 0) return null;
-                        const active = sidebarTvShows.filter((g) =>
-                          allPosters.some((p) =>
-                            (p.media.tmdb_id === g.tmdbId || p.media.show_tmdb_id === g.tmdbId) &&
-                            (theme.theme_id === "" || p.media.theme_id === theme.theme_id)
-                          )
-                        ).length;
-                        return <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, ml: 0.5 }}>{active} / {total}</Typography>;
-                      })()}
-                    </ListItemButton>
-                  </List>
-                );
-              })()}
-            </AccordionDetails>
-          </Accordion>
-        ))}
-      </Box>
-
-      {/* Main content */}
-      <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {/* Fixed toolbar */}
         <Box sx={{
-          flexShrink: 0,
           display: "flex",
           alignItems: "center",
           gap: 1,
           px: 2,
-          minHeight: 48,
-          borderBottom: 1,
-          borderColor: "divider",
-          bgcolor: "background.paper",
+          py: 0.75,
+          minHeight: 56,
         }}>
-          <Box sx={{ flex: 1 }} />
-          <Tooltip title={t("artworkLanguageTooltip")} placement="bottom">
-            <Select
-              size="small"
-              displayEmpty
-              value={activeLanguage}
-              onChange={(e) => switchLanguage(e.target.value)}
-              startAdornment={<LanguageIcon sx={{ fontSize: "1rem", mr: 0.5, color: "text.secondary" }} />}
-              sx={{ minWidth: 160, fontSize: "0.8rem" }}
-            >
-              <MenuItem value="">{t("languageNeutral")}</MenuItem>
-              {ARTWORK_LANGUAGE_CODES.map((code) => (
-                <MenuItem key={code} value={code}>{getLanguageLabel(code, locale)}</MenuItem>
-              ))}
-            </Select>
-          </Tooltip>
-          {themes.length > 0 && (
-            <Select
-              size="small"
-              value={activeThemeId}
-              onChange={(e) => setActiveThemeId(e.target.value)}
-              sx={{ minWidth: 140, fontSize: "0.8rem" }}
-            >
-              {themes.map((th) => (
-                <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>
-              ))}
-            </Select>
-          )}
-          {nav.view === "list" && (
-            <IconButton
-              size="small"
-              onClick={() => nav.listType === "tv" ? setAddShowOpen(true) : setAddMovieOpen(true)}
-              aria-label={nav.listType === "tv" ? t("addShow") : nav.listType === "collections" ? t("addCollection") : t("addMovie")}
-            >
-              <AddIcon />
-            </IconButton>
-          )}
-          {zipContext && (
+            {(conn?.creatorDisplayName || conn?.creatorId) && (
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 800,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "text.secondary",
+                }}
+              >
+                {conn.creatorDisplayName || conn.creatorId}
+              </Typography>
+            )}
+            <Box sx={{ flex: 1 }} />
+            <Tooltip title={t("artworkLanguageTooltip")} placement="bottom">
+              <Select
+                size="small"
+                displayEmpty
+                value={activeLanguage}
+                onChange={(e) => switchLanguage(e.target.value)}
+                startAdornment={<LanguageIcon sx={{ fontSize: "1rem", mr: 0.5, color: "text.secondary" }} />}
+                sx={{ minWidth: 160, fontSize: "0.8rem" }}
+              >
+                <MenuItem value="">{t("languageNeutral")}</MenuItem>
+                {ARTWORK_LANGUAGE_CODES.map((code) => (
+                  <MenuItem key={code} value={code}>{getLanguageLabel(code, locale)}</MenuItem>
+                ))}
+              </Select>
+            </Tooltip>
+            {themes.length > 0 && (
+              <Select
+                size="small"
+                value={activeThemeId}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === "__new__") {
+                    setEditingTheme(null);
+                    setThemeModalOpen(true);
+                    return;
+                  }
+                  setActiveThemeId(value);
+                }}
+                sx={{ minWidth: 140, fontSize: "0.8rem" }}
+              >
+                <MenuItem value="__new__">{t("newTheme")}</MenuItem>
+                {themes.map((th) => (
+                  <MenuItem key={th.theme_id} value={th.theme_id}>{th.name}</MenuItem>
+                ))}
+              </Select>
+            )}
+            {nav.view === "list" && (
+              <>
+                <ToggleButtonGroup
+                  value={listViewMode}
+                  exclusive
+                  size="small"
+                  onChange={(_, v) => v && handleListViewMode(v as "table" | "grid")}
+                >
+                  <ToggleButton value="table" aria-label={t("viewTable")}>
+                    <TableRowsOutlinedIcon sx={{ fontSize: "1rem" }} />
+                  </ToggleButton>
+                  <ToggleButton value="grid" aria-label={t("viewGrid")}>
+                    <GridViewOutlinedIcon sx={{ fontSize: "1rem" }} />
+                  </ToggleButton>
+                </ToggleButtonGroup>
+                <IconButton
+                  size="small"
+                  onClick={() => nav.listType === "tv" ? setAddShowOpen(true) : setAddMovieOpen(true)}
+                  aria-label={nav.listType === "tv" ? t("addShow") : nav.listType === "collections" ? t("addCollection") : t("addMovie")}
+                >
+                  <AddIcon />
+                </IconButton>
+              </>
+            )}
+            {zipContext && (
+              <Button
+                startIcon={<UnarchiveOutlinedIcon />}
+                size="small"
+                variant="outlined"
+                onClick={() => { setZipImportConfig(zipContext); setZipImportOpen(true); }}
+              >
+                {t("importZip")}
+              </Button>
+            )}
             <Button
-              startIcon={<UnarchiveOutlinedIcon />}
+              startIcon={<FileUploadOutlinedIcon />}
               size="small"
-              variant="outlined"
-              onClick={() => { setZipImportConfig(zipContext); setZipImportOpen(true); }}
+              onClick={() => { setUploadPreFill({ themeId: activeThemeId, language: activeLanguage || undefined }); setUploadDrawerOpen(true); }}
             >
-              {t("importZip")}
+              {t("upload")}
             </Button>
-          )}
-          <Button
-            startIcon={<FileUploadOutlinedIcon />}
-            size="small"
-            onClick={() => { setUploadPreFill({ themeId: activeThemeId, language: activeLanguage || undefined }); setUploadDrawerOpen(true); }}
-          >
-            {t("upload")}
-          </Button>
+        </Box>
+      </Box>
+
+      <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden", overscrollBehaviorY: "none" }}>
+        {/* Sidebar */}
+        <Box
+          sx={{
+            position: "relative",
+            width: 220,
+            flexShrink: 0,
+            zIndex: 1,
+            pt: 1,
+            display: { xs: "none", md: "block" },
+            overflowY: "auto",
+            overscrollBehaviorY: "none",
+            ...STUDIO_GLASS_PANEL_SX,
+            boxShadow: (theme) =>
+              theme.palette.mode === "light"
+                ? "inset -1px 0 0 rgba(15,23,42,0.06), 10px 0 24px rgba(15,23,42,0.06)"
+                : "inset -1px 0 0 rgba(255,255,255,0.04), 10px 0 24px rgba(0,0,0,0.2)",
+          }}
+        >
+          {/* ── One accordion per theme ── */}
+          {themes.map((theme) => (
+            <Accordion
+              key={theme.theme_id}
+              disableGutters
+              elevation={0}
+              expanded={expandedSections.has(theme.theme_id)}
+              onChange={() => toggleSection(theme.theme_id)}
+              sx={{ "&:before": { display: "none" }, bgcolor: "transparent" }}
+            >
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon sx={{ fontSize: "1rem" }} />}
+                sx={{ minHeight: 36, px: 1.5, "& .MuiAccordionSummary-content": { m: 0, alignItems: "center", gap: 1 } }}
+              >
+                <LayersOutlinedIcon sx={{ fontSize: "0.85rem", color: "text.secondary", flexShrink: 0 }} />
+                <Typography variant="body2" fontWeight={700} noWrap sx={{ flex: 1 }}>{theme.name}</Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ p: 0 }}>
+                {(() => {
+                  const activeList = nav.view === "list" ? nav : null;
+                  const isTheme = activeList?.themeId === theme.theme_id;
+                  return (
+                    <List dense disablePadding>
+                      <ListItemButton
+                        selected={isTheme && activeList?.listType === "collections"}
+                        onClick={() => navigate({ view: "list", listType: "collections", themeId: theme.theme_id })}
+                        sx={{ pl: 4 }}
+                      >
+                        <MovieOutlinedIcon sx={{ fontSize: "0.85rem", mr: 1, color: "text.secondary", flexShrink: 0 }} />
+                        <ListItemText primary={t("collections")} slotProps={{ primary: { variant: "body2", noWrap: true } }} />
+                        {sidebarCollections.length > 0 && (() => {
+                          const total = sidebarCollections.length;
+                          const active = sidebarCollections.filter((g) =>
+                            allPosters.some((p) =>
+                              ((p.media.type === "collection" && p.media.tmdb_id === g.tmdbId) || p.media.collection_tmdb_id === g.tmdbId) &&
+                              p.media.theme_id === theme.theme_id
+                            )
+                          ).length;
+                          return (
+                            <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, ml: 0.5 }}>{active} / {total}</Typography>
+                          );
+                        })()}
+                      </ListItemButton>
+                      <ListItemButton
+                        selected={isTheme && activeList?.listType === "movies"}
+                        onClick={() => navigate({ view: "list", listType: "movies", themeId: theme.theme_id })}
+                        sx={{ pl: 4 }}
+                      >
+                        <MovieOutlinedIcon sx={{ fontSize: "0.85rem", mr: 1, color: "text.secondary", flexShrink: 0 }} />
+                        <ListItemText primary={t("movies")} slotProps={{ primary: { variant: "body2", noWrap: true } }} />
+                        {(() => {
+                          const total = sidebarMovies.length;
+                          if (total === 0) return null;
+                          const active = sidebarMovies.filter((g) =>
+                            allPosters.some((p) =>
+                              p.media.tmdb_id === g.tmdbId &&
+                              (p.media.type === "movie" || p.media.type === "backdrop") &&
+                              (theme.theme_id === "" || p.media.theme_id === theme.theme_id)
+                            )
+                          ).length;
+                          return <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, ml: 0.5 }}>{active} / {total}</Typography>;
+                        })()}
+                      </ListItemButton>
+                      <ListItemButton
+                        selected={isTheme && activeList?.listType === "tv"}
+                        onClick={() => navigate({ view: "list", listType: "tv", themeId: theme.theme_id })}
+                        sx={{ pl: 4 }}
+                      >
+                        <TvOutlinedIcon sx={{ fontSize: "0.85rem", mr: 1, color: "text.secondary", flexShrink: 0 }} />
+                        <ListItemText primary={t("tvShows")} slotProps={{ primary: { variant: "body2", noWrap: true } }} />
+                        {(() => {
+                          const total = sidebarTvShows.length;
+                          if (total === 0) return null;
+                          const active = sidebarTvShows.filter((g) =>
+                            allPosters.some((p) =>
+                              (p.media.tmdb_id === g.tmdbId || p.media.show_tmdb_id === g.tmdbId) &&
+                              (theme.theme_id === "" || p.media.theme_id === theme.theme_id)
+                            )
+                          ).length;
+                          return <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, ml: 0.5 }}>{active} / {total}</Typography>;
+                        })()}
+                      </ListItemButton>
+                    </List>
+                  );
+                })()}
+              </AccordionDetails>
+            </Accordion>
+          ))}
         </Box>
 
+        {/* Main content */}
+        <Box sx={{ position: "relative", zIndex: 1, flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
         {/* Scrollable content area */}
-        <Box sx={{ flex: 1, overflowY: "auto", "& [data-type-chip]": { display: "none" } }}>
-          <Box sx={{ px: 3, pt: 2, pb: 3 }}>
-            <PageHeader
-              crumbs={studioBreadcrumbs}
-              title={toolbarHeading && nav.view !== "root" && !(
-                nav.view === "list" && (
-                  (nav.listType === "collections" && sidebarCollections.length === 0) ||
-                  (nav.listType === "movies" && sidebarMovies.length === 0) ||
-                  (nav.listType === "tv" && sidebarTvShows.length === 0)
-                )
-              ) ? toolbarHeading : undefined}
-            />
-            {loading ? (
-              <Typography color="text.secondary">{tc("loading")}</Typography>
-            ) : (
-              renderMain()
-            )}
+        <Box
+          ref={scrollContentRef}
+          sx={{
+            flex: 1,
+            overflowY: "auto",
+            overscrollBehaviorY: "none",
+            "& [data-type-chip]": { display: "none" },
+            "--studio-sticky-header-height": `${stickyHeaderHeight}px`,
+          }}
+        >
+          <Box sx={{ pt: 0, pb: 3 }}>
+            <Box
+              ref={stickyHeaderRef}
+              sx={{
+                position: "sticky",
+                top: 0,
+                overflow: "hidden",
+                zIndex: 2,
+                pt: 2,
+                pb: 0,
+                ...STUDIO_GLASS_PANEL_SX,
+              }}
+            >
+              <Box sx={{ px: 3 }}>
+                <PageHeader
+                  crumbs={studioBreadcrumbs}
+                  title={toolbarHeading && nav.view !== "root" && !(
+                    nav.view === "list" && (
+                      (nav.listType === "collections" && sidebarCollections.length === 0) ||
+                      (nav.listType === "movies" && sidebarMovies.length === 0) ||
+                      (nav.listType === "tv" && sidebarTvShows.length === 0)
+                    )
+                  ) ? toolbarHeading : undefined}
+                  subtitle={toolbarSubtitle}
+                />
+              </Box>
+              {detailHeaderExtra}
+            </Box>
+            <Box sx={{ px: 3, pt: nav.view === "media" ? 2 : 2 }}>
+              {loading ? (
+                <Typography color="text.secondary">{tc("loading")}</Typography>
+              ) : (
+                renderMain()
+              )}
+            </Box>
           </Box>
         </Box>
+      </Box>
       </Box>
 
       {/* Add collection dialog */}
