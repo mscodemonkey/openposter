@@ -121,7 +121,7 @@ type ItemKind =
   | { tag: "showBackdrop"; tmdbId: number; showTmdbId: number }
   | { tag: "season"; tmdbId: number | null; showTmdbId: number; seasonNumber: number }
   | { tag: "episode"; showTmdbId: number; seasonNumber: number; episodeNumber: number }
-  | { tag: "collectionPoster"; tmdbId: number }
+  | { tag: "collectionPoster"; tmdbId: number; collectionTmdbId: number; title: string }
   | { tag: "collectionBackdrop"; tmdbId: number; collectionTmdbId: number }
   | { tag: "movie"; tmdbId: number; title: string; year: number; collectionTmdbId: number };
 
@@ -236,7 +236,7 @@ function mapForCollection(
       return { item: null, skip: { filename, reason: `collection name "${parsed.title}" doesn't match "${contextTitle}"` } };
     }
     return {
-      item: { filename, blob, label: "Collection poster", status: "pending", kind: { tag: "collectionPoster", tmdbId: contextTmdbId } },
+      item: { filename, blob, label: "Collection poster", status: "pending", kind: { tag: "collectionPoster", tmdbId: contextTmdbId, collectionTmdbId: contextTmdbId, title: contextTitle } },
       skip: null,
     };
   }
@@ -393,6 +393,8 @@ async function uploadItem(
   if (k.tag === "collectionPoster") {
     form.append("media_type", "collection");
     form.append("tmdb_id", String(k.tmdbId));
+    form.append("collection_tmdb_id", String(k.collectionTmdbId));
+    form.append("title", k.title);
   } else if (k.tag === "collectionBackdrop") {
     form.append("media_type", "backdrop");
     form.append("tmdb_id", String(k.tmdbId));

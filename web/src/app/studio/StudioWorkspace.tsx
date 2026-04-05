@@ -192,6 +192,44 @@ function groupByMedia(posters: PosterEntry[]): MediaGroup[] {
   }));
 }
 
+function dedupeByLogicalSlot(posters: PosterEntry[]): PosterEntry[] {
+  const latestByKey = new Map<string, PosterEntry>();
+  for (const poster of posters) {
+    let key: string;
+    if (poster.media.type === "collection") {
+      key = [
+        "collection",
+        poster.kind ?? "poster",
+        poster.media.tmdb_id ?? "",
+        poster.language ?? "",
+        poster.media.theme_id ?? "",
+      ].join("|");
+    } else if (poster.media.type === "show") {
+      key = [
+        "show",
+        poster.kind ?? "poster",
+        poster.media.tmdb_id ?? "",
+        poster.language ?? "",
+        poster.media.theme_id ?? "",
+      ].join("|");
+    } else {
+      key = [
+        poster.media.type,
+        poster.kind ?? "poster",
+        poster.media.tmdb_id ?? "",
+        poster.media.show_tmdb_id ?? "",
+        poster.media.collection_tmdb_id ?? "",
+        poster.media.season_number ?? "",
+        poster.media.episode_number ?? "",
+        poster.language ?? "",
+        poster.media.theme_id ?? "",
+      ].join("|");
+    }
+    latestByKey.set(key, poster);
+  }
+  return [...latestByKey.values()];
+}
+
 // ─── Mosaic thumbnail ─────────────────────────────────────────────────────────
 
 function MosaicThumb({ urls, alt }: { urls: string[]; alt: string }) {
@@ -825,6 +863,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks,
   const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const debugEnabled = searchParams.get("debug") === "true";
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
   const showYear = tmdbData?.first_air_date?.slice(0, 4) ?? undefined;
@@ -968,6 +1007,40 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks,
   const squareDraft = showSquarePosters.filter((p) => p.published === false).length;
   const logoPublished = showLogoPosters.filter((p) => p.published !== false).length;
   const logoDraft = showLogoPosters.filter((p) => p.published === false).length;
+  const tedRelevantPosters = showTmdbId === 201834
+    ? posters.filter((p) => (p.media.tmdb_id ?? p.media.show_tmdb_id) === showTmdbId)
+    : [];
+
+  useEffect(() => {
+    if (!debugEnabled || showTmdbId !== 201834) return;
+    const relevantPosters = posters.filter((p) => (p.media.tmdb_id ?? p.media.show_tmdb_id) === showTmdbId);
+    console.log("[Studio debug][ted]", {
+      showTmdbId,
+      activeThemeId: callbacks.activeThemeId,
+      activeLanguage: callbacks.activeLanguage,
+      postersCount: posters.length,
+      relevantPosters: relevantPosters.map((p) => ({
+        poster_id: p.poster_id,
+        media_type: p.media.type,
+        tmdb_id: p.media.tmdb_id ?? null,
+        show_tmdb_id: p.media.show_tmdb_id ?? null,
+        kind: p.kind ?? null,
+        theme_id: p.media.theme_id ?? null,
+        language: p.language ?? null,
+        published: p.published ?? null,
+        title: p.media.title ?? null,
+      })),
+      showPosters: showPosters.map((p) => ({
+        poster_id: p.poster_id,
+        media_type: p.media.type,
+        kind: p.kind ?? null,
+        theme_id: p.media.theme_id ?? null,
+        language: p.language ?? null,
+        published: p.published ?? null,
+        title: p.media.title ?? null,
+      })),
+    });
+  }, [showTmdbId, posters, showPosters, callbacks.activeThemeId, callbacks.activeLanguage, debugEnabled]);
 
   useEffect(() => {
     setHeaderExtra(allIds.length > 0 ? (
@@ -1003,6 +1076,20 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks,
         </Alert>
       )}
 
+      {debugEnabled && showTmdbId === 201834 && (
+        <Alert severity="info" sx={{ whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: "0.75rem" }}>
+          {[
+            `DEBUG ted`,
+            `theme=${callbacks.activeThemeId || "(none)"}`,
+            `language=${callbacks.activeLanguage || "(none)"}`,
+            `posters.length=${posters.length}`,
+            `tedRelevantPosters=${tedRelevantPosters.length}`,
+            `showPosters=${showPosters.length}`,
+            ...tedRelevantPosters.map((p) => `- ${p.poster_id} type=${p.media.type} kind=${p.kind ?? "poster"} published=${String(p.published)} theme=${p.media.theme_id ?? "(none)"} lang=${p.language ?? "(none)"} title=${p.media.title ?? "(none)"}`),
+          ].join("\n")}
+        </Alert>
+      )}
+
       {/* POSTERS: show poster + one slot per season (clickable → season detail) */}
       <Stack spacing={1}>
         <StudioCollectionSectionHeading
@@ -1016,7 +1103,7 @@ function TvShowDetailView({ showTmdbId, posters, tmdbData, tmdbState, callbacks,
           {showPosters.length > 0
             ? showPosters.map((p) => (
                 <Box key={p.poster_id}>
-                  <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={showDisplayTitle} subtitle={showCountsSubtitle} />
+                  <StudioPosterCard poster={p} selected={selected.has(p.poster_id)} onToggleSelect={() => toggleSelect(p.poster_id)} callbacks={callbacks} titleOverride={tmdbData?.name ?? undefined} subtitle={showYear} />
                 </Box>
               ))
             : (
@@ -1254,9 +1341,9 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
     return callbacks.activeThemeId === "" || p.media.theme_id === callbacks.activeThemeId;
   }
 
-  const collectionPosters = posters.filter((p) => p.media.type === "collection" && p.kind !== "logo" && p.kind !== "square" && matchesTheme(p));
-  const collectionSquarePosters = posters.filter((p) => p.media.type === "collection" && p.kind === "square" && matchesTheme(p));
-  const collectionLogoPosters = posters.filter((p) => p.media.type === "collection" && p.kind === "logo" && matchesTheme(p));
+  const collectionPosters = dedupeByLogicalSlot(posters.filter((p) => p.media.type === "collection" && p.kind !== "logo" && p.kind !== "square" && matchesTheme(p)));
+  const collectionSquarePosters = dedupeByLogicalSlot(posters.filter((p) => p.media.type === "collection" && p.kind === "square" && matchesTheme(p)));
+  const collectionLogoPosters = dedupeByLogicalSlot(posters.filter((p) => p.media.type === "collection" && p.kind === "logo" && matchesTheme(p)));
 
   const backdropPosters = allPosters.filter(
     (p) => p.media.type === "backdrop" && !p.media.show_tmdb_id && matchesTheme(p) &&
@@ -1370,20 +1457,9 @@ function CollectionDetailView({ collectionTmdbId, posters, allPosters, tmdbData,
             />
             <Box
               sx={{
-                display: "flex",
-                flexWrap: "wrap",
+                display: "grid",
+                gridTemplateColumns: POSTER_GRID_COLS,
                 gap: GRID_GAP,
-                alignItems: "flex-start",
-                "& > *": {
-                  flex: "1 1 180px",
-                  minWidth: 170,
-                  maxWidth: {
-                    xs: "calc(50% - 8px)",
-                    sm: "calc(33.333% - 11px)",
-                    md: "calc(25% - 12px)",
-                    lg: "calc(20% - 13px)",
-                  },
-                },
               }}
             >
               {tmdbMovies.length > 0
@@ -2062,7 +2138,6 @@ export default function StudioWorkspace() {
   const [activeLanguage, setActiveLanguage] = useState("en");
   const [languageToast, setLanguageToast] = useState<string | null>(null);
   const [detailHeaderExtra, setDetailHeaderExtra] = useState<React.ReactNode | null>(null);
-  const [listHeroBackdropUrl, setListHeroBackdropUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (nav.view !== "media") setDetailHeaderExtra(null);
@@ -2270,6 +2345,57 @@ export default function StudioWorkspace() {
     setAddMovieResults([]);
   }
 
+  // Add collection dialog — searches TMDB collections directly
+  const [addCollectionOpen, setAddCollectionOpen] = useState(false);
+  const [addCollectionInput, setAddCollectionInput] = useState("");
+  const [addCollectionState, setAddCollectionState] = useState<"idle" | "loading" | "found" | "results" | "error">("idle");
+  const [addCollectionLookup, setAddCollectionLookup] = useState<{ tmdbId: number; title: string } | null>(null);
+  const [addCollectionResults, setAddCollectionResults] = useState<TmdbSearchResult[]>([]);
+
+  async function handleLookupCollection() {
+    const raw = addCollectionInput.trim();
+    if (!raw) return;
+    setAddCollectionState("loading");
+    setAddCollectionLookup(null);
+    setAddCollectionResults([]);
+    const numId = Number(raw);
+    if (numId) {
+      const data = await fetchTmdbCollection(numId);
+      if (data) {
+        setAddCollectionLookup({ tmdbId: data.id, title: data.name });
+        setAddCollectionState("found");
+        return;
+      }
+    }
+    const results = await fetchTmdbSearchCollection(raw);
+    if (results.length === 1) {
+      setAddCollectionLookup({ tmdbId: results[0].id, title: results[0].name });
+      setAddCollectionState("found");
+    } else if (results.length > 1) {
+      setAddCollectionResults(results.slice(0, 8));
+      setAddCollectionState("results");
+    } else {
+      setAddCollectionState("error");
+    }
+  }
+
+  function handleAddCollection() {
+    if (!addCollectionLookup) return;
+    const next = pinnedCollections.filter((c) => c.tmdbId !== addCollectionLookup.tmdbId);
+    next.push({ tmdbId: addCollectionLookup.tmdbId, title: addCollectionLookup.title });
+    savePinnedCollections(next);
+    navigate({ view: "media", mediaKey: `collection:${addCollectionLookup.tmdbId}` });
+    closeAddCollection();
+  }
+
+  function closeAddCollection() {
+    setAddCollectionOpen(false);
+    setAddCollectionInput("");
+    setAddCollectionState("idle");
+    setAddCollectionLookup(null);
+    setAddCollectionResults([]);
+  }
+
   function toggleSection(key: string) {
     setExpandedSections((prev) => {
       const next = new Set(prev);
@@ -2288,12 +2414,24 @@ export default function StudioWorkspace() {
     setConn(connWithId);
 
     try {
-      // Load all posters from node
-      const postersRes = await fetch(`${c.nodeUrl}/v1/posters?limit=200&include_drafts=true`, {
-        headers: { Authorization: `Bearer ${c.adminToken}` },
-      });
-      const postersJson = postersRes.ok ? (await postersRes.json()) as { results: PosterEntry[] } : { results: [] };
-      const posters = postersJson.results;
+      // Load all posters from node, following pagination so recently updated
+      // draft items do not disappear after metadata changes.
+      const posters: PosterEntry[] = [];
+      let cursor: string | null = null;
+      do {
+        const url = new URL(`${c.nodeUrl}/v1/posters`);
+        url.searchParams.set("limit", "200");
+        url.searchParams.set("include_drafts", "true");
+        if (cursor) url.searchParams.set("cursor", cursor);
+
+        const postersRes = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${c.adminToken}` },
+        });
+        if (!postersRes.ok) break;
+        const postersJson = await postersRes.json() as { results?: PosterEntry[]; next_cursor?: string | null };
+        posters.push(...(postersJson.results ?? []));
+        cursor = postersJson.next_cursor ?? null;
+      } while (cursor);
       setAllPosters(posters);
 
       // Resolve creator_id — try four sources in order of reliability:
@@ -2720,53 +2858,6 @@ export default function StudioWorkspace() {
     return () => { cancelled = true; };
   }, [nav, sidebarTvShows.length]); // sidebarTvShows.length as proxy for list changes
 
-  useEffect(() => {
-    if (nav.view !== "list") {
-      setListHeroBackdropUrl(null);
-      return;
-    }
-
-    const pickRandom = <T,>(items: T[]): T | null => {
-      if (items.length === 0) return null;
-      return items[Math.floor(Math.random() * items.length)] ?? null;
-    };
-
-    let candidates: string[] = [];
-
-    if (nav.listType === "collections") {
-      candidates = sidebarCollections.flatMap((g) => {
-        const posters = postersForMedia(g.key);
-        const uploadedBackdrop = posters.find((p) => p.media.type === "backdrop" && p.media.collection_tmdb_id === g.tmdbId)?.assets.preview.url;
-        const tmdb = collectionTmdbMap.get(g.tmdbId);
-        const fallback = tmdb?.backdrop_path
-          ? tmdbImageUrl(tmdb.backdrop_path)
-          : tmdb?.poster_path
-            ? tmdbImageUrl(tmdb.poster_path)
-            : null;
-        return [uploadedBackdrop, fallback, ...g.previewUrls].filter(Boolean) as string[];
-      });
-    } else if (nav.listType === "tv") {
-      candidates = sidebarTvShows.flatMap((g) => {
-        const posters = postersForMedia(g.key);
-        const uploadedBackdrop = posters.find((p) => p.media.type === "backdrop" && p.media.show_tmdb_id === g.tmdbId)?.assets.preview.url;
-        const tmdb = showTmdbMap.get(g.tmdbId);
-        const fallback = tmdb?.backdrop_path
-          ? tmdbImageUrl(tmdb.backdrop_path)
-          : tmdb?.poster_path
-            ? tmdbImageUrl(tmdb.poster_path)
-            : null;
-        return [uploadedBackdrop, fallback, ...g.previewUrls].filter(Boolean) as string[];
-      });
-    } else if (nav.listType === "movies") {
-      candidates = sidebarMovies.flatMap((g) => {
-        const posters = postersForMedia(g.key);
-        const uploadedBackdrop = posters.find((p) => p.media.type === "backdrop" && p.media.tmdb_id === g.tmdbId)?.assets.preview.url;
-        return [uploadedBackdrop, ...g.previewUrls].filter(Boolean) as string[];
-      });
-    }
-
-    setListHeroBackdropUrl(pickRandom(candidates));
-  }, [nav, sidebarCollections, sidebarTvShows, sidebarMovies, collectionTmdbMap, showTmdbMap, allPosters]);
 
   function postersForTheme(themeId: string) {
     return allPosters.filter((p) => p.media.theme_id === themeId);
@@ -3162,7 +3253,7 @@ export default function StudioWorkspace() {
                     title={t("noCollections")}
                     description={t("noCollectionsHint")}
                     actionLabel={t("addCollection")}
-                    onAction={() => setAddMovieOpen(true)}
+                    onAction={() => setAddCollectionOpen(true)}
                   />
                 ) : collLetterGroups.map(([letter, group], idx) => (
                   <Box key={letter} sx={{ pt: idx === 0 ? 0 : "20px" }}>
@@ -3215,7 +3306,7 @@ export default function StudioWorkspace() {
                 title={t("noCollections")}
                 description={t("noCollectionsHint")}
                 actionLabel={t("addCollection")}
-                onAction={() => setAddMovieOpen(true)}
+                onAction={() => setAddCollectionOpen(true)}
               />
             ) : (
               <Table size="small">
@@ -3826,7 +3917,6 @@ export default function StudioWorkspace() {
   })();
 
   const studioHeroBackdropUrl = (() => {
-    if (nav.view === "list") return listHeroBackdropUrl;
     if (nav.view !== "media") return null;
 
     if (nav.mediaKey.startsWith("movie:")) {
@@ -3871,6 +3961,34 @@ export default function StudioWorkspace() {
         overscrollBehaviorY: "none",
       }}
     >
+      {nav.view === "list" && (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            opacity: 0.04,
+            pointerEvents: "none",
+            zIndex: 0,
+            backgroundImage: (theme) => {
+              const c = theme.palette.mode === "dark" ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.30)";
+              return `linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%), linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%)`;
+            },
+            backgroundSize: "200px 200px",
+            backgroundPosition: "0 0, 100px 100px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pl: { xs: 0, md: "220px" },
+          }}
+        >
+          <Box
+            component="img"
+            src="/op-logo-small.svg"
+            alt=""
+            sx={{ width: 600, height: 600, filter: "grayscale(1) drop-shadow(0 0 24px rgba(255,255,255,1))" }}
+          />
+        </Box>
+      )}
       {studioHeroBackdropUrl && (
         <Box sx={{ position: "fixed", top: 64, left: 0, right: 0, height: "75vh", zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
           <Box
@@ -3974,7 +4092,7 @@ export default function StudioWorkspace() {
                 </ToggleButtonGroup>
                 <IconButton
                   size="small"
-                  onClick={() => nav.listType === "tv" ? setAddShowOpen(true) : setAddMovieOpen(true)}
+                  onClick={() => nav.listType === "tv" ? setAddShowOpen(true) : nav.listType === "collections" ? setAddCollectionOpen(true) : setAddMovieOpen(true)}
                   aria-label={nav.listType === "tv" ? t("addShow") : nav.listType === "collections" ? t("addCollection") : t("addMovie")}
                 >
                   <AddIcon />
@@ -4220,6 +4338,53 @@ export default function StudioWorkspace() {
           <Button variant="contained" onClick={handleAddMovie} disabled={addMovieState !== "found"}>
             {addMovieResult?.kind === "collection" ? t("addCollection") : t("addMovie")}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add collection dialog */}
+      <Dialog open={addCollectionOpen} onClose={closeAddCollection} maxWidth="xs" fullWidth>
+        <DialogTitle>{t("addCollection")}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ pt: 1 }}>
+            <Stack direction="row" spacing={1}>
+              <TextField
+                label={t("searchByNameOrId")}
+                value={addCollectionInput}
+                onChange={(e) => { setAddCollectionInput(e.target.value); setAddCollectionLookup(null); setAddCollectionState("idle"); setAddCollectionResults([]); }}
+                onKeyDown={(e) => { if (e.key === "Enter") void handleLookupCollection(); }}
+                placeholder="e.g. Alien Collection or 8091"
+                size="small"
+                fullWidth
+                autoFocus
+              />
+              <Button size="small" variant="outlined" onClick={() => void handleLookupCollection()} disabled={!addCollectionInput.trim() || addCollectionState === "loading"} sx={{ flexShrink: 0 }}>
+                {tc("search")}
+              </Button>
+            </Stack>
+            {addCollectionState === "loading" && <Typography variant="body2" color="text.secondary">{tc("loading")}</Typography>}
+            {addCollectionState === "found" && addCollectionLookup && <Alert severity="success" sx={{ py: 0 }}>{addCollectionLookup.title}</Alert>}
+            {addCollectionState === "error" && <Alert severity="error" sx={{ py: 0 }}>{t("collectionNotFound")}</Alert>}
+            {addCollectionState === "results" && (
+              <Stack spacing={0.5}>
+                {addCollectionResults.map((r) => (
+                  <Box
+                    key={r.id}
+                    onClick={() => { setAddCollectionLookup({ tmdbId: r.id, title: r.name }); setAddCollectionState("found"); }}
+                    sx={{ display: "flex", alignItems: "center", gap: 1.5, p: 0.75, borderRadius: 1, cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}
+                  >
+                    <Box sx={{ width: 28, height: 42, flexShrink: 0, bgcolor: "action.hover", borderRadius: 0.5, overflow: "hidden" }}>
+                      {r.poster_path && <Box component="img" src={tmdbImageUrl(r.poster_path) ?? ""} alt="" sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
+                    </Box>
+                    <Typography variant="body2" noWrap>{r.name}</Typography>
+                  </Box>
+                ))}
+              </Stack>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeAddCollection}>{tc("cancel")}</Button>
+          <Button variant="contained" onClick={handleAddCollection} disabled={addCollectionState !== "found"}>{t("addCollection")}</Button>
         </DialogActions>
       </Dialog>
 
