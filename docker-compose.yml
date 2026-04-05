@@ -39,7 +39,9 @@ services:
       OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
     volumes:
-      - node-a-data:/data
+      - ./reference-node/openposter_node:/app/openposter_node
+      - ./reference-node/pyproject.toml:/app/pyproject.toml:ro
+      - ./reference-node/data-a:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read()"]
@@ -63,7 +65,9 @@ services:
       OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
     volumes:
-      - node-b-data:/data
+      - ./reference-node/openposter_node:/app/openposter_node
+      - ./reference-node/pyproject.toml:/app/pyproject.toml:ro
+      - ./reference-node/data-b:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read()"]
@@ -83,7 +87,9 @@ services:
       OPENPOSTER_INDEXER_POLL_SECONDS: "10"
       OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
     volumes:
-      - indexer-data:/data
+      - ./indexer/openposter_indexer:/app/openposter_indexer
+      - ./indexer/pyproject.toml:/app/pyproject.toml:ro
+      - ./indexer/data:/data
     depends_on:
       node-a:
         condition: service_healthy
@@ -107,7 +113,9 @@ services:
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
       OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
     volumes:
-      - issuer-data:/data
+      - ./issuer/openposter_issuer:/app/openposter_issuer
+      - ./issuer/pyproject.toml:/app/pyproject.toml:ro
+      - ./issuer/data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8085/v1/health').read()"]
@@ -136,6 +144,10 @@ services:
         condition: service_healthy
       issuer:
         condition: service_healthy
+    volumes:
+      - ./web:/app
+      - web-node-modules:/app/node_modules
+      - web-next-cache:/app/.next
     restart: unless-stopped
 
   # ── Web UI B (consumer testing — Node B) ─────────────────────────────────
@@ -157,6 +169,10 @@ services:
         condition: service_healthy
       issuer:
         condition: service_healthy
+    volumes:
+      - ./web:/app
+      - web-b-node-modules:/app/node_modules
+      - web-b-next-cache:/app/.next
     restart: unless-stopped
 
   # ── Diagnostics UI ────────────────────────────────────────────────────────
@@ -175,10 +191,16 @@ services:
         condition: service_healthy
       issuer:
         condition: service_healthy
+    volumes:
+      - ./diagnostics-app:/app
+      - diag-node-modules:/app/node_modules
+      - diag-next-cache:/app/.next
     restart: unless-stopped
 
 volumes:
-  node-a-data:
-  node-b-data:
-  indexer-data:
-  issuer-data:
+  web-node-modules:
+  web-next-cache:
+  web-b-node-modules:
+  web-b-next-cache:
+  diag-node-modules:
+  diag-next-cache:

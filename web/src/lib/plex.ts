@@ -109,15 +109,55 @@ export async function getPlexStatus(nodeUrl: string, adminToken: string): Promis
   }
 }
 
+async function _fetchImageAsBase64(url: string): Promise<string> {
+  // Route through the Next.js proxy so the server-side fetch can reach nodes
+  // that the browser can't access cross-origin. The proxy also rewrites
+  // localhost URLs to host.docker.internal so it works inside Docker.
+  const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+  const r = await fetch(proxyUrl);
+  if (!r.ok) {
+    const j = (await r.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(j?.error ?? `image fetch failed: ${r.status}`);
+  }
+  const buf = await r.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
 export async function applyToPlexPoster(
   nodeUrl: string,
   adminToken: string,
   req: PlexApplyRequest,
 ): Promise<{ media_item_id: string }> {
+  // If the image lives on a different origin than the connected node, fetch it
+  // in the browser (where CORS allows it) and send the bytes as base64 so the
+  // backend doesn't need to make a cross-node HTTP request itself.
+  let imageUrl: string | null = req.imageUrl ?? null;
+  let imageData: string | null = null;
+  if (req.imageUrl) {
+    const nodeOrigin = new URL(nodeUrl).origin;
+    let sameOrigin = false;
+    try {
+      sameOrigin = new URL(req.imageUrl).origin === nodeOrigin;
+    } catch {
+      // relative URL or parse failure — treat as same-origin, pass through as-is
+      sameOrigin = true;
+    }
+    if (!sameOrigin) {
+      // Throws on failure — don't silently fall back to passing a URL the
+      // backend can't reach either.
+      imageData = await _fetchImageAsBase64(req.imageUrl);
+      imageUrl = null;
+    }
+  }
+
   const r = await _nodeRequest(nodeUrl, adminToken, "/v1/admin/plex/apply", {
     method: "POST",
     body: JSON.stringify({
-      image_url: req.imageUrl,
+      image_url: imageUrl,
+      image_data: imageData,
       tmdb_id: req.tmdbId ?? null,
       media_type: req.mediaType,
       plex_rating_key: req.plexRatingKey ?? null,

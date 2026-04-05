@@ -6,6 +6,7 @@ The node stores Plex credentials server-side (never in the browser).
 All Plex API calls are proxied through the node admin API.
 """
 
+import base64
 import json
 import re
 import uuid
@@ -501,7 +502,10 @@ async def media_servers_remove(request: Request, server_id: str):
 # ---------------------------------------------------------------------------
 
 class PlexApplyRequest(BaseModel):
-    image_url: str
+    image_url: str | None = None
+    # base64-encoded image bytes; used by the frontend when the poster lives on
+    # a remote node that the backend can't reach directly via HTTP.
+    image_data: str | None = None
     tmdb_id: int | None = None
     media_type: str          # movie | show | season | episode | collection
     show_tmdb_id: int | None = None
@@ -540,27 +544,41 @@ async def plex_apply(request: Request, body: PlexApplyRequest):
     token = settings["token"]
 
     # Fetch the image first (fail fast before bothering Plex).
-    # If the URL is a local blob URL (/v1/blobs/sha256:<hex>) read from disk to
-    # avoid Docker port-mapping issues when the node fetches from itself.
-    _local_blob_re = re.compile(r"/v1/blobs/(sha256:[0-9a-f]{64})$")
-    _local_match = _local_blob_re.search(body.image_url)
-
-    if _local_match:
-        blob_hash = _local_match.group(1)
-        local_path = blob_path(cfg.data_dir, blob_hash)
-        if not local_path.exists():
-            raise http_error(400, "image_fetch_error", f"Local blob not found: {blob_hash}")
-        image_data = local_path.read_bytes()
+    # image_data (base64) takes precedence — the frontend sends this when the
+    # poster lives on a remote node that the backend can't reach directly.
+    # Otherwise, if the URL is a local blob URL (/v1/blobs/sha256:<hex>) read
+    # from disk to avoid Docker port-mapping issues when the node fetches itself.
+    if body.image_data:
+        try:
+            image_data = base64.b64decode(body.image_data)
+        except Exception as e:
+            raise http_error(400, "image_fetch_error", f"Invalid image_data: {e}")
         content_type = _sniff_content_type(image_data)
-    else:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as _img_client:
-            try:
-                img_r = await _img_client.get(body.image_url)
-                img_r.raise_for_status()
-            except Exception as e:
-                raise http_error(400, "image_fetch_error", f"Could not fetch image: {e}")
-            image_data = img_r.content
+    elif body.image_url:
+        _local_blob_re = re.compile(r"/v1/blobs/(sha256:[0-9a-f]{64})$")
+        _local_match = _local_blob_re.search(body.image_url)
+        _is_local_blob = bool(_local_match) and (
+            body.image_url.startswith("/") or body.image_url.startswith(cfg.base_url)
+        )
+
+        if _is_local_blob:
+            blob_hash = _local_match.group(1)
+            local_path = blob_path(cfg.data_dir, blob_hash)
+            if not local_path.exists():
+                raise http_error(400, "image_fetch_error", f"Local blob not found: {blob_hash}")
+            image_data = local_path.read_bytes()
             content_type = _sniff_content_type(image_data)
+        else:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as _img_client:
+                try:
+                    img_r = await _img_client.get(body.image_url)
+                    img_r.raise_for_status()
+                except Exception as e:
+                    raise http_error(400, "image_fetch_error", f"Could not fetch image: {e}")
+                image_data = img_r.content
+                content_type = _sniff_content_type(image_data)
+    else:
+        raise http_error(400, "validation_error", "Either image_url or image_data is required")
 
     if not body.plex_rating_key and body.tmdb_id is None:
         raise http_error(400, "validation_error", "Either tmdb_id or plex_rating_key is required")

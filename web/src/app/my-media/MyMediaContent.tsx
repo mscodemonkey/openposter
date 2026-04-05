@@ -1167,9 +1167,44 @@ export default function MyMediaContent() {
     }
   }
 
+  const isListView = nav.view === "movies" || nav.view === "shows" || nav.view === "collections";
+
   return (
     <>
-    <Box sx={{ position: "relative", height: "calc(100vh - 64px)", overflow: "hidden" }}>
+    <Box sx={{
+      position: "relative",
+      height: "calc(100vh - 64px)",
+      overflow: "hidden",
+      overscrollBehaviorY: "none",
+    }}>
+      {isListView && (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            opacity: 0.04,
+            pointerEvents: "none",
+            zIndex: 0,
+            backgroundImage: (theme) => {
+              const c = theme.palette.mode === "dark" ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.30)";
+              return `linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%), linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%)`;
+            },
+            backgroundSize: "200px 200px",
+            backgroundPosition: "0 0, 100px 100px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pl: { xs: 0, md: "220px" },
+          }}
+        >
+          <Box
+            component="img"
+            src="/op-logo-small.svg"
+            alt=""
+            sx={{ width: 600, height: 600, filter: "grayscale(1) drop-shadow(0 0 24px rgba(255,255,255,1))" }}
+          />
+        </Box>
+      )}
       {/* Sidebar — floats over the content as a frosted glass overlay */}
       <Box
         component="nav"
@@ -1183,8 +1218,8 @@ export default function MyMediaContent() {
           borderRight: 1,
           borderColor: "divider",
           overflowY: "auto",
-          bgcolor: (theme) => alpha(theme.palette.background.default, 0.45),
-          backdropFilter: "blur(12px)",
+          backgroundColor: (theme) => theme.palette.mode === "light" ? "rgba(255, 255, 255, 0.1)" : "rgba(18, 18, 20, 0.1)",
+          backdropFilter: "blur(16px) saturate(150%)",
           zIndex: 1,
         }}
       >
@@ -1311,9 +1346,10 @@ export default function MyMediaContent() {
         sx={{
           height: "100%",
           overflowY: "auto",
+          overscrollBehaviorY: "none",
           pt: 0,
           pb: { xs: 2, md: 3 },
-          pl: { md: "232px" },
+          pl: { md: "220px" },
         }}
       >
         <Box
@@ -1324,8 +1360,8 @@ export default function MyMediaContent() {
             mb: 2,
             pt: { xs: 2, md: 3 },
             pb: 2,
-            bgcolor: (theme) => alpha(theme.palette.background.default, 0.45),
-            backdropFilter: "blur(12px)",
+            backgroundColor: (theme) => theme.palette.mode === "light" ? "rgba(255, 255, 255, 0.1)" : "rgba(18, 18, 20, 0.1)",
+            backdropFilter: "blur(16px) saturate(150%)",
           }}
         >
           <Box
@@ -1364,7 +1400,7 @@ export default function MyMediaContent() {
                     if (scrollContainerRef.current) {
                       scrollContainerRef.current.scrollTop = 0;
                     }
-                  }, 250);
+                  }, 500);
                 }}
                 placeholder={t("searchLibraryPlaceholder", { name: listSearchTarget })}
                 size="small"

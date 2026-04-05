@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import Box from "@mui/material/Box";
@@ -71,6 +71,59 @@ interface PosterCardProps {
   statusBar?: React.ReactNode;
 }
 
+function PosterCardImage({
+  activeImage,
+  imageCandidates,
+  aspectRatio,
+  alt,
+  onImageError,
+}: {
+  activeImage: string | null;
+  imageCandidates: string[];
+  aspectRatio: string;
+  alt: string;
+  onImageError?: () => void;
+}) {
+  const [imageIndex, setImageIndex] = useState(0);
+  const [imgFailed, setImgFailed] = useState(false);
+
+  const resolvedImage = imageCandidates[imageIndex] ?? activeImage;
+  const showPlaceholder = imgFailed || !resolvedImage;
+
+  const handleImageError = () => {
+    if (imageIndex < imageCandidates.length - 1) {
+      setImageIndex((prev) => prev + 1);
+      return;
+    }
+    setImgFailed(true);
+    onImageError?.();
+  };
+
+  if (showPlaceholder) {
+    return (
+      <Box sx={{ position: "relative", aspectRatio, background: CHECKER, display: "block" }}>
+        <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0.75, px: 1, pointerEvents: "none" }}>
+          <ImageIcon sx={{ fontSize: "2.25rem", color: "rgba(255,255,255,0.7)" }} />
+          <Typography sx={{ fontSize: "0.58rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", lineHeight: 1.2, color: "rgba(255,255,255,0.78)", textAlign: "center" }}>
+            Missing artwork
+          </Typography>
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <CardMedia
+      component="img"
+      image={resolvedImage}
+      alt={alt}
+      loading="lazy"
+      onError={handleImageError}
+      sx={{ aspectRatio, objectFit: "contain", display: "block" }}
+    />
+  );
+}
+
 export default function PosterCard({
   poster,
   actions,
@@ -126,10 +179,14 @@ export default function PosterCard({
   const subtitleLine = subtitle ?? subtitleParts.join(" · ");
 
   const primary = actions?.[0];
-  const [imgFailed, setImgFailed] = useState(false);
-  const showPlaceholder = imageFailed_prop || imgFailed;
-
-  const imageArea = showPlaceholder ? (
+  const imageCandidates = useMemo(() => {
+    const urls = [poster.assets.preview.url];
+    if (poster.assets.full.url && poster.assets.full.url !== poster.assets.preview.url) {
+      urls.push(poster.assets.full.url);
+    }
+    return urls.filter((url): url is string => typeof url === "string" && url.length > 0);
+  }, [poster.assets.full.url, poster.assets.preview.url]);
+  const imageArea = imageFailed_prop ? (
     <Box sx={{ position: "relative", aspectRatio, background: CHECKER, display: "block" }}>
       <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0.75, px: 1, pointerEvents: "none" }}>
         <ImageIcon sx={{ fontSize: "2.25rem", color: "rgba(255,255,255,0.7)" }} />
@@ -139,13 +196,13 @@ export default function PosterCard({
       </Box>
     </Box>
   ) : (
-    <CardMedia
-      component="img"
-      image={poster.assets.preview.url}
+    <PosterCardImage
+      key={`${poster.poster_id}:${poster.assets.preview.url}:${poster.assets.full.url}`}
+      activeImage={imageCandidates[0] ?? null}
+      imageCandidates={imageCandidates}
+      aspectRatio={aspectRatio}
       alt={poster.media.title || poster.poster_id}
-      loading="lazy"
-      onError={() => { setImgFailed(true); onImageError?.(); }}
-      sx={{ aspectRatio, objectFit: "contain", display: "block" }}
+      onImageError={onImageError}
     />
   );
 
