@@ -24,8 +24,8 @@ import PosterSubscribeMenu from "@/components/PosterSubscribeMenu";
 import { loadPosterSearchResults } from "./posterSearch";
 import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
 import type { PosterEntry } from "@/lib/types";
-import type { ThemeSubscription } from "@/lib/subscriptions";
-import { getSubscriptions } from "@/lib/subscriptions";
+import { getThemeSubscriptions, type ThemeSubscription } from "@/lib/subscriptions";
+import { loadIssuerToken } from "@/lib/issuer_storage";
 import { applyToPlexPoster } from "@/lib/plex";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
 import { thumbUrl } from "@/lib/media-server";
@@ -218,7 +218,12 @@ export default function CollectionMoviesView({
       .finally(() => setAltLoading(false));
   }, [selectedMovie?.tmdb_id, selectedMovieId]);
 
-  const subs = useMemo(() => getSubscriptions(), []);
+  const [subs, setSubs] = useState<ThemeSubscription[]>([]);
+  useEffect(() => {
+    const token = loadIssuerToken();
+    if (!token) return;
+    getThemeSubscriptions(token).then(setSubs).catch(() => {});
+  }, []);
   const subscribedThemeIds = useMemo(() => new Set(subs.map((s) => s.themeId)), [subs]);
   const subscribedCreatorIds = useMemo(() => new Set(subs.map((s) => s.creatorId)), [subs]);
   const subThemeNames = useMemo(() => new Map(subs.map((s) => [s.themeId, s.themeName])), [subs]);

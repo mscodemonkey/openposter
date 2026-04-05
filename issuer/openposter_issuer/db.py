@@ -79,6 +79,79 @@ class UrlClaim(Base):
     __table_args__ = (UniqueConstraint("public_url", "owner_user_id", name="uniq_url_claim"),)
 
 
+class ThemeSubscription(Base):
+    __tablename__ = "theme_subscriptions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.user_id"), index=True)
+    creator_id: Mapped[str] = mapped_column(String)
+    creator_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    theme_id: Mapped[str] = mapped_column(String)
+    theme_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    cover_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    node_base: Mapped[str] = mapped_column(String)
+    subscribed_at: Mapped[str] = mapped_column(String)  # ISO8601
+    language: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    __table_args__ = (UniqueConstraint("user_id", "theme_id", name="uniq_theme_subscription"),)
+
+
+class FavouriteCreator(Base):
+    __tablename__ = "favourite_creators"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.user_id"), index=True)
+    creator_id: Mapped[str] = mapped_column(String)
+    creator_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    node_base: Mapped[str] = mapped_column(String)
+    added_at: Mapped[str] = mapped_column(String)  # ISO8601
+
+    __table_args__ = (UniqueConstraint("user_id", "creator_id", name="uniq_favourite_creator"),)
+
+
+class CollectionSubscription(Base):
+    __tablename__ = "collection_subscriptions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.user_id"), index=True)
+    collection_tmdb_id: Mapped[str] = mapped_column(String)
+    collection_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    theme_id: Mapped[str] = mapped_column(String)
+    theme_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    language: Mapped[str | None] = mapped_column(String, nullable=True)
+    node_base: Mapped[str] = mapped_column(String)
+    subscribed_at: Mapped[str] = mapped_column(String)  # ISO8601
+
+    __table_args__ = (UniqueConstraint("user_id", "collection_tmdb_id", "theme_id", "language", name="uniq_collection_sub"),)
+
+
+class TvShowSubscription(Base):
+    __tablename__ = "tv_show_subscriptions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.user_id"), index=True)
+    show_tmdb_id: Mapped[str] = mapped_column(String)
+    show_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    theme_id: Mapped[str] = mapped_column(String)
+    theme_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    language: Mapped[str | None] = mapped_column(String, nullable=True)
+    node_base: Mapped[str] = mapped_column(String)
+    subscribed_at: Mapped[str] = mapped_column(String)  # ISO8601
+
+    __table_args__ = (UniqueConstraint("user_id", "show_tmdb_id", "theme_id", "language", name="uniq_tv_sub"),)
+
+
+class UserPreference(Base):
+    __tablename__ = "user_preferences"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.user_id"), index=True)
+    key: Mapped[str] = mapped_column(String)
+    value: Mapped[str] = mapped_column(String)  # JSON text
+
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uniq_user_pref"),)
+
+
 def new_uuid() -> str:
     return str(uuid.uuid4())
 

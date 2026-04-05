@@ -40,7 +40,8 @@ import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
 import { useCreatorSubscriptions } from "./useCreatorSubscriptions";
 import { useArtworkDrawer } from "./useArtworkDrawer";
 import type { PosterEntry } from "@/lib/types";
-import { getSubscriptions } from "@/lib/subscriptions";
+import { getThemeSubscriptions, type ThemeSubscription } from "@/lib/subscriptions";
+import { loadIssuerToken } from "@/lib/issuer_storage";
 import { applyToPlexPoster } from "@/lib/plex";
 import { getTrackedArtwork, fetchPosterFromNode, untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
@@ -536,7 +537,12 @@ export default function CollectionMediaDetail({
   }, [item.id, item.tmdb_id, item.title, movies, childrenForId, childrenLoading]);
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
-  const subs = useMemo(() => getSubscriptions(), []);
+  const [subs, setSubs] = useState<ThemeSubscription[]>([]);
+  useEffect(() => {
+    const token = loadIssuerToken();
+    if (!token) return;
+    getThemeSubscriptions(token).then(setSubs).catch(() => {});
+  }, []);
 
   // ── Collection child counts ────────────────────────────────────────────────
   const collMovieCount = movies.filter((m) => m.type === "movie").length;

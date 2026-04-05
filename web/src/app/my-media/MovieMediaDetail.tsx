@@ -20,7 +20,8 @@ import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
 import { useCreatorSubscriptions } from "./useCreatorSubscriptions";
 import { useArtworkDrawer } from "./useArtworkDrawer";
 import type { PosterEntry } from "@/lib/types";
-import { getSubscriptions } from "@/lib/subscriptions";
+import { getThemeSubscriptions, type ThemeSubscription } from "@/lib/subscriptions";
+import { loadIssuerToken } from "@/lib/issuer_storage";
 import { applyToPlexPoster } from "@/lib/plex";
 import { getTrackedArtwork, fetchPosterFromNode, untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
@@ -114,7 +115,12 @@ export default function MovieMediaDetail({ item, conn, serverName }: MovieMediaD
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const subs = useMemo(() => getSubscriptions(), []);
+  const [subs, setSubs] = useState<ThemeSubscription[]>([]);
+  useEffect(() => {
+    const token = loadIssuerToken();
+    if (!token) return;
+    getThemeSubscriptions(token).then(setSubs).catch(() => {});
+  }, []);
 
   const trackedItem = trackedArtwork.get(item.id) ?? null;
   const trackedBackdrop = trackedArtwork.get(item.id + ":bg") ?? null;

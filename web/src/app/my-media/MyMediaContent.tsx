@@ -63,8 +63,8 @@ import type { MediaServerConfig } from "@/lib/media-servers";
 import { applyToPlexPoster } from "@/lib/plex";
 import { fetchPosterFromNode, getTrackedArtwork, runArtworkUpdateCheck, untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork, UpdateProgress } from "@/lib/artwork-tracking";
-import { getSubscriptions } from "@/lib/subscriptions";
-import type { ThemeSubscription } from "@/lib/subscriptions";
+import { getThemeSubscriptions, type ThemeSubscription } from "@/lib/subscriptions";
+import { loadIssuerToken } from "@/lib/issuer_storage";
 
 // ---------------------------------------------------------------------------
 // A–Z helpers
@@ -768,7 +768,12 @@ export default function MyMediaContent() {
     }
     return counts;
   }, [library?.movies]);
-  const subs = useMemo(() => getSubscriptions(), []);
+  const [subs, setSubs] = useState<ThemeSubscription[]>([]);
+  useEffect(() => {
+    const token = loadIssuerToken();
+    if (!token) return;
+    getThemeSubscriptions(token).then(setSubs).catch(() => {});
+  }, []);
   const subThemeNames = useMemo(() => new Map(subs.map((s: ThemeSubscription) => [s.themeId, s.themeName])), [subs]);
 
   const activeLetters = useMemo((): Set<string> => {

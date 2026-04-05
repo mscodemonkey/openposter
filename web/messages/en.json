@@ -273,7 +273,15 @@
     "checking": "Checking\u2026",
     "indexed": "Indexed: {status}",
     "following": "Following",
-    "noSubscriptions": "You haven't subscribed to any themes yet. Browse a creator's page to subscribe."
+    "noSubscriptions": "You haven't subscribed to any themes yet. Browse a creator's page to subscribe.",
+    "signInToFollow": "Sign in to see your followed themes.",
+    "favouriteCreators": "Favourite Creators",
+    "noFavouriteCreators": "No favourite creators yet.",
+    "themes": "Themes",
+    "collections": "Collections",
+    "noCollectionSubscriptions": "No collection subscriptions yet.",
+    "tvShows": "TV Shows",
+    "noTvShowSubscriptions": "No TV show subscriptions yet."
   },
   "creators": {
     "title": "Creators",
@@ -355,6 +363,8 @@
     "unsubscribeFromTheme": "Unsubscribe from {themeName}",
     "subscribeToCreator": "Subscribe to {creatorName}",
     "unsubscribeFromCreator": "Unsubscribe from {creatorName}",
+    "favouriteCreator": "Favourite {creatorName}",
+    "unfavouriteCreator": "Unfavourite {creatorName}",
     "themeNotFound": "Theme not found."
   },
   "studio": {
@@ -762,5 +772,16 @@
     "plexLibrariesFailed": "Could not fetch libraries — enter names manually",
     "orEnterManually": "or enter manually",
     "plexAuthOpened": "Complete sign-in in the Plex tab that just opened"
+  },
+  "subscribeEntity": {
+    "title": "Subscribe to {name}",
+    "theme": "Theme",
+    "language": "Language",
+    "textless": "TEXTLESS",
+    "saveAsPreferred": "Save as my preferred language",
+    "cancel": "CANCEL",
+    "subscribe": "SUBSCRIBE",
+    "subscribedTo": "Subscribed to {name}",
+    "unsubscribe": "UNSUBSCRIBE"
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
@@ -8,9 +8,11 @@ import MenuItem from "@mui/material/MenuItem";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import {
-  isSubscribed, subscribe, unsubscribe,
-  isSubscribedToCreator, subscribeCreator, unsubscribeCreator,
+  subscribeTheme, unsubscribeTheme, isSubscribed,
+  getFavouriteCreators, addFavouriteCreator, removeFavouriteCreator,
 } from "@/lib/subscriptions";
+import { issuerGetThemeSubscriptions } from "@/lib/issuer";
+import { loadIssuerToken } from "@/lib/issuer_storage";
 
 interface PosterSubscribeMenuProps {
   creatorId: string;
@@ -26,37 +28,51 @@ export default function PosterSubscribeMenu({
 }: PosterSubscribeMenuProps) {
   const t = useTranslations("creator");
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [subTheme, setSubTheme] = useState(() => (themeId ? isSubscribed(themeId) : false));
-  const [subCreator, setSubCreator] = useState(() => isSubscribedToCreator(creatorId));
+  const [token, setToken] = useState<string | null>(null);
+  const [subTheme, setSubTheme] = useState(false);
+  const [subCreator, setSubCreator] = useState(false);
+
+  useEffect(() => {
+    const tok = loadIssuerToken();
+    setToken(tok);
+    if (!tok) return;
+    getFavouriteCreators(tok)
+      .then((favs) => setSubCreator(favs.some((f) => f.creatorId === creatorId)))
+      .catch(() => {});
+    if (!themeId) return;
+    issuerGetThemeSubscriptions(tok)
+      .then((subs) => setSubTheme(isSubscribed(subs, themeId)))
+      .catch(() => {});
+  }, [creatorId, themeId]);
 
   const isSubscribedAny = subTheme || subCreator;
 
-  const handleToggleTheme = useCallback(() => {
-    if (!themeId) return;
+  const handleToggleTheme = useCallback(async () => {
+    if (!themeId || !token) return;
     if (subTheme) {
-      unsubscribe(themeId);
+      await unsubscribeTheme(token, themeId).catch(() => {});
       setSubTheme(false);
     } else {
-      subscribe({
+      await subscribeTheme(token, {
         creatorId, creatorDisplayName, themeId,
         themeName: themeName ?? "Theme", coverUrl: coverUrl ?? null, nodeBase,
-        subscribedAt: new Date().toISOString(),
-      });
+      }).catch(() => {});
       setSubTheme(true);
     }
     setAnchorEl(null);
-  }, [subTheme, themeId, creatorId, creatorDisplayName, themeName, coverUrl, nodeBase]);
+  }, [subTheme, themeId, token, creatorId, creatorDisplayName, themeName, coverUrl, nodeBase]);
 
-  const handleToggleCreator = useCallback(() => {
+  const handleToggleCreator = useCallback(async () => {
+    if (!token) return;
     if (subCreator) {
-      unsubscribeCreator(creatorId);
+      await removeFavouriteCreator(token, creatorId).catch(() => {});
       setSubCreator(false);
     } else {
-      subscribeCreator({ creatorId, creatorDisplayName, nodeBase });
+      await addFavouriteCreator(token, { creatorId, creatorDisplayName, nodeBase }).catch(() => {});
       setSubCreator(true);
     }
     setAnchorEl(null);
-  }, [subCreator, creatorId, creatorDisplayName, nodeBase]);
+  }, [subCreator, token, creatorId, creatorDisplayName, nodeBase]);
 
   return (
     <>
@@ -71,17 +87,17 @@ export default function PosterSubscribeMenu({
           : <StarBorderIcon sx={{ fontSize: 12 }} />}
       </IconButton>
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-        {themeId && (
-          <MenuItem onClick={handleToggleTheme} dense>
+        {themeId && token && (
+          <MenuItem onClick={() => void handleToggleTheme()} dense>
             {subTheme
               ? t("unsubscribeFromTheme", { themeName: themeName ?? "Theme" })
               : t("subscribeToTheme", { themeName: themeName ?? "Theme" })}
           </MenuItem>
         )}
-        <MenuItem onClick={handleToggleCreator} dense>
+        <MenuItem onClick={() => void handleToggleCreator()} dense>
           {subCreator
-            ? t("unsubscribeFromCreator", { creatorName: creatorDisplayName })
-            : t("subscribeToCreator", { creatorName: creatorDisplayName })}
+            ? t("unfavouriteCreator", { creatorName: creatorDisplayName })
+            : t("favouriteCreator", { creatorName: creatorDisplayName })}
         </MenuItem>
       </Menu>
     </>

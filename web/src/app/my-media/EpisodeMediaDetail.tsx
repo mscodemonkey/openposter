@@ -29,7 +29,8 @@ import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
 import { useCreatorSubscriptions } from "./useCreatorSubscriptions";
 import { useArtworkDrawer } from "./useArtworkDrawer";
 import type { PosterEntry } from "@/lib/types";
-import { getSubscriptions } from "@/lib/subscriptions";
+import { getThemeSubscriptions, type ThemeSubscription } from "@/lib/subscriptions";
+import { loadIssuerToken } from "@/lib/issuer_storage";
 import { applyToPlexPoster } from "@/lib/plex";
 import { untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
@@ -183,7 +184,12 @@ export default function EpisodeMediaDetail({
   const { creatorSubs, toggleCreatorSubscription } = useCreatorSubscriptions();
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
-  const subs = useMemo(() => getSubscriptions(), []);
+  const [subs, setSubs] = useState<ThemeSubscription[]>([]);
+  useEffect(() => {
+    const token = loadIssuerToken();
+    if (!token) return;
+    getThemeSubscriptions(token).then(setSubs).catch(() => {});
+  }, []);
 
   // Merged list of real episodes and TMDB-only placeholders, sorted by episode number.
   const mergedEpisodes = useMemo<Array<{ type: "real"; episode: MediaItem } | { type: "missing"; episodeNumber: number; airDate: string | null }>>(() => {

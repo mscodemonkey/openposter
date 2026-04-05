@@ -13,6 +13,7 @@ import { INDEXER_BASE_URL } from "@/lib/config";
 import PlexApplyButton from "@/components/PlexApplyButton";
 import RelatedArtworkSection from "@/components/RelatedArtworkSection";
 import PosterCard from "@/components/PosterCard";
+import SubscribeEntityButton from "@/components/SubscribeEntityButton";
 import type { PosterEntry } from "@/lib/types";
 
 function PosterGrid({ items }: { items: PosterEntry[] }) {
@@ -60,15 +61,44 @@ export default async function MovieBoxsetPage({
 
   const backdropUrl = collection.assets.full.url ?? null;
 
+  // Derive unique themes and languages from all posters in the boxset
+  const themeMap = new Map<string, { themeId: string; themeName: string; nodeBase: string; creatorName: string }>();
+  for (const p of [collection, ...movies]) {
+    if (p.media.theme_id && !themeMap.has(p.media.theme_id)) {
+      themeMap.set(p.media.theme_id, {
+        themeId: p.media.theme_id,
+        themeName: p.media.theme_id,
+        nodeBase: p.creator.home_node ?? "",
+        creatorName: p.creator.display_name,
+      });
+    }
+  }
+  const uniqueThemes = [...themeMap.values()];
+  const languageSet = new Set(
+    ([collection, ...movies] as PosterEntry[])
+      .map((p) => p.language ?? null)
+      .filter((l): l is string => l !== null)
+  );
+  const uniqueLanguages = [...languageSet];
+
   return (
     <>
       {backdropUrl && <MovieBoxsetBackdrop url={backdropUrl} />}
     <Container maxWidth="lg" sx={{ py: 3, position: "relative", zIndex: 1 }}>
       <Stack spacing={2.5}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            {displayTitle}
-          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="h4" sx={{ fontWeight: 800 }}>
+              {displayTitle}
+            </Typography>
+            <SubscribeEntityButton
+              entityType="collection"
+              entityId={collectionTmdbId}
+              entityName={displayTitle}
+              availableThemes={uniqueThemes}
+              availableLanguages={uniqueLanguages}
+            />
+          </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {[t("movieBoxSetLabel"), collection.creator.display_name].filter(Boolean).join(" · ")}
           </Typography>
