@@ -37,3 +37,9 @@ web/.next/
 web/out/
 web/.env.local
 .openclaw/
+
+# Playwright
+node_modules/
+playwright-report/
+test-results/
+.playwright/
