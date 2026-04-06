@@ -24,6 +24,24 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Detect TMDB configuration
+        shell: bash
+        run: |
+          if [ -n "${TMDB_READ_ACCESS_TOKEN}" ]; then
+            echo "OPENPOSTER_E2E_HAS_TMDB=true" >> "$GITHUB_ENV"
+            echo "TMDB-backed E2E coverage: enabled" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "OPENPOSTER_E2E_HAS_TMDB=false" >> "$GITHUB_ENV"
+            echo "::notice title=TMDB secret missing::TMDB_READ_ACCESS_TOKEN is not configured. TMDB-dependent E2E specs will be skipped in this run."
+            {
+              echo "TMDB-backed E2E coverage: disabled"
+              echo
+              echo "- Missing repository secret: \`TMDB_READ_ACCESS_TOKEN\`"
+              echo "- Result: TMDB-dependent Studio specs will be skipped"
+              echo "- Remaining E2E coverage will still run"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Install root dependencies
         run: npm ci
 

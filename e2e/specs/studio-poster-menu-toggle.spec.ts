@@ -8,8 +8,11 @@ import {
   pinShow,
   resetDevStack,
   setDefaultLanguage,
+  skipIfTmdbUnavailable,
   uploadPoster,
 } from "../helpers/openposter";
+
+skipIfTmdbUnavailable(test);
 
 test.beforeEach(async () => {
   await resetDevStack();

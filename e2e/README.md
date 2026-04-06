@@ -21,7 +21,8 @@ Run order:
 CI:
 
 - GitHub Actions workflow: [`.github/workflows/e2e.yml`](/Users/martinjsteven/.openclaw/workspace-openposter/.github/workflows/e2e.yml)
-- CI expects the repository secret `TMDB_READ_ACCESS_TOKEN` so the web app can boot with TMDB-backed routes enabled.
+- CI uses the repository secret `TMDB_READ_ACCESS_TOKEN` for full TMDB-backed coverage.
+- If that secret is missing, the workflow now emits a clear notice and skips the TMDB-dependent Studio specs instead of failing noisily.
 
 Notes:
 

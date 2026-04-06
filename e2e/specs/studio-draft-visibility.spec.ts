@@ -8,8 +8,11 @@ import {
   resetDevStack,
   setDefaultLanguage,
   setPosterPublished,
+  skipIfTmdbUnavailable,
   uploadPoster,
 } from "../helpers/openposter";
+
+skipIfTmdbUnavailable(test);
 
 test.beforeEach(async () => {
   await resetDevStack();

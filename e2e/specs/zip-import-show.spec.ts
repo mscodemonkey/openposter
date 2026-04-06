@@ -7,7 +7,10 @@ import {
   openStudioMedia,
   pinShow,
   resetDevStack,
+  skipIfTmdbUnavailable,
 } from "../helpers/openposter";
+
+skipIfTmdbUnavailable(test);
 
 test.beforeEach(async () => {
   await resetDevStack();

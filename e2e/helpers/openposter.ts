@@ -15,6 +15,15 @@ export const TEST_RESET_TOKEN = process.env.OPENPOSTER_TEST_RESET_TOKEN ?? "dev-
 export const TEST_CREATOR_ID = process.env.OPENPOSTER_TEST_CREATOR_ID ?? "mcfly";
 export const TEST_CREATOR_DISPLAY_NAME =
   process.env.OPENPOSTER_TEST_CREATOR_DISPLAY_NAME ?? "Martin";
+export const HAS_TMDB =
+  /^(1|true|yes)$/i.test(process.env.OPENPOSTER_E2E_HAS_TMDB ?? "")
+  || Boolean(process.env.TMDB_READ_ACCESS_TOKEN);
+export const TMDB_SKIP_REASON =
+  "TMDB-backed E2E coverage is disabled because TMDB_READ_ACCESS_TOKEN is not configured for this environment.";
+
+export function skipIfTmdbUnavailable(test: { skip(condition: boolean, description?: string): void }): void {
+  test.skip(!HAS_TMDB, TMDB_SKIP_REASON);
+}
 
 export const TED_POSTER_IMAGE = path.resolve(
   process.cwd(),
