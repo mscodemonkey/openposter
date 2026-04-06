@@ -39,8 +39,20 @@ function _headers(adminToken: string) {
   return { Authorization: `Bearer ${adminToken}` };
 }
 
+// Module-level bust key — incremented by bustThumbs() to force fresh URLs after cache clear.
+let _thumbBustKey = 0;
+export function bustThumbs(): void { _thumbBustKey++; }
+
 export function thumbUrl(nodeUrl: string, adminToken: string, itemId: string): string {
-  return `${nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/thumb/${encodeURIComponent(itemId)}?t=${encodeURIComponent(adminToken)}`;
+  const base = `${nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/thumb/${encodeURIComponent(itemId)}?t=${encodeURIComponent(adminToken)}`;
+  return _thumbBustKey > 0 ? `${base}&v=${_thumbBustKey}` : base;
+}
+
+export async function clearThumbCache(nodeUrl: string, adminToken: string): Promise<void> {
+  await fetch(`${nodeUrl.replace(/\/+$/, "")}/v1/admin/media-server/thumbs/cache`, {
+    method: "DELETE",
+    headers: _headers(adminToken),
+  });
 }
 
 export function artUrl(nodeUrl: string, adminToken: string, itemId: string): string {

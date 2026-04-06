@@ -428,6 +428,34 @@ async def media_server_art(request: Request, item_id: str, t: str = Query(defaul
         return Response(status_code=404)
 
 
+@router.delete("/admin/media-server/thumb/{item_id}/cache")
+async def media_server_thumb_cache_bust(request: Request, item_id: str):
+    """Delete the cached thumbnail for an item so the next request re-fetches from Plex."""
+    from .auth import require_admin
+    await require_admin(request)
+
+    cfg = request.app.state.cfg
+    try:
+        _thumb_cache_path(cfg.data_dir, item_id).unlink(missing_ok=True)
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@router.delete("/admin/media-server/art/{item_id}/cache")
+async def media_server_art_cache_bust(request: Request, item_id: str):
+    """Delete the cached background art for an item so the next request re-fetches from Plex."""
+    from .auth import require_admin
+    await require_admin(request)
+
+    cfg = request.app.state.cfg
+    try:
+        _art_cache_path(cfg.data_dir, item_id).unlink(missing_ok=True)
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 @router.get("/admin/media-server/logo/{item_id}")
 async def media_server_logo(request: Request, item_id: str, t: str = Query(default="")):
     """Proxy clearLogo image from Plex. Returns 404 if none exists or server is older than PMS 1.43.
@@ -522,8 +550,8 @@ async def media_server_square(request: Request, item_id: str, t: str = Query(def
     """Proxy square poster image from Plex. Returns 404 if none exists.
 
     Images are cached to disk after the first fetch.
-    Plex Image[] type for square artwork is likely "squarePoster" — debug log on first run
-    to verify against your library.
+    PMS 1.43 reports square artwork in the Image[] array as backgroundSquare and
+    serves it from /library/metadata/{id}/squareArt/{thumbId}.
     """
     await _check_token(request, t)
 
@@ -562,7 +590,11 @@ async def media_server_square(request: Request, item_id: str, t: str = Query(def
                 images: list[dict] = metadata_obj.get("Image", [])
                 logger.info(f"[square proxy] Image array for {item_id}: {images}")
                 square_entry = next(
-                    (img for img in images if img.get("type") in ("squarePoster", "square", "Square")), None
+                    (
+                        img for img in images
+                        if img.get("type") in ("backgroundSquare", "squarePoster", "square", "Square")
+                    ),
+                    None,
                 )
                 square_path: str | None = square_entry.get("url") if square_entry else None
             except Exception as exc:
@@ -602,6 +634,23 @@ async def media_server_square_cache_bust(request: Request, item_id: str):
     cfg = request.app.state.cfg
     try:
         _square_cache_path(cfg.data_dir, item_id).unlink(missing_ok=True)
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@router.delete("/admin/media-server/thumbs/cache")
+async def media_server_thumb_cache_bust_all(request: Request):
+    """Delete ALL cached thumbnail images so every next request re-fetches fresh from Plex."""
+    from .auth import require_admin
+    await require_admin(request)
+
+    cfg = request.app.state.cfg
+    import shutil
+    try:
+        thumbs_dir = _cache_dir(cfg.data_dir) / "thumbs"
+        if thumbs_dir.exists():
+            shutil.rmtree(thumbs_dir)
     except Exception:
         pass
     return {"ok": True}

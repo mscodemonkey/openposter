@@ -42,6 +42,8 @@ import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import MovieOutlinedIcon from "@mui/icons-material/MovieOutlined";
 import SearchIcon from "@mui/icons-material/Search";
+import SyncIcon from "@mui/icons-material/Sync";
+import Tooltip from "@mui/material/Tooltip";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 
 import PlexMark from "@/components/PlexMark";
@@ -56,7 +58,7 @@ import { CollectionCard, TVShowCard } from "@/components/SectionedPosterView";
 import type { CollectionGroup, TVShowGroup } from "@/components/SectionedPosterView";
 import type { PosterEntry } from "@/lib/types";
 import { loadCreatorConnection } from "@/lib/storage";
-import { fetchMediaLibrary, fetchMediaChildren, thumbUrl } from "@/lib/media-server";
+import { fetchMediaLibrary, fetchMediaChildren, thumbUrl, clearThumbCache, bustThumbs } from "@/lib/media-server";
 import type { MediaItem, MediaLibrary } from "@/lib/media-server";
 import { listMediaServers } from "@/lib/media-servers";
 import type { MediaServerConfig } from "@/lib/media-servers";
@@ -509,6 +511,11 @@ export default function MyMediaContent() {
   const [childrenForId, setChildrenForId] = useState<string | null>(null);
   const [failedThumbs, setFailedThumbs] = useState<Set<string>>(new Set());
   const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
+  // Incrementing refreshKey causes the init effect to re-run (manual refresh).
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  // Incremented after clearing thumb cache — causes all thumbUrl() calls to return new URLs.
+  const [thumbVersion, setThumbVersion] = useState(0);
   // media_item_id → TrackedArtwork (loaded in parallel with library)
   const [trackedArtwork, setTrackedArtwork] = useState<Map<string, TrackedArtwork>>(new Map());
 
@@ -534,6 +541,20 @@ export default function MyMediaContent() {
     });
   }
 
+  async function handleRefresh() {
+    if (!conn || refreshing) return;
+    setRefreshing(true);
+    setFailedThumbs(new Set());
+    try {
+      // Wipe the node's disk cache so every thumb is fetched fresh from Plex.
+      await clearThumbCache(conn.nodeUrl, conn.adminToken);
+    } catch { /* ignore — still bust URLs below */ }
+    // Bump the module-level key so thumbUrl() returns new URLs → browser re-requests.
+    bustThumbs();
+    setThumbVersion((v) => v + 1);
+    setRefreshing(false);
+  }
+
   async function handleReset(mediaItemId: string) {
     try {
       await untrackArtwork(conn!.nodeUrl, conn!.adminToken, mediaItemId);
@@ -550,12 +571,18 @@ export default function MyMediaContent() {
 
   useEffect(() => {
     let cancelled = false;
+    const isRefresh = refreshKey > 0;
+    if (isRefresh) {
+      setRefreshing(true);
+      setFailedThumbs(new Set());
+    }
     const frameId = requestAnimationFrame(() => {
       if (cancelled) return;
       const connection = loadCreatorConnection();
       setConn(connection);
       if (!connection) {
         setLoading(false);
+        if (isRefresh) setRefreshing(false);
         return;
       }
       Promise.all([
@@ -593,6 +620,10 @@ export default function MyMediaContent() {
           }
 
           setError(null);
+          // Skip the artwork update check on manual refresh — it already ran on
+          // initial load and is intentionally slow. A manual refresh only syncs
+          // the library item list and tracked artwork records.
+          if (isRefresh) return;
           runArtworkUpdateCheck(
             connection.nodeUrl,
             connection.adminToken,
@@ -623,7 +654,10 @@ export default function MyMediaContent() {
           if (!cancelled) setError(e instanceof Error ? e.message : String(e));
         })
         .finally(() => {
-          if (!cancelled) setLoading(false);
+          if (!cancelled) {
+            setLoading(false);
+            setRefreshing(false);
+          }
         });
     });
 
@@ -631,7 +665,8 @@ export default function MyMediaContent() {
       cancelled = true;
       cancelAnimationFrame(frameId);
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   useEffect(() => {
     if (!conn) return;
@@ -1177,11 +1212,57 @@ export default function MyMediaContent() {
   return (
     <>
     <Box sx={{
-      position: "relative",
+      display: "flex",
+      flexDirection: "column",
       height: "calc(100vh - 64px)",
-      overflow: "hidden",
-      overscrollBehaviorY: "none",
     }}>
+
+      {/* ── My Media toolbar ── */}
+      <Box
+        sx={{
+          flexShrink: 0,
+          position: "relative",
+          zIndex: 1,
+          backgroundColor: (theme) =>
+            theme.palette.mode === "light"
+              ? "rgba(255, 255, 255, 0.5)"
+              : "rgba(18, 18, 20, 0.5)",
+          backdropFilter: "blur(16px) saturate(150%)",
+          boxShadow: (theme) =>
+            theme.palette.mode === "light"
+              ? "inset 0 1px 0 rgba(255,255,255,0.55), 0 1px 0 rgba(15,23,42,0.08)"
+              : "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 0 rgba(0,0,0,0.3)",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.75, minHeight: 48 }}>
+          <Box sx={{ flex: 1 }} />
+          <Tooltip title={t("refreshLibrary")}>
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => void handleRefresh()}
+                disabled={refreshing || loading}
+              >
+                <SyncIcon
+                  fontSize="small"
+                  sx={{
+                    animation: refreshing ? "spin 1s linear infinite" : "none",
+                    "@keyframes spin": { "0%": { transform: "rotate(0deg)" }, "100%": { transform: "rotate(360deg)" } },
+                  }}
+                />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+      </Box>
+
+      {/* ── Sidebar + content ── */}
+      <Box sx={{
+        position: "relative",
+        flex: 1,
+        overflow: "hidden",
+        overscrollBehaviorY: "none",
+      }}>
       {isListView && (
         <Box
           sx={{
@@ -1454,7 +1535,8 @@ export default function MyMediaContent() {
       </Box>
 
       {showAZRail && <AZRail available={activeLetters} scrollContainerRef={scrollContainerRef} />}
-    </Box>
+      </Box> {/* end sidebar+content */}
+    </Box> {/* end flex-column */}
 
     <Snackbar
       open={snack.open}

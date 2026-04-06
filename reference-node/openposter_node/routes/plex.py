@@ -219,9 +219,11 @@ async def _apply_image(
 ) -> None:
     """Upload image bytes to Plex as the poster/thumb/art/logo/square."""
     if is_logo:
-        endpoint = "logos"
+        # PMS 1.43 exposes clear-logo uploads via /clearLogos.
+        endpoint = "clearLogos"
     elif is_square:
-        endpoint = "squares"
+        # PMS 1.43 exposes square artwork via /squareArts.
+        endpoint = "squareArts"
     elif is_backdrop:
         endpoint = "arts"
     elif is_episode:

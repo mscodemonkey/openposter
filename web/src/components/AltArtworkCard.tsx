@@ -87,6 +87,7 @@ export default function AltArtworkCard({
             variant={isApplied ? "contained" : "outlined"}
             onClick={() => onApply(poster)}
             disabled={isApplying || isApplied}
+            data-testid={`use-artwork-${poster.poster_id}`}
             sx={{ fontSize: "0.65rem", py: 0.25, minWidth: 0 }}
           >
             {isApplied ? t("appliedCheck") : isApplying ? <CircularProgress size={12} /> : label}

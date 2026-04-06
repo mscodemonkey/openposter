@@ -4,10 +4,11 @@
 # The old reference-node/compose.multi.yml is superseded by this file.
 #
 # Services:
+#   directory :8084  — bootstrap directory node (gossip, /v1/nodes)
 #   node-a    :8081  — creator node (Studio / upload)
 #   node-b    :8082  — consumer node (My Media / Plex)
-#   indexer   :8090  — crawls nodes, powers search
-#   issuer    :8085  — identity, creator handles, node directory
+#   indexer   :8090  — crawls nodes, powers search (seeds from directory)
+#   issuer    :8085  — identity, creator handles, node registry
 #   web       :3000  — Web UI pointed at Node A (creator)
 #   web-b     :3002  — Web UI pointed at Node B (consumer testing)
 #   diag      :3001  — Diagnostics UI
@@ -22,6 +23,34 @@
 #   curl "http://localhost:8085/dev/reset?token=dev-reset"
 
 services:
+
+  # ── Directory (bootstrap gossip node) ────────────────────────────────────
+  # Plain reference-node instance whose sole job is to accept node registrations
+  # and serve GET /v1/nodes for gossip bootstrap. The indexer seeds from here,
+  # mirroring production where all indexers seed from directory.openposter.art.
+  directory:
+    build: ./reference-node
+    ports:
+      - "8084:8080"
+    environment:
+      PORT: "8080"
+      OPENPOSTER_BASE_URL: "http://directory:8080"
+      OPENPOSTER_NODE_NAME: "OpenPoster Directory"
+      OPENPOSTER_OPERATOR_NAME: "OpenPoster Dev"
+      OPENPOSTER_ADMIN_TOKEN: "dev-admin"
+      OPENPOSTER_ALLOW_PRIVATE_NODES: "true"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+      OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
+    volumes:
+      - ./reference-node/openposter_node:/app/openposter_node
+      - ./reference-node/pyproject.toml:/app/pyproject.toml:ro
+      - ./reference-node/data-directory:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   # ── Node A (creator) ──────────────────────────────────────────────────────
   node-a:
@@ -38,10 +67,16 @@ services:
       OPENPOSTER_ALLOW_PRIVATE_NODES: "true"
       OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
+      # Announce to directory using Docker-internal URL (directory validates this)
+      OPENPOSTER_ANNOUNCE_TO: "http://directory:8080"
+      OPENPOSTER_ANNOUNCE_URL: "http://node-a:8080"
     volumes:
       - ./reference-node/openposter_node:/app/openposter_node
       - ./reference-node/pyproject.toml:/app/pyproject.toml:ro
       - ./reference-node/data-a:/data
+    depends_on:
+      directory:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read()"]
@@ -64,10 +99,16 @@ services:
       OPENPOSTER_ALLOW_PRIVATE_NODES: "true"
       OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
+      # Announce to directory using Docker-internal URL (directory validates this)
+      OPENPOSTER_ANNOUNCE_TO: "http://directory:8080"
+      OPENPOSTER_ANNOUNCE_URL: "http://node-b:8080"
     volumes:
       - ./reference-node/openposter_node:/app/openposter_node
       - ./reference-node/pyproject.toml:/app/pyproject.toml:ro
       - ./reference-node/data-b:/data
+    depends_on:
+      directory:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read()"]
@@ -82,8 +123,8 @@ services:
       - "8090:8090"
     environment:
       PORT: "8090"
-      # Seed from Node A via Docker internal network so the indexer can crawl it
-      OPENPOSTER_INDEXER_SEEDS: "http://node-a:8080"
+      # Seed from directory — mirrors production topology
+      OPENPOSTER_INDEXER_SEEDS: "http://directory:8080"
       OPENPOSTER_INDEXER_POLL_SECONDS: "10"
       OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
     volumes:
@@ -91,7 +132,11 @@ services:
       - ./indexer/pyproject.toml:/app/pyproject.toml:ro
       - ./indexer/data:/data
     depends_on:
+      directory:
+        condition: service_healthy
       node-a:
+        condition: service_healthy
+      node-b:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:

@@ -693,7 +693,8 @@
     "othersLabelPostersCollection": "Other posters for this collection",
     "cardCollectionMovies": "{count, plural, one {# Movie} other {# Movies}}",
     "cardCollectionShows": "{count, plural, one {# TV Show} other {# TV Shows}}",
-    "cardCollectionMixed": "{movieCount, plural, one {# Movie} other {# Movies}}, {showCount, plural, one {# TV Show} other {# TV Shows}}"
+    "cardCollectionMixed": "{movieCount, plural, one {# Movie} other {# Movies}}, {showCount, plural, one {# TV Show} other {# TV Shows}}",
+    "refreshLibrary": "Refresh thumbnails"
   },
   "plex": {
     "sectionTitle": "Plex Media Server",

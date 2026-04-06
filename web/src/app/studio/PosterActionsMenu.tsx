@@ -44,12 +44,16 @@ export default function PosterActionsMenu({ poster, themes = [], onUpload, onMov
   const currentThemeId = poster?.media.theme_id ?? null;
   const otherThemes = themes.filter((th) => th.theme_id !== currentThemeId);
   const published = poster?.published !== false;
+  const actionLabel = poster?.media.title
+    ? `Artwork actions for ${poster.media.title}`
+    : "Artwork actions";
 
   const close = () => { setAnchor(null); setMoveOpen(false); setLangOpen(false); };
 
   return (
     <>
       <IconButton
+        aria-label={actionLabel}
         size="small"
         sx={{ bgcolor: "rgba(0,0,0,0.6)", color: "white", "&:hover": { bgcolor: "rgba(0,0,0,0.8)" } }}
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAnchor(e.currentTarget); }}

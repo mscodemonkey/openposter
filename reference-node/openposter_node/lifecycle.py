@@ -219,6 +219,11 @@ async def init_app_state(app: FastAPI) -> None:
         from .gossip import attach_gossip
         attach_gossip(app)
 
+    # Announce to directory node if configured
+    if cfg.announce_to:
+        from .announce import schedule_announce
+        schedule_announce(app, cfg.announce_to, cfg.announce_url or cfg.base_url)
+
     # Start Plex library sync (initial sync on startup + periodic background loop)
     from .plex_sync import attach_plex_sync
     attach_plex_sync(app)
