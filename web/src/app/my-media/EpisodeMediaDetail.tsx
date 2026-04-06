@@ -97,6 +97,9 @@ interface EpisodeMediaDetailProps {
   onUntrack: (id: string) => void;
   onTrack: (id: string, artwork: TrackedArtwork) => void;
   serverName?: string;
+  /** TMDB episode list for this season — fetched by the parent and passed down. */
+  tmdbEpisodes: { episode_number: number; air_date: string | null }[] | null;
+  tmdbEpisodesLoading: boolean;
 }
 
 export default function EpisodeMediaDetail({
@@ -116,26 +119,11 @@ export default function EpisodeMediaDetail({
   onUntrack,
   onTrack,
   serverName,
+  tmdbEpisodes,
 }: EpisodeMediaDetailProps) {
   const t = useTranslations("myMedia");
 
-  // ── TMDB episode count ─────────────────────────────────────────────────────
-  const [tmdbEpisodes, setTmdbEpisodes] = useState<{ episode_number: number; air_date: string | null }[] | null>(null);
-  const [tmdbEpisodeCountLoading, setTmdbEpisodeCountLoading] = useState(false);
-  useEffect(() => {
-    if (!showTmdbId || seasonIndex == null) { setTmdbEpisodes(null); return; }
-    let cancelled = false;
-    setTmdbEpisodeCountLoading(true);
-    fetch(`/api/tmdb/tv/${showTmdbId}/season/${seasonIndex}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((d: { episodes?: { episode_number: number; air_date?: string | null }[] } | null) => {
-        if (!cancelled) setTmdbEpisodes(d?.episodes?.map((e) => ({ episode_number: e.episode_number, air_date: e.air_date ?? null })) ?? null);
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setTmdbEpisodeCountLoading(false); });
-    return () => { cancelled = true; };
-  }, [showTmdbId, seasonIndex]);
-  const tmdbEpisodeCount = tmdbEpisodes?.length ?? null;
+  // tmdbEpisodes is fetched by the parent (MyMediaContent) and passed down as a prop.
 
   // ── Hero backdrop ──────────────────────────────────────────────────────────
   const [failedSeasonBg, setFailedSeasonBg] = useState(false);
@@ -452,20 +440,6 @@ export default function EpisodeMediaDetail({
       {/* Page content above hero */}
       <Box sx={{ position: "relative", zIndex: 1 }}>
 
-
-      {!episodesLoading && episodes.length > 0 && (
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-          {tmdbEpisodeCountLoading
-            ? <><CircularProgress size={12} /><Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>{t("checkingEpisodeCount")}</Typography></>
-            : tmdbEpisodeCount != null
-              ? <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                  {episodes.length >= tmdbEpisodeCount
-                    ? t("allEpisodesAvailable", { server: serverName ?? "your media server" })
-                    : t("episodesAvailableCount", { count: episodes.length, total: tmdbEpisodeCount, server: serverName ?? "your media server" })}
-                </Typography>
-              : null}
-        </Stack>
-      )}
 
       {episodesLoading ? (
         <Stack alignItems="center" sx={{ py: 4 }}><CircularProgress /></Stack>

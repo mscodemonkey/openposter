@@ -526,6 +526,8 @@ export default function MyMediaContent() {
   const [collMenuAnchor, setCollMenuAnchor] = useState<null | HTMLElement>(null);
   const [appliedListSearchByScope, setAppliedListSearchByScope] = useState<Record<string, string>>({});
   const [collectionHeaderStatus, setCollectionHeaderStatus] = useState<React.ReactNode | null>(null);
+  const [tmdbSeasonEpisodes, setTmdbSeasonEpisodes] = useState<{ episode_number: number; air_date: string | null }[] | null>(null);
+  const [tmdbSeasonLoading, setTmdbSeasonLoading] = useState(false);
   const searchDebounceRef = useRef<number | null>(null);
 
   function markFailed(id: string) {
@@ -679,6 +681,25 @@ export default function MyMediaContent() {
       .then((items) => { setChildren(items); setChildrenForId(id); })
       .catch(() => { setChildren([]); setChildrenForId(id); });
   }, [nav, conn]);
+
+  const seasonShowTmdbId = nav.view === "season" ? nav.showTmdbId : null;
+  const seasonSeasonIndex = nav.view === "season" ? nav.seasonIndex : null;
+  useEffect(() => {
+    if (seasonShowTmdbId == null || seasonSeasonIndex == null) {
+      setTmdbSeasonEpisodes(null);
+      return;
+    }
+    let cancelled = false;
+    setTmdbSeasonLoading(true);
+    fetch(`/api/tmdb/tv/${seasonShowTmdbId}/season/${seasonSeasonIndex}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { episodes?: { episode_number: number; air_date?: string | null }[] } | null) => {
+        if (!cancelled) setTmdbSeasonEpisodes(d?.episodes?.map((e) => ({ episode_number: e.episode_number, air_date: e.air_date ?? null })) ?? null);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setTmdbSeasonLoading(false); });
+    return () => { cancelled = true; };
+  }, [seasonShowTmdbId, seasonSeasonIndex]);
 
   const sortedMovies = useMemo(() => sortedByTitle(library?.movies ?? []), [library]);
   const sortedShows = useMemo(() => sortedByTitle(library?.shows ?? []), [library]);
@@ -1037,6 +1058,30 @@ export default function MyMediaContent() {
       return collectionHeaderStatus;
     }
 
+    if (nav.view === "season" && !childrenLoading && children.length > 0) {
+      const serverLabel = servers[0]?.name ?? t("title");
+      if (tmdbSeasonLoading) {
+        return (
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <CircularProgress size={12} />
+            <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              {t("checkingEpisodeCount")}
+            </Typography>
+          </Stack>
+        );
+      }
+      if (tmdbSeasonEpisodes != null) {
+        const tmdbCount = tmdbSeasonEpisodes.length;
+        return (
+          <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            {children.length >= tmdbCount
+              ? t("allEpisodesAvailable", { server: serverLabel })
+              : t("episodesAvailableCount", { count: children.length, total: tmdbCount, server: serverLabel })}
+          </Typography>
+        );
+      }
+    }
+
     return null;
   })();
 
@@ -1202,6 +1247,8 @@ export default function MyMediaContent() {
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
             onTrack={(id, artwork) => setTrackedArtwork((prev) => new Map(prev).set(id, artwork))}
             serverName={servers[0]?.name}
+            tmdbEpisodes={tmdbSeasonEpisodes}
+            tmdbEpisodesLoading={tmdbSeasonLoading}
           />
         );
     }
@@ -1228,6 +1275,8 @@ export default function MyMediaContent() {
               ? "rgba(255, 255, 255, 0.5)"
               : "rgba(18, 18, 20, 0.5)",
           backdropFilter: "blur(16px) saturate(150%)",
+          borderBottom: 1,
+          borderColor: "divider",
           boxShadow: (theme) =>
             theme.palette.mode === "light"
               ? "inset 0 1px 0 rgba(255,255,255,0.55), 0 1px 0 rgba(15,23,42,0.08)"
