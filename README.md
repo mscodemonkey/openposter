@@ -1,5 +1,9 @@
 # OpenPoster
 
+[![E2E](https://github.com/mscodemonkey/openposter/actions/workflows/e2e.yml/badge.svg)](https://github.com/mscodemonkey/openposter/actions/workflows/e2e.yml)
+[![Last Commit](https://img.shields.io/github/last-commit/mscodemonkey/openposter/main)](https://github.com/mscodemonkey/openposter/commits/main)
+[![Repo Size](https://img.shields.io/github/repo-size/mscodemonkey/openposter)](https://github.com/mscodemonkey/openposter)
+
 OpenPoster is a **federated poster network** for self-hosters.
 
 If you’ve ever relied on a single central poster site (thePosterDB-style) you’ve seen the pattern:
@@ -128,11 +132,34 @@ A node exposes:
 - search + poster metadata endpoints (`/v1/search`, `/v1/posters/{id}`)
 - blob endpoints (`/v1/blobs/{hash}`)
 
-Clients discover nodes via bootstrapping + gossip (details evolving), then:
+Clients discover nodes via bootstrapping + gossip, then:
 - query multiple nodes
 - merge results
 - verify signatures
 - fetch blobs from origin or mirrors depending on redistribution policy
+
+### Discovery model
+
+OpenPoster uses a hybrid discovery model:
+
+- **Directory** = the well-known starting point. New nodes can register there, and new clients or indexers can ask it for an initial list of nodes. For most first-time users, this is the normal default.
+- **Seeds** = node URLs to try first when bootstrapping. The directory is usually the default seed. Additional seeds are optional and mainly useful for advanced or self-hosted setups.
+- **Gossip** = what happens after bootstrapping. Nodes share the other nodes they know about via `/v1/nodes`, so discovery can continue without depending on a single service forever.
+
+The intended startup flow is:
+
+1. Start with one or more bootstrap seeds.
+2. If no seeds are configured, use the official directory as the default seed.
+3. Ask those seeds for `/v1/nodes` to build an initial peer list.
+4. Announce this node to the directory so future newcomers can find it.
+5. Continue discovering peers through gossip.
+
+Important:
+
+- The directory is a **bootstrap convenience**, not the global source of truth for the whole network.
+- A seed is just "a good first node to ask", not a special protocol role.
+- A brand-new node still needs at least one known address to get started. In normal setups, that address is the official directory.
+- Gossip is for **discovery**, not trust. Clients and indexers must still verify signed metadata and apply their own trust rules.
 
 ---
 
