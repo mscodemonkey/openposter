@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import Box from "@mui/material/Box";
-import { CardChip } from "@/components/MediaCard";
 import Stack from "@mui/material/Stack";
 
 import { POSTER_GRID_COLS, EPISODE_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
@@ -392,7 +391,6 @@ export function CollectionCard({
 }) {
   const t = useTranslations("sections");
   const href = `/movie/${group.collectionTmdbId}/boxset`;
-  const chipProps = chip === false ? null : (chip ?? { label: t("movieBoxSet"), color: "primary" as const });
   const countParts = [
     group.movieCount > 0 ? t("movieCount", { count: group.movieCount }) : null,
     (group.tvShowCount ?? 0) > 0 ? t("tvShowCount", { count: group.tvShowCount ?? 0 }) : null,
@@ -413,7 +411,6 @@ export function CollectionCard({
       media={media}
       title={group.title}
       subtitle={subtitleLine || undefined}
-      topLeftSlot={chipProps ? <CardChip label={chipProps.label} color={chipProps.color} /> : undefined}
       menuSlot={menuSlot}
       managed={managed}
       href={href}
@@ -427,7 +424,6 @@ export function TVShowCard({ group, onClick, onImageError, chip, menuSlot, image
   const t = useTranslations("sections");
   const n = group.coverPreviews.length;
   const href = `/tv/${group.showTmdbId}/boxset`;
-  const chipProps = chip === false ? null : (chip ?? { label: t("tvBoxSetChip"), color: "secondary" as const });
   const [failed, setFailed] = useState<Set<number>>(new Set());
   const showPlaceholder = imageFailed || n === 0;
 
@@ -455,14 +451,13 @@ export function TVShowCard({ group, onClick, onImageError, chip, menuSlot, image
       media={media}
       title={group.title}
       subtitle={[group.year, group.creatorName || null].filter(Boolean).join(" · ") || undefined}
-      topLeftSlot={chipProps ? <CardChip label={chipProps.label} color={chipProps.color} /> : undefined}
-      menuSlot={menuSlot}
-      bottomRightSlot={(group.seasonCount > 0 || group.episodeCount > 0) ? (
+      topRightSlot={(group.seasonCount > 0 || group.episodeCount > 0) ? (
         <Box sx={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 0.5 }}>
           {group.seasonCount > 0 && <CountBadge icon={<TvOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.seasonCount} tooltip={t("seasonPostersIncluded", { count: group.seasonCount })} />}
           {group.episodeCount > 0 && <CountBadge icon={<DvrOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.episodeCount} tooltip={t("episodeCardsIncluded", { count: group.episodeCount })} />}
         </Box>
       ) : undefined}
+      menuSlot={menuSlot}
       href={href}
       onClick={onClick}
       imageWrapper={imageWrapper}
@@ -477,13 +472,7 @@ function EpisodeSeasonCard({ group }: { group: EpisodeSeasonGroup }) {
     <ArtworkCardFrame
       media={<MosaicBox previews={group.episodePreviews} aspectRatio="16 / 9" alt={`${group.showTitle || t("unknownShow")} S${String(group.seasonNumber).padStart(2, "0")}`} />}
       title={group.showTitle || t("unknownShow")}
-      topLeftSlot={
-        <Tooltip title={group.seasonTitle ?? ""} placement="right" disableHoverListener={!group.seasonTitle}>
-          <Box sx={{ pointerEvents: group.seasonTitle ? "auto" : "none", opacity: 0.9 }}>
-            <CardChip label={t("seasonLabel", { number: String(group.seasonNumber).padStart(2, "0") })} color="info" />
-          </Box>
-        </Tooltip>
-      }
+      subtitle={group.seasonTitle ?? t("seasonLabel", { number: String(group.seasonNumber).padStart(2, "0") })}
       bottomRightSlot={<CountBadge icon={<DvrOutlinedIcon sx={{ fontSize: "1rem" }} />} count={group.episodeCount} tooltip={t("episodeCardsIncluded", { count: group.episodeCount })} />}
       href={href}
       ariaLabel={`${group.showTitle || t("unknownShow")} S${String(group.seasonNumber).padStart(2, "0")}`}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import Alert from "@mui/material/Alert";
@@ -17,14 +17,9 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
-import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
-import ReplayIcon from "@mui/icons-material/Replay";
-import UploadIcon from "@mui/icons-material/Upload";
-
 import AltArtworkDrawer from "@/components/AltArtworkDrawer";
 import ArtworkSourceBadge from "@/components/ArtworkSourceBadge";
-import MediaCard, { CardChip, MediaCardOverlay, ToolbarButton } from "@/components/MediaCard";
-import CreatorSubscriptionToolbarAction from "./CreatorSubscriptionToolbarAction";
+import MediaCard, { CardMenuButton } from "@/components/MediaCard";
 import { useArtworkAutoUpdate } from "./useArtworkAutoUpdate";
 import { useCreatorSubscriptions } from "./useCreatorSubscriptions";
 import { useArtworkDrawer } from "./useArtworkDrawer";
@@ -36,15 +31,13 @@ import { untrackArtwork } from "@/lib/artwork-tracking";
 import type { TrackedArtwork } from "@/lib/artwork-tracking";
 import { thumbUrl, artUrl } from "@/lib/media-server";
 import type { MediaItem } from "@/lib/media-server";
-import { BACKDROP_GRID_COLS, GRID_GAP, CHIP_HEIGHT } from "@/lib/grid-sizes";
+import { BACKDROP_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
 
 // ─── MissingEpisodeCard ───────────────────────────────────────────────────────
 
 /** Placeholder card for an episode that exists in TMDB but is not present on the media server. */
 function MissingEpisodeCard({ episodeNumber, airDate }: { episodeNumber: number; airDate: string | null }) {
   const t = useTranslations("myMedia");
-  const label = `EPISODE ${String(episodeNumber).padStart(2, "0")}`;
-
   const { statusLabel, statusColor } = (() => {
     if (!airDate) return { statusLabel: t("episodeStatusNotBroadcast"), statusColor: "text.disabled" as const };
     const aired = new Date(airDate);
@@ -68,9 +61,6 @@ function MissingEpisodeCard({ episodeNumber, airDate }: { episodeNumber: number;
         <Typography variant="caption" sx={{ color: statusColor, fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
           {statusLabel}
         </Typography>
-        <Box sx={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
-          <CardChip label={label} color="success" />
-        </Box>
       </Box>
     </Box>
   );
@@ -132,9 +122,6 @@ export default function EpisodeMediaDetail({
     ? (failedShowBg ? null : artUrl(conn.nodeUrl, conn.adminToken, showId))
     : artUrl(conn.nodeUrl, conn.adminToken, seasonId);
 
-  // ── Selection ──────────────────────────────────────────────────────────────
-  const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
-
   // ── Alt artwork drawer ─────────────────────────────────────────────────────
   const [drawerEpisodeId, setDrawerEpisodeId] = useState<string | null>(null);
   const { drawerOpen, drawerPosters, drawerLoading, closeDrawer, openDrawer: openArtworkDrawer } = useArtworkDrawer();
@@ -189,30 +176,28 @@ export default function EpisodeMediaDetail({
     });
   }, [episodes, tmdbEpisodes]);
 
-  // Clicking outside the grid deselects the current episode.
-  const gridRef = useRef<HTMLDivElement>(null);
-  const selectedEpisodeIdRef = useRef(selectedEpisodeId);
-  selectedEpisodeIdRef.current = selectedEpisodeId;
-
-  useEffect(() => {
-    function handleDocClick(e: MouseEvent) {
-      if (
-        selectedEpisodeIdRef.current !== null &&
-        gridRef.current &&
-        !gridRef.current.contains(e.target as Node)
-      ) {
-        setSelectedEpisodeId(null);
-      }
-    }
-    document.addEventListener("click", handleDocClick);
-    return () => document.removeEventListener("click", handleDocClick);
-  }, []);
-
   // ── Derived drawer episode ─────────────────────────────────────────────────
   const drawerEpisode = useMemo(
     () => episodes.find((e) => e.id === drawerEpisodeId) ?? null,
     [episodes, drawerEpisodeId],
   );
+
+  function subscribeMenuItem(tracked: TrackedArtwork | null, isSubscribed: boolean) {
+    return {
+      label: isSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"),
+      kind: isSubscribed ? "unsubscribe" as const : "subscribe" as const,
+      disabled: !tracked?.creator_id,
+      dataTestId: tracked?.creator_id ? `creator-subscription-${tracked.creator_id}` : undefined,
+      onClick: () => {
+        if (!tracked?.creator_id) return;
+        toggleCreatorSubscription({
+          creatorId: tracked.creator_id,
+          creatorDisplayName: tracked.creator_display_name ?? tracked.creator_id,
+          nodeBase: tracked.node_base ?? "",
+        });
+      },
+    };
+  }
 
   // ── Drawer poster partitions ───────────────────────────────────────────────
   // Exclude the poster that is already applied to this episode.
@@ -446,7 +431,7 @@ export default function EpisodeMediaDetail({
       ) : episodes.length === 0 ? (
         <Typography color="text.secondary">{t("noItems")}</Typography>
       ) : (
-        <Box ref={gridRef} sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: BACKDROP_GRID_COLS, gap: GRID_GAP }}>
           {mergedEpisodes.map((entry) => {
             if (entry.type === "missing") {
               return <MissingEpisodeCard key={`missing-${entry.episodeNumber}`} episodeNumber={entry.episodeNumber} airDate={entry.airDate} />;
@@ -455,7 +440,6 @@ export default function EpisodeMediaDetail({
             const failed = failedThumbs.has(episode.id);
             const tracked = trackedArtwork.get(episode.id) ?? null;
             const isResetting = resettingIds.has(episode.id);
-            const isSelected = selectedEpisodeId === episode.id;
             const epLabel = episode.index != null
               ? `EPISODE ${String(episode.index).padStart(2, "0")}`
               : (episode.title ?? "Episode");
@@ -467,15 +451,6 @@ export default function EpisodeMediaDetail({
               : seasonLabel;
 
             const isCreatorSubscribed = tracked?.creator_id ? creatorSubs.has(tracked.creator_id) : false;
-
-            const handleCreatorSubscribe = () => {
-              if (!tracked?.creator_id) return;
-              toggleCreatorSubscription({
-                creatorId: tracked.creator_id,
-                creatorDisplayName: tracked.creator_display_name ?? tracked.creator_id,
-                nodeBase: tracked.node_base ?? "",
-              });
-            };
 
             const imageUrl = failed
               ? null
@@ -493,48 +468,18 @@ export default function EpisodeMediaDetail({
                   imageBackground="repeating-conic-gradient(#2a2a2a 0% 25%, #1e1e1e 0% 50%) 0 0 / 20px 20px"
                   onImageError={() => onMarkFailed(episode.id)}
                   resetting={isResetting}
-                  selected={isSelected}
-                  onClick={() => setSelectedEpisodeId(episode.id)}
-                  onClose={() => setSelectedEpisodeId(null)}
                   creatorName={tracked?.creator_display_name}
                   badge={<ArtworkSourceBadge source={tracked ? "openposter" : failed ? null : "plex"} creatorName={tracked?.creator_display_name} mediaServer={serverName} />}
-                  chip={<CardChip label={epLabel} color="success" />}
-                  overlay={
-                    <MediaCardOverlay>
-                      <Box sx={{ gridColumn: "span 4", display: "flex", gap: 0.75 }}>
-                        <Box sx={{ flex: 1 }}>
-                          <CreatorSubscriptionToolbarAction
-                            creatorId={tracked?.creator_id}
-                            isSubscribed={isCreatorSubscribed}
-                            disabled={!tracked}
-                            onToggle={handleCreatorSubscribe}
-                            onAfterToggle={() => setTimeout(() => setSelectedEpisodeId(null), 500)}
-                          />
-                        </Box>
-                        <Box sx={{ flex: 1 }}>
-                          <ToolbarButton
-                            icon={<ReplayIcon sx={{ fontSize: "1.1rem" }} />}
-                            disabled={!tracked}
-                            tooltip={t("tooltipResetToDefault")}
-                            onClick={(e) => { e.stopPropagation(); handleReset(episode); setSelectedEpisodeId(null); }}
-                          />
-                        </Box>
-                        <Box sx={{ flex: 1 }}>
-                          <ToolbarButton
-                            icon={<UploadIcon sx={{ fontSize: "1.1rem" }} />}
-                            tooltip={t("tooltipUploadOwnEpisodeCard")}
-                            onClick={(e) => { e.stopPropagation(); setSelectedEpisodeId(null); }}
-                          />
-                        </Box>
-                        <Box sx={{ flex: 1 }}>
-                          <ToolbarButton
-                            icon={<PhotoLibraryIcon sx={{ fontSize: "1.1rem" }} />}
-                            tooltip={t("tooltipSelectEpisodeCard")}
-                            onClick={(e) => { e.stopPropagation(); setSelectedEpisodeId(null); openDrawer(episode); }}
-                          />
-                        </Box>
-                      </Box>
-                    </MediaCardOverlay>
+                  menuSlot={
+                    <CardMenuButton
+                      items={[
+                        subscribeMenuItem(tracked, isCreatorSubscribed),
+                        { label: t("tooltipResetToDefault"), kind: "reset", disabled: !tracked, onClick: () => handleReset(episode) },
+                        { label: t("tooltipUploadOwnEpisodeCard"), kind: "upload", onClick: () => {} },
+                        { label: t("menuChooseEpisodeCardFromOpenPoster"), kind: "select", onClick: () => openDrawer(episode) },
+                      ]}
+                      ariaLabel={`${epLabel} options`}
+                    />
                   }
                 />
               </Box>

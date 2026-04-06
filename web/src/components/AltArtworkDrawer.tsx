@@ -18,6 +18,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
 import CloseIcon from "@mui/icons-material/Close";
+import ImageSearchOutlinedIcon from "@mui/icons-material/ImageSearchOutlined";
 
 import OPLogo from "@/components/OPLogo";
 import AltArtworkCard, { type AltArtworkChip } from "@/components/AltArtworkCard";
@@ -78,22 +79,32 @@ export default function AltArtworkDrawer({
 }: AltArtworkDrawerProps) {
   const t = useTranslations("myMedia");
 
+  const visiblePosters = useMemo(
+    () =>
+      posters.filter((poster) => {
+        const previewUrl = poster.assets.preview.url?.trim();
+        const fullUrl = poster.assets.full.url?.trim();
+        return Boolean(previewUrl || fullUrl);
+      }),
+    [posters],
+  );
+
   const subscribedThemeIds = useMemo(() => new Set(subs.map((s) => s.themeId)), [subs]);
   const subscribedCreatorIds = useMemo(() => new Set(subs.map((s) => s.creatorId)), [subs]);
 
   const fromSubs = useMemo(
     () =>
-      posters.filter(
+      visiblePosters.filter(
         (p) =>
           (p.media.theme_id && subscribedThemeIds.has(p.media.theme_id)) ||
           subscribedCreatorIds.has(p.creator.creator_id),
       ),
-    [posters, subscribedThemeIds, subscribedCreatorIds],
+    [visiblePosters, subscribedThemeIds, subscribedCreatorIds],
   );
 
   const others = useMemo(
-    () => posters.filter((p) => !fromSubs.includes(p)),
-    [posters, fromSubs],
+    () => visiblePosters.filter((p) => !fromSubs.includes(p)),
+    [visiblePosters, fromSubs],
   );
 
   return (
@@ -148,8 +159,38 @@ export default function AltArtworkDrawer({
           <Stack alignItems="center" sx={{ py: 4 }}>
             <CircularProgress />
           </Stack>
-        ) : posters.length === 0 ? (
-          <Typography color="text.secondary">{t("noAlternatives")}</Typography>
+        ) : visiblePosters.length === 0 ? (
+          <Stack
+            spacing={1.5}
+            alignItems="center"
+            justifyContent="center"
+            sx={{
+              minHeight: 320,
+              px: 3,
+              textAlign: "center",
+              color: "text.secondary",
+            }}
+          >
+            <Box
+              sx={{
+                width: 72,
+                height: 72,
+                borderRadius: "50%",
+                display: "grid",
+                placeItems: "center",
+                bgcolor: "action.hover",
+                boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.05)",
+              }}
+            >
+              <ImageSearchOutlinedIcon sx={{ fontSize: 34, color: "text.secondary" }} />
+            </Box>
+            <Typography variant="h6" sx={{ color: "text.primary", lineHeight: 1.2 }}>
+              {t("noAlternativesTitle")}
+            </Typography>
+            <Typography variant="body2" sx={{ maxWidth: 320 }}>
+              {t("noAlternatives")}
+            </Typography>
+          </Stack>
         ) : fromSubs.length === 0 ? (
           // No subscriptions match — flat grid, no section headers
           <Box sx={{ display: "grid", gridTemplateColumns: gridCols, gap: GRID_GAP }}>

@@ -80,7 +80,6 @@ function AltMoviePosterCard({ poster, subs, applyingId, appliedIds, onApply }: A
     <Box>
       <PosterCard
         poster={poster}
-        chip={{ label: "MOVIE", color: "success" }}
         subscribeSlot={
           poster.creator.creator_id ? (
             <PosterSubscribeMenu
@@ -280,8 +279,6 @@ export default function CollectionMoviesView({
     }
   }
 
-  const missingChip = { label: "MISSING", color: "error" as const };
-
   return (
     <Box>
       {/* Back button */}
@@ -315,7 +312,6 @@ export default function CollectionMoviesView({
                 >
                   <PosterCard
                     poster={makePoster(item, thumbUrl(conn.nodeUrl, conn.adminToken, item.id), tracked?.creator_display_name ?? undefined)}
-                    chip={failed ? missingChip : undefined}
                     imageFailed={failed}
                     managed={!!tracked}
                     selected={isSelected}

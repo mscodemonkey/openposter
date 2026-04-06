@@ -3,6 +3,8 @@
 import { useState, useRef } from "react";
 
 import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
 
 import { CHIP_HEIGHT } from "@/lib/grid-sizes";
 import ButtonBase from "@mui/material/ButtonBase";
@@ -12,6 +14,13 @@ import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 
 import ImageIcon from "@mui/icons-material/Image";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
+import NotificationsOffOutlinedIcon from "@mui/icons-material/NotificationsOffOutlined";
+import PhotoLibraryOutlinedIcon from "@mui/icons-material/PhotoLibraryOutlined";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import ReplayIcon from "@mui/icons-material/Replay";
+import UploadIcon from "@mui/icons-material/Upload";
 
 import { useTranslations } from "next-intl";
 
@@ -106,6 +115,91 @@ export interface ToolbarButtonProps {
   /** Button height. "md" = 44px (default), "sm" = 30px. */
   size?: "md" | "sm";
   dataTestId?: string;
+}
+
+export interface CardMenuItem {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  dataTestId?: string;
+  kind?: "select" | "upload" | "reset" | "subscribe" | "unsubscribe" | "retry";
+}
+
+export function CardMenuButton({
+  items,
+  ariaLabel = "Card options",
+}: {
+  items: CardMenuItem[];
+  ariaLabel?: string;
+}) {
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+
+  const iconForKind = (kind?: CardMenuItem["kind"]) => {
+    switch (kind) {
+      case "select":
+        return <PhotoLibraryOutlinedIcon fontSize="small" />;
+      case "upload":
+        return <UploadIcon fontSize="small" />;
+      case "reset":
+        return <ReplayIcon fontSize="small" />;
+      case "subscribe":
+        return <NotificationsActiveOutlinedIcon fontSize="small" />;
+      case "unsubscribe":
+        return <NotificationsOffOutlinedIcon fontSize="small" />;
+      case "retry":
+        return <RefreshIcon fontSize="small" />;
+      default:
+        return null;
+    }
+  };
+
+  if (items.length === 0) return null;
+
+  return (
+    <>
+      <IconButton
+        size="small"
+        aria-label={ariaLabel}
+        onClick={(e) => {
+          e.stopPropagation();
+          setMenuAnchor(e.currentTarget);
+        }}
+        sx={{
+          bgcolor: "rgba(0,0,0,0.64)",
+          color: "white",
+          "&:hover": { bgcolor: "rgba(0,0,0,0.82)" },
+          "& .MuiSvgIcon-root": { fontSize: "1rem" },
+        }}
+      >
+        <MoreVertIcon />
+      </IconButton>
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={() => setMenuAnchor(null)}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {[...items].reverse().map((item) => (
+          <MenuItem
+            key={item.label}
+            disabled={item.disabled}
+            data-testid={item.dataTestId}
+            onClick={() => {
+              setMenuAnchor(null);
+              if (!item.disabled) item.onClick();
+            }}
+          >
+            {item.kind && (
+              <ListItemIcon sx={{ minWidth: 32 }}>
+                {iconForKind(item.kind)}
+              </ListItemIcon>
+            )}
+            {item.label}
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
+  );
 }
 
 export function ToolbarButton({
@@ -331,6 +425,8 @@ interface MediaCardProps {
   title?: string;
   /** Optional shared subtitle below the media surface. */
   subtitle?: string | null;
+  /** Bottom-right menu button rendered on the image surface. */
+  menuSlot?: React.ReactNode;
 }
 
 export default function MediaCard({
@@ -355,10 +451,12 @@ export default function MediaCard({
   creatorName,
   title,
   subtitle,
+  menuSlot,
 }: MediaCardProps) {
   const t = useTranslations("posterCard");
   const [keyboardFocused, setKeyboardFocused] = useState(false);
-  const isOverlayVisible = selected || keyboardFocused;
+  const hasOverlay = Boolean(overlay);
+  const isOverlayVisible = hasOverlay && (selected || keyboardFocused);
 
   // Distinguish keyboard focus from mouse focus so the ring
   // only appears for keyboard users (pointer press sets this flag first).
@@ -370,15 +468,16 @@ export default function MediaCard({
   const handleFocus = () => {
     if (!mouseDownRef.current) {
       setKeyboardFocused(true);
-      // Notify parent so it can deselect any previously selected card
-      onClick?.();
+      if (hasOverlay) {
+        // Overlay cards use focus to reveal controls for keyboard users.
+        onClick?.();
+      }
     }
     mouseDownRef.current = false;
   };
   const handleBlur = (e: React.FocusEvent) => {
     setKeyboardFocused(false);
-    // If focus moved entirely outside this card, deselect via parent
-    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+    if (hasOverlay && !e.currentTarget.contains(e.relatedTarget as Node | null)) {
       onClose?.();
     }
   };
@@ -462,7 +561,7 @@ export default function MediaCard({
         <Box
           sx={{
             position: "absolute",
-            top: 0,
+            top: 4,
             right: 8,
             transform: isOverlayVisible ? "translateY(-42px)" : "translateY(0)",
             transition: "transform 0.22s ease",
@@ -503,6 +602,27 @@ export default function MediaCard({
               {bottomLabel}
             </Typography>
           </Box>
+        </Box>
+      )}
+
+      {menuSlot && (
+        <Box
+          sx={{
+            position: "absolute",
+            right: 4,
+            bottom: 4,
+            zIndex: 3,
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          {menuSlot}
         </Box>
       )}
 
@@ -582,7 +702,7 @@ export default function MediaCard({
       onClick={onClick}
       surfaceTabIndex={onClick ? 0 : undefined}
       surfaceRole={onClick ? "button" : undefined}
-      surfaceAriaPressed={onClick ? selected : undefined}
+      surfaceAriaPressed={hasOverlay && onClick ? selected : undefined}
       surfaceTitle={tooltip && !isOverlayVisible ? tooltip : undefined}
       onSurfaceMouseDown={handleMouseDown}
       onSurfaceFocus={handleFocus}

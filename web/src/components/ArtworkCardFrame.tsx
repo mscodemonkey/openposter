@@ -20,6 +20,7 @@ interface ArtworkCardFrameProps {
   statusBar?: ReactNode;
   topLeftSlot?: ReactNode;
   menuSlot?: ReactNode;
+  bottomLeftSlot?: ReactNode;
   bottomRightSlot?: ReactNode;
   managed?: boolean;
   selected?: boolean;
@@ -51,6 +52,7 @@ export default function ArtworkCardFrame({
   statusBar,
   topLeftSlot,
   menuSlot,
+  bottomLeftSlot,
   bottomRightSlot,
   managed = false,
   selected = false,
@@ -95,9 +97,29 @@ export default function ArtworkCardFrame({
             <OPLogo size={20} />
           </Box>
         )}
+        {bottomLeftSlot && (
+          <Box sx={{ position: "absolute", bottom: 8, left: 8 }}>
+            {bottomLeftSlot}
+          </Box>
+        )}
         {bottomRightSlot && (
-          <Box sx={{ position: "absolute", bottom: 8, right: 8, pointerEvents: "none" }}>
+          <Box sx={{ position: "absolute", bottom: 8, right: menuSlot ? 44 : 8, pointerEvents: "none" }}>
             {bottomRightSlot}
+          </Box>
+        )}
+        {menuSlot && (
+          <Box
+            sx={{ position: "absolute", right: 4, bottom: 4, zIndex: 2 }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            {menuSlot}
           </Box>
         )}
       </Box>
@@ -137,11 +159,6 @@ export default function ArtworkCardFrame({
   return (
     <Box sx={{ position: "relative", height: "100%", overflow: "visible", ...containerSx as object }}>
       {clickableMedia}
-      {menuSlot && (
-        <Box sx={{ position: "absolute", top: 4, right: 4, zIndex: 2 }}>
-          {menuSlot}
-        </Box>
-      )}
       {statusBar}
       {showTitleStrip && title && (
         <CardTitleStrip

@@ -258,6 +258,7 @@ async def admin_set_claim_token(request: Request):
 async def admin_create_theme(request: Request, body: ThemeCreate):
     await _require_admin(request)
     import secrets
+    from sqlalchemy import select
     from ..db import CreatorTheme
 
     # Derive creator_id from whoami — for now require creator_id in request header
@@ -274,6 +275,26 @@ async def admin_create_theme(request: Request, body: ThemeCreate):
     now = _now_rfc3339()
 
     async with request.app.state.Session() as session:
+        if name.casefold() == "default theme":
+            existing_default = (
+                await session.execute(
+                    select(CreatorTheme).where(
+                        CreatorTheme.creator_id == creator_id,
+                        CreatorTheme.deleted_at.is_(None),
+                        CreatorTheme.name == "Default theme",
+                    ).order_by(CreatorTheme.created_at.asc())
+                )
+            ).scalars().first()
+            if existing_default is not None:
+                return {
+                    "theme_id": existing_default.theme_id,
+                    "creator_id": existing_default.creator_id,
+                    "name": existing_default.name,
+                    "description": existing_default.description,
+                    "created_at": existing_default.created_at,
+                    "updated_at": existing_default.updated_at,
+                }
+
         session.add(CreatorTheme(
             theme_id=theme_id,
             creator_id=creator_id,
@@ -292,7 +313,7 @@ async def admin_create_theme(request: Request, body: ThemeCreate):
 @router.get("/admin/themes")
 async def admin_list_themes(request: Request):
     await _require_admin(request)
-    from sqlalchemy import select
+    from sqlalchemy import func, select
     from ..db import CreatorTheme, Poster
 
     creator_id = request.headers.get("x-creator-id", "").strip()
@@ -325,14 +346,30 @@ async def admin_list_themes(request: Request):
             await session.commit()
             themes = [default_theme]
 
-        # Count posters per theme
-        from sqlalchemy import func
         count_stmt = select(Poster.theme_id, func.count(Poster.poster_id)).where(
             Poster.creator_id == creator_id,
             Poster.deleted_at.is_(None),
             Poster.theme_id.is_not(None),
         ).group_by(Poster.theme_id)
         counts = dict((await session.execute(count_stmt)).all())
+
+        # Clean up duplicate empty "Default theme" rows that can accumulate in dev/reset flows.
+        default_themes = [t for t in themes if t.name == "Default theme"]
+        if len(default_themes) > 1:
+            removed_any = False
+            for dup in default_themes[1:]:
+                if counts.get(dup.theme_id, 0) == 0 and not dup.cover_hash:
+                    dup.deleted_at = now = _now_rfc3339()
+                    dup.updated_at = now
+                    removed_any = True
+            if removed_any:
+                await session.commit()
+                themes = [t for t in themes if t.deleted_at is None]
+                counts = {
+                    theme_id: count
+                    for theme_id, count in counts.items()
+                    if any(t.theme_id == theme_id for t in themes)
+                }
 
     cfg = request.app.state.cfg
 
