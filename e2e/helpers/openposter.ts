@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -15,14 +16,22 @@ export const TEST_RESET_TOKEN = process.env.OPENPOSTER_TEST_RESET_TOKEN ?? "dev-
 export const TEST_CREATOR_ID = process.env.OPENPOSTER_TEST_CREATOR_ID ?? "mcfly";
 export const TEST_CREATOR_DISPLAY_NAME =
   process.env.OPENPOSTER_TEST_CREATOR_DISPLAY_NAME ?? "Martin";
+const TMDB_ENV_FLAG = process.env.OPENPOSTER_E2E_HAS_TMDB ?? "";
+const PLEX_ENV_FLAG = process.env.OPENPOSTER_E2E_HAS_PLEX ?? "";
 export const HAS_TMDB =
-  /^(1|true|yes)$/i.test(process.env.OPENPOSTER_E2E_HAS_TMDB ?? "")
-  || Boolean(process.env.TMDB_READ_ACCESS_TOKEN);
+  /^(1|true|yes)$/i.test(TMDB_ENV_FLAG)
+  || (!/^(0|false|no)$/i.test(TMDB_ENV_FLAG) && Boolean(process.env.TMDB_READ_ACCESS_TOKEN));
 export const TMDB_SKIP_REASON =
   "TMDB-backed E2E coverage is disabled because TMDB_READ_ACCESS_TOKEN is not configured for this environment.";
+export const PLEX_SKIP_REASON =
+  "Plex-backed My Media E2E coverage is disabled because no Plex bootstrap configuration is available for this environment.";
 
 export function skipIfTmdbUnavailable(test: { skip(condition: boolean, description?: string): void }): void {
   test.skip(!HAS_TMDB, TMDB_SKIP_REASON);
+}
+
+export function skipIfPlexUnavailable(test: { skip(condition: boolean, description?: string): void }): void {
+  test.skip(!HAS_PLEX, PLEX_SKIP_REASON);
 }
 
 export const TED_POSTER_IMAGE = path.resolve(
@@ -49,6 +58,20 @@ const PLEX_SETTINGS_FIXTURE = path.resolve(
   process.cwd(),
   "reference-node/data-a/plex_settings.json",
 );
+
+export const HAS_PLEX =
+  /^(1|true|yes)$/i.test(PLEX_ENV_FLAG)
+  || (
+    !/^(0|false|no)$/i.test(PLEX_ENV_FLAG)
+    && (
+      (
+        Boolean(process.env.OPENPOSTER_E2E_PLEX_BASE_URL)
+        && Boolean(process.env.OPENPOSTER_E2E_PLEX_TOKEN)
+      )
+      || existsSync(PLEX_SETTINGS_FIXTURE)
+      || existsSync(path.resolve(process.cwd(), "reference-node/data-a/media_servers.json"))
+    )
+  );
 
 type Theme = {
   theme_id: string;
@@ -460,13 +483,28 @@ export async function getTrackedArtworkAt(nodeUrl: string): Promise<TrackedArtwo
 }
 
 async function loadPlexFixtureSettings(): Promise<PlexFixtureSettings> {
+  if (process.env.OPENPOSTER_E2E_PLEX_BASE_URL && process.env.OPENPOSTER_E2E_PLEX_TOKEN) {
+    return {
+      base_url: process.env.OPENPOSTER_E2E_PLEX_BASE_URL,
+      token: process.env.OPENPOSTER_E2E_PLEX_TOKEN,
+      tv_libraries: (process.env.OPENPOSTER_E2E_PLEX_TV_LIBRARIES ?? "TV Shows")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+      movie_libraries: (process.env.OPENPOSTER_E2E_PLEX_MOVIE_LIBRARIES ?? "Movies")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    };
+  }
+
   const raw = await readFile(PLEX_SETTINGS_FIXTURE, "utf8");
   return JSON.parse(raw) as PlexFixtureSettings;
 }
 
-export async function reconnectDefaultPlexServer(): Promise<void> {
+export async function reconnectDefaultPlexServerAt(nodeUrl: string): Promise<void> {
   const settings = await loadPlexFixtureSettings();
-  await api("/v1/admin/plex/connect", {
+  await apiAt(nodeUrl, "/v1/admin/plex/connect", {
     method: "POST",
     headers: {
       ...authHeaders(),
@@ -479,6 +517,10 @@ export async function reconnectDefaultPlexServer(): Promise<void> {
       movie_libraries: settings.movie_libraries,
     }),
   });
+}
+
+export async function reconnectDefaultPlexServer(): Promise<void> {
+  await reconnectDefaultPlexServerAt(TEST_NODE_URL);
 }
 
 export async function triggerMediaLibrarySyncAt(nodeUrl: string): Promise<void> {
@@ -562,6 +604,7 @@ export async function ensureMediaLibrarySyncedAt(
   nodeUrl: string,
   timeoutMs = 180_000,
 ): Promise<MediaLibrary> {
+  await reconnectDefaultPlexServerAt(nodeUrl);
   await triggerMediaLibrarySyncAt(nodeUrl);
 
   const startedAt = Date.now();

@@ -42,6 +42,27 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Detect Plex bootstrap configuration
+        shell: bash
+        run: |
+          if [ -n "${OPENPOSTER_E2E_PLEX_BASE_URL}" ] && [ -n "${OPENPOSTER_E2E_PLEX_TOKEN}" ]; then
+            echo "OPENPOSTER_E2E_HAS_PLEX=true" >> "$GITHUB_ENV"
+            echo "Plex-backed My Media E2E coverage: enabled (env)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f "reference-node/data-a/plex_settings.json" ] || [ -f "reference-node/data-a/media_servers.json" ]; then
+            echo "OPENPOSTER_E2E_HAS_PLEX=true" >> "$GITHUB_ENV"
+            echo "Plex-backed My Media E2E coverage: enabled (fixture file)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "OPENPOSTER_E2E_HAS_PLEX=false" >> "$GITHUB_ENV"
+            echo "::notice title=Plex bootstrap missing::No Plex bootstrap config was found. My Media E2E specs will be skipped in this run."
+            {
+              echo "Plex-backed My Media E2E coverage: disabled"
+              echo
+              echo "- Missing Plex bootstrap env or fixture data"
+              echo "- Result: My Media E2E specs will be skipped"
+              echo "- Studio, indexer, diagnostics, and non-Plex flows will still run"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Install root dependencies
         run: npm ci
 

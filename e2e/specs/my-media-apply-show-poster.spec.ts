@@ -8,9 +8,12 @@ import {
   getTrackedArtwork,
   openMyMediaShow,
   resetDevStack,
+  skipIfPlexUnavailable,
   uploadPoster,
   waitForIndexedPoster,
 } from "../helpers/openposter";
+
+skipIfPlexUnavailable(test);
 
 test.beforeEach(async () => {
   await resetDevStack();

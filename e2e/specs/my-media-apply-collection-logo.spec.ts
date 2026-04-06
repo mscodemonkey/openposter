@@ -8,9 +8,12 @@ import {
   openMyMediaCollection,
   resetDevStack,
   seedConfirmedCollectionTmdbMatch,
+  skipIfPlexUnavailable,
   uploadPoster,
   waitForIndexedPoster,
 } from "../helpers/openposter";
+
+skipIfPlexUnavailable(test);
 
 test.beforeEach(async () => {
   await resetDevStack();

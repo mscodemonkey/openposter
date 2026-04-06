@@ -23,6 +23,7 @@ CI:
 - GitHub Actions workflow: [`.github/workflows/e2e.yml`](/Users/martinjsteven/.openclaw/workspace-openposter/.github/workflows/e2e.yml)
 - CI uses the repository secret `TMDB_READ_ACCESS_TOKEN` for full TMDB-backed coverage.
 - If that secret is missing, the workflow now emits a clear notice and skips the TMDB-dependent Studio specs instead of failing noisily.
+- CI also runs My Media coverage only when Plex bootstrap config is available, either via checked-in local fixture data or `OPENPOSTER_E2E_PLEX_*` environment variables.
 
 Notes:
 

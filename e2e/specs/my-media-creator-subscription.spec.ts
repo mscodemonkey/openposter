@@ -11,9 +11,12 @@ import {
   openMyMediaMovie,
   primeIssuerSession,
   resetDevStack,
+  skipIfPlexUnavailable,
   uploadPoster,
   waitForIndexedPoster,
 } from "../helpers/openposter";
+
+skipIfPlexUnavailable(test);
 
 test.beforeEach(async () => {
   await resetDevStack();
