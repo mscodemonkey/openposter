@@ -30,6 +30,7 @@ export default function CreatorSubscriptionToolbarAction({
       disabled={disabled || !creatorId}
       active={isSubscribed}
       tooltip={isSubscribed ? t("tooltipSubscribed") : t("tooltipSubscribeToCreator")}
+      dataTestId={creatorId ? `creator-subscription-${creatorId}` : undefined}
       menuItems={creatorId ? [
         {
           label: isSubscribed ? t("menuUnsubscribe") : t("menuSubscribe"),

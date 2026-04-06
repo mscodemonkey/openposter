@@ -49,6 +49,14 @@ class PosterMetaPatch(BaseModel):
     clear_language: bool = False  # set language to null (Textless)
 
 
+class PosterAssetReplaceResponse(BaseModel):
+    ok: bool
+    poster_id: str
+    updated_at: str
+    preview_hash: str
+    full_hash: str
+
+
 def _now_rfc3339() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -849,6 +857,53 @@ async def admin_patch_poster(request: Request, poster_id: str, body: PosterMetaP
         await session.commit()
 
     return {"ok": True, "poster_id": poster_id, "updated_at": now}
+
+
+@router.put("/admin/posters/{poster_id}/assets", response_model=PosterAssetReplaceResponse)
+async def admin_replace_poster_assets(
+    request: Request,
+    poster_id: str,
+    preview: UploadFile = File(...),
+    full: UploadFile = File(...),
+):
+    """Replace the stored image assets for an existing poster without changing poster_id.
+
+    This supports creator-side artwork revisions and gives the auto-update flow a stable
+    poster identity whose asset hashes can legitimately change over time.
+    """
+    await _require_admin(request)
+    from ..db import Poster
+
+    cfg = request.app.state.cfg
+    preview_hash, preview_bytes, preview_mime = await _save_upload_to_blob(cfg.data_dir, preview)
+    full_hash, full_bytes, full_mime = await _save_upload_to_blob(cfg.data_dir, full)
+    now = _now_rfc3339()
+
+    async with request.app.state.Session() as session:
+        p = await session.get(Poster, poster_id)
+        if p is None or p.deleted_at is not None:
+            raise http_error(404, "not_found", "poster not found")
+
+        p.preview_hash = preview_hash
+        p.preview_bytes = preview_bytes
+        p.preview_mime = preview_mime
+        p.preview_width = None
+        p.preview_height = None
+        p.full_hash = full_hash
+        p.full_bytes = full_bytes
+        p.full_mime = full_mime
+        p.full_width = None
+        p.full_height = None
+        p.updated_at = now
+        await session.commit()
+
+    return {
+        "ok": True,
+        "poster_id": poster_id,
+        "updated_at": now,
+        "preview_hash": preview_hash,
+        "full_hash": full_hash,
+    }
 
 
 @router.get("/admin/settings/{key}")

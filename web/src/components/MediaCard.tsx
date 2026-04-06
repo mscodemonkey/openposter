@@ -105,6 +105,7 @@ export interface ToolbarButtonProps {
   tooltip?: string;
   /** Button height. "md" = 44px (default), "sm" = 30px. */
   size?: "md" | "sm";
+  dataTestId?: string;
 }
 
 export function ToolbarButton({
@@ -117,6 +118,7 @@ export function ToolbarButton({
   active = false,
   tooltip,
   size = "md",
+  dataTestId,
 }: ToolbarButtonProps) {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
 
@@ -135,6 +137,7 @@ export function ToolbarButton({
       onClick={handleClick}
       focusRipple
       aria-label={tooltip ?? label}
+      data-testid={dataTestId}
       title={tooltip && !disabled ? tooltip : undefined}
       sx={{
         gridColumn: `span ${cols}`,
