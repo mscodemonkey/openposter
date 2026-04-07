@@ -55,13 +55,12 @@ test("my media can apply OpenPoster collection square artwork", async ({ page })
   await expect(page.getByRole("heading", { name: /James Bond/i })).toBeVisible();
 
   const collectionSquareCard = page.getByRole("button", {
-    name: "View alternate square artwork and other options",
+    name: "James Bond Collection square options",
   }).first();
-  const squareContainer = collectionSquareCard.locator("xpath=..");
 
   await collectionSquareCard.click();
-  const selectSquareButton = squareContainer.getByRole("button", {
-    name: "Select square artwork from an OpenPoster creator",
+  const selectSquareButton = page.getByRole("menuitem", {
+    name: "Choose square artwork from OpenPoster",
   });
   await expect(selectSquareButton).toBeEnabled({ timeout: 30_000 });
   await selectSquareButton.click();

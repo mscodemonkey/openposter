@@ -2,14 +2,109 @@ from __future__ import annotations
 
 import json
 import os
+import random
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from sqlalchemy import select
 
 from .config import load_config
 from .crypto.signing import ensure_ed25519_keypair
 from .db import AppliedArtwork, Base, CreatorProfile, CreatorSettings, CreatorTheme, Peer, Poster, make_engine, make_sessionmaker
+
+
+def _bootstrap_seed_candidates(cfg) -> list[str]:
+    seeds = [s.rstrip("/") for s in cfg.bootstrap_seeds if s.strip()]
+    random.shuffle(seeds)
+    if cfg.official_directory_url:
+        official = cfg.official_directory_url.rstrip("/")
+        if official not in seeds:
+            seeds.append(official)
+    return seeds
+
+
+async def _seed_peer(app: FastAPI, url: str, now_str: str) -> bool:
+    from .routes.nodes import fetch_and_validate_descriptor
+
+    try:
+        desc = await fetch_and_validate_descriptor(url)
+    except Exception:
+        return False
+
+    async with app.state.Session() as session:
+        existing = await session.get(Peer, url)
+        if existing is None:
+            session.add(Peer(
+                url=url,
+                node_id=desc.get("node_id"),
+                name=desc.get("name"),
+                status="active",
+                trust_score=1,
+                first_seen=now_str,
+                last_seen=now_str,
+                last_validated=now_str,
+                consecutive_failures=0,
+            ))
+        else:
+            existing.node_id = desc.get("node_id")
+            existing.name = desc.get("name")
+            existing.status = "active"
+            existing.last_seen = now_str
+            existing.last_validated = now_str
+            existing.consecutive_failures = 0
+        await session.commit()
+    return True
+
+
+async def _bootstrap_from_seeds(app: FastAPI) -> None:
+    cfg = app.state.cfg
+    candidates = _bootstrap_seed_candidates(cfg)
+    if not candidates:
+        return
+
+    ordered_candidates = list(dict.fromkeys(candidates))
+
+    from datetime import datetime, timezone
+    from .routes.nodes import _normalize_url
+
+    now_str = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    discovered_urls: list[str] = []
+    successful_seed = False
+
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        for seed in ordered_candidates:
+            try:
+                normalized_seed = _normalize_url(seed)
+            except Exception:
+                continue
+
+            if await _seed_peer(app, normalized_seed, now_str):
+                successful_seed = True
+            else:
+                continue
+
+            try:
+                response = await client.get(normalized_seed + "/v1/nodes")
+                response.raise_for_status()
+                payload = response.json()
+            except Exception:
+                continue
+
+            for node in payload.get("nodes", []):
+                raw_url = (node.get("url") or "").strip().rstrip("/")
+                if not raw_url:
+                    continue
+                try:
+                    discovered_urls.append(_normalize_url(raw_url))
+                except Exception:
+                    continue
+
+    if not successful_seed:
+        return
+
+    for url in dict.fromkeys(discovered_urls):
+        await _seed_peer(app, url, now_str)
 
 
 async def init_app_state(app: FastAPI) -> None:
@@ -216,6 +311,7 @@ async def init_app_state(app: FastAPI) -> None:
 
     # Start gossip background tasks (not in mirror-only mode)
     if not mirror_origin:
+        await _bootstrap_from_seeds(app)
         from .gossip import attach_gossip
         attach_gossip(app)
 

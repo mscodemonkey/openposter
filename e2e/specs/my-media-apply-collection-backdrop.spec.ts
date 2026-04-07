@@ -49,13 +49,12 @@ test("my media can apply an OpenPoster collection backdrop", async ({ page }) =>
   await expect(page.getByRole("heading", { name: /James Bond/i })).toBeVisible();
 
   const collectionBackdropCard = page.getByRole("button", {
-    name: "View alternate backdrops and other options",
+    name: "James Bond Collection backdrop options",
   }).first();
-  const backdropContainer = collectionBackdropCard.locator("xpath=..");
 
   await collectionBackdropCard.click();
-  const selectBackdropButton = backdropContainer.getByRole("button", {
-    name: "Select a backdrop from an OpenPoster creator",
+  const selectBackdropButton = page.getByRole("menuitem", {
+    name: "Choose a backdrop from OpenPoster",
   });
   await expect(selectBackdropButton).toBeEnabled({ timeout: 30_000 });
   await selectBackdropButton.click();

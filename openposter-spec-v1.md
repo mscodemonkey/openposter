@@ -122,6 +122,28 @@ The **node list** endpoint is a simple way for nodes to share “other nodes I k
 
 Important: the node list is about **discovery**, not **trust**. Clients should still verify signed poster metadata and apply their own trust rules.
 
+### 3.0 Discovery model
+
+OpenPoster uses a hybrid discovery model:
+
+- **Directory**: a well-known bootstrap service. New nodes may register there, and new nodes, clients, or indexers may use it to get an initial list of nodes. For typical first-run behavior, implementations SHOULD provide an official directory or equivalent default bootstrap source.
+- **Seeds**: one or more node URLs used as starting points for bootstrapping. The official directory is typically the default seed, but implementations MAY allow additional configured seeds for advanced or private deployments.
+- **Gossip**: ongoing peer discovery via `/v1/nodes` after the initial bootstrap step.
+
+The intended model is:
+
+1. Start from one or more seeds.
+2. Fetch `/v1/nodes` from those seeds to build an initial peer set.
+3. Optionally announce this node to the directory so future participants can discover it.
+4. Continue learning about peers through gossip.
+
+Implications:
+
+- The directory is a convenience and rendezvous point, not a required global source of truth.
+- A brand-new participant still needs at least one known bootstrap address. In most deployments, this will be the official directory.
+- A bootstrap response is a useful starting list, not necessarily a complete list of all nodes in the network.
+- Any reachable node MAY be used as a seed; being a seed does not imply authority or special trust.
+
 ### 3.1 Endpoint
 
 `GET /v1/nodes`

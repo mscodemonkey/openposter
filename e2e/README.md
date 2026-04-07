@@ -27,7 +27,9 @@ CI:
 
 Notes:
 
-- The suite resets node-a, node-b, and issuer before each test via the dev reset endpoints.
+- Before the suite starts, it snapshots the local stateful data directories, initializes a clean test state, and restores your original data after the run finishes.
+- If a prior run crashes before teardown, the next run restores that preserved state first before taking a fresh snapshot.
+- The suite resets directory, node-a, node-b, indexer, and issuer before each test via the dev reset endpoints.
 - Studio auth is bootstrapped through browser storage with the dev admin token.
 - Issuer auth for My Media subscription flows is bootstrapped through browser localStorage with a fresh test user created via the issuer signup API.
 - The suite now covers:

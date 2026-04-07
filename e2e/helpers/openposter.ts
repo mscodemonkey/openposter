@@ -6,6 +6,7 @@ import path from "node:path";
 
 export const TEST_NODE_URL = process.env.OPENPOSTER_TEST_NODE_URL ?? "http://localhost:8081";
 export const TEST_NODE_B_URL = process.env.OPENPOSTER_TEST_NODE_B_URL ?? "http://localhost:8082";
+export const TEST_DIRECTORY_URL = process.env.OPENPOSTER_TEST_DIRECTORY_URL ?? "http://localhost:8084";
 export const TEST_WEB_URL = process.env.OPENPOSTER_WEB_BASE_URL ?? "http://localhost:3000";
 export const TEST_WEB_B_URL = process.env.OPENPOSTER_WEB_B_BASE_URL ?? "http://localhost:3002";
 export const TEST_DIAG_URL = process.env.OPENPOSTER_DIAG_BASE_URL ?? "http://localhost:3001";
@@ -216,8 +217,10 @@ async function issuerApi<T>(
 
 export async function resetDevStack(): Promise<void> {
   const resetTargets = [
+    `${TEST_DIRECTORY_URL}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
     `${TEST_NODE_URL}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
     `${process.env.OPENPOSTER_TEST_NODE_B_URL ?? "http://localhost:8082"}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
+    `${TEST_INDEXER_URL}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
     `${process.env.OPENPOSTER_TEST_ISSUER_URL ?? "http://localhost:8085"}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
   ];
 

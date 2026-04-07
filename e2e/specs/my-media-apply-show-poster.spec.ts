@@ -51,13 +51,12 @@ test("my media can apply an OpenPoster show poster", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /ted/i })).toBeVisible();
 
   const selectedShowCard = page.getByRole("button", {
-    name: "View alternate artwork and other options",
+    name: "ted poster options",
   }).first();
-  const showPosterCard = selectedShowCard.locator("xpath=..");
 
   await selectedShowCard.click();
-  await showPosterCard.getByRole("button", {
-    name: "Select a new poster from an OpenPoster creator",
+  await page.getByRole("menuitem", {
+    name: "Choose a poster from OpenPoster",
   }).click();
   const drawer = page.getByRole("presentation").filter({
     has: page.getByRole("button", { name: "Use this poster" }),

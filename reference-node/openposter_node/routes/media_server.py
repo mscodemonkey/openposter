@@ -101,6 +101,7 @@ def _db_item_to_dict(item: PlexLibraryItem) -> dict:
     """Serialise a PlexLibraryItem row to the API dict format."""
     return {
         "id": item.id,
+        "server_id": item.server_id,
         "title": item.title,
         "year": item.year,
         "type": item.type,
@@ -129,6 +130,7 @@ def _plex_item(item: dict, type_override: str | None = None) -> dict:
     guids = item.get("Guid") or []
     return {
         "id": str(item.get("ratingKey", "")),
+        "server_id": None,
         "title": item.get("title", ""),
         "year": item.get("year"),
         "type": type_override or item.get("type", ""),
@@ -191,7 +193,7 @@ async def media_server_library(request: Request, server_id: str = Query(default=
 
 
 @router.get("/admin/media-server/items/{item_id}/children")
-async def media_server_children(request: Request, item_id: str):
+async def media_server_children(request: Request, item_id: str, server_id: str = Query(default=None)):
     """Return children for a given item.
 
     For collections: returns movies that have this collection_id in their
@@ -203,6 +205,11 @@ async def media_server_children(request: Request, item_id: str):
     from .auth import require_admin
     await require_admin(request)
 
+    cfg = request.app.state.cfg
+    if server_id is None:
+        servers = _load_servers(cfg.data_dir)
+        server_id = servers[0]["id"] if servers else "default"
+
     async with request.app.state.Session() as session:
         # Determine item type so we know which query to use
         item_row = await session.get(PlexLibraryItem, item_id)
@@ -212,25 +219,28 @@ async def media_server_children(request: Request, item_id: str):
             children_rows = (await session.scalars(
                 select(PlexLibraryItem).where(
                     PlexLibraryItem.type == "movie",
+                    PlexLibraryItem.server_id == server_id,
                     func.instr(PlexLibraryItem.collection_ids, '"' + item_id + '"') > 0,
                 )
             )).all()
         else:
             # Shows → seasons, seasons → episodes (parent_id relationship)
             children_rows = (await session.scalars(
-                select(PlexLibraryItem).where(PlexLibraryItem.parent_id == item_id)
+                select(PlexLibraryItem).where(
+                    PlexLibraryItem.parent_id == item_id,
+                    PlexLibraryItem.server_id == server_id,
+                )
             )).all()
 
     if children_rows:
         return {"items": [_db_item_to_dict(r) for r in children_rows]}
 
     # Fallback to live Plex (episodes are not pre-cached; new items not yet synced)
-    cfg = request.app.state.cfg
     servers = _load_servers(cfg.data_dir)
     plex_servers = [s for s in servers if s.get("type") == "plex"]
     if not plex_servers:
         return {"items": []}
-    fallback_server = plex_servers[0]
+    fallback_server = next((s for s in plex_servers if s["id"] == server_id), plex_servers[0])
     base_url = fallback_server["base_url"]
     token = fallback_server["token"]
 
@@ -240,7 +250,7 @@ async def media_server_children(request: Request, item_id: str):
         except Exception as e:
             raise http_error(502, "plex_error", f"Could not fetch children: {e}")
 
-    return {"items": [_plex_item(c) for c in children]}
+    return {"items": [{**_plex_item(c), "server_id": fallback_server["id"]} for c in children]}
 
 
 @router.get("/admin/media-server/sync/status")

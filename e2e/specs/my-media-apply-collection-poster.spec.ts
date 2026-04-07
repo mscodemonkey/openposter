@@ -49,13 +49,12 @@ test("my media can apply an OpenPoster collection poster", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /James Bond/i })).toBeVisible();
 
   const collectionPosterCard = page.getByRole("button", {
-    name: "View alternate artwork and other options",
+    name: "James Bond Collection poster options",
   }).first();
-  const posterContainer = collectionPosterCard.locator("xpath=..");
 
   await collectionPosterCard.click();
-  const selectPosterButton = posterContainer.getByRole("button", {
-    name: "Select a new poster from an OpenPoster creator",
+  const selectPosterButton = page.getByRole("menuitem", {
+    name: "Choose a poster from OpenPoster",
   });
   await expect(selectPosterButton).toBeEnabled({ timeout: 30_000 });
   await selectPosterButton.click();

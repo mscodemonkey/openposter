@@ -51,13 +51,12 @@ test("my media can apply and reset an OpenPoster show backdrop", async ({ page }
   await expect(page.getByRole("heading", { name: /ted/i })).toBeVisible();
 
   const selectedBackdropCard = page.getByRole("button", {
-    name: "View backdrop options",
+    name: "ted backdrop options",
   }).first();
-  const showBackdropCard = selectedBackdropCard.locator("xpath=..");
 
   await selectedBackdropCard.click();
-  await showBackdropCard.getByRole("button", {
-    name: "Select a backdrop from an OpenPoster creator",
+  await page.getByRole("menuitem", {
+    name: "Choose a backdrop from OpenPoster",
   }).click();
 
   const drawer = page.getByRole("presentation").filter({

@@ -65,10 +65,13 @@ test("my media can apply an OpenPoster episode card", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Season/i }).first()).toBeVisible();
 
   const selectEpisodeButton = page.getByRole("button", {
-    name: "Select an episode card from an OpenPoster creator",
+    name: "EPISODE 01 options",
   }).first();
   await expect(selectEpisodeButton).toBeVisible();
   await selectEpisodeButton.click();
+  await page.getByRole("menuitem", {
+    name: "Choose an episode card from OpenPoster",
+  }).click();
 
   const drawer = page.getByRole("presentation").filter({
     has: page.getByRole("button", { name: "Use this episode card" }),

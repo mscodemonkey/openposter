@@ -73,16 +73,61 @@ export async function addMediaServer(
   adminToken: string,
   config: Omit<MediaServerConfig, "id"> & { id?: string; token: string },
 ): Promise<MediaServerConfig> {
-  const r = await fetch(`${_base(nodeUrl)}/v1/admin/media-servers`, {
-    method: "POST",
-    headers: _headers(adminToken),
-    body: JSON.stringify(config),
+  const target = `${_base(nodeUrl)}/v1/admin/media-servers`;
+  console.debug("[MediaServerWizard] addMediaServer:start", {
+    target,
+    nodeUrl: _base(nodeUrl),
+    config: {
+      id: config.id ?? null,
+      type: config.type,
+      name: config.name,
+      base_url: config.base_url,
+      tv_libraries: config.tv_libraries,
+      movie_libraries: config.movie_libraries,
+    },
+  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+  let r: Response;
+  try {
+    r = await fetch(target, {
+      method: "POST",
+      headers: _headers(adminToken),
+      body: JSON.stringify(config),
+      signal: controller.signal,
+    });
+  } catch (e: unknown) {
+    window.clearTimeout(timeoutId);
+    console.error("[MediaServerWizard] addMediaServer:error", {
+      target,
+      error: e instanceof Error ? { name: e.name, message: e.message } : e,
+    });
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error(`Saving the media server to ${_base(nodeUrl)} timed out. Please reconnect your node and try again.`);
+    }
+    throw e;
+  }
+  window.clearTimeout(timeoutId);
+  console.debug("[MediaServerWizard] addMediaServer:response", {
+    target,
+    status: r.status,
+    ok: r.ok,
   });
   if (!r.ok) {
     const j = (await r.json().catch(() => null)) as { error?: { message?: string } } | null;
+    console.error("[MediaServerWizard] addMediaServer:bad-response", {
+      target,
+      status: r.status,
+      payload: j,
+    });
     throw new Error(j?.error?.message ?? `Failed to add server: ${r.status}`);
   }
-  return r.json() as Promise<MediaServerConfig>;
+  const result = await r.json() as MediaServerConfig;
+  console.debug("[MediaServerWizard] addMediaServer:success", {
+    target,
+    result,
+  });
+  return result;
 }
 
 /** Remove a media server by ID. */

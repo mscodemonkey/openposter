@@ -53,11 +53,11 @@ test("my media can apply OpenPoster movie logo artwork", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Dr\. No/i })).toBeVisible();
 
   const logoCard = page.getByRole("button", {
-    name: "View alternate logos and other options",
+    name: "Dr. No logo options",
   }).first();
   await logoCard.click();
-  await logoCard.getByRole("button", {
-    name: "Select a logo from an OpenPoster creator",
+  await page.getByRole("menuitem", {
+    name: "Choose a logo from OpenPoster",
   }).click();
 
   const drawer = page.getByRole("presentation").filter({

@@ -11,6 +11,8 @@ class Config:
     operator_name: str
     operator_contact: str | None
     mirrors: list[str]
+    official_directory_url: str | None
+    bootstrap_seeds: list[str]
     announce_to: str | None   # directory base URL to POST registration to
     announce_url: str | None  # URL to register as (defaults to base_url)
 
@@ -25,8 +27,14 @@ def load_config() -> Config:
     mirrors_raw = os.environ.get("OPENPOSTER_MIRRORS", "").strip()
     mirrors = [m.strip().rstrip("/") for m in mirrors_raw.split(",") if m.strip()]
 
+    official_directory_raw = os.environ.get("OPENPOSTER_OFFICIAL_DIRECTORY_URL", "").strip().rstrip("/")
+    official_directory_url = official_directory_raw or None
+
+    bootstrap_seeds_raw = os.environ.get("OPENPOSTER_BOOTSTRAP_SEEDS", "").strip()
+    bootstrap_seeds = [s.strip().rstrip("/") for s in bootstrap_seeds_raw.split(",") if s.strip()]
+
     announce_to_raw = os.environ.get("OPENPOSTER_ANNOUNCE_TO", "").strip().rstrip("/")
-    announce_to = announce_to_raw or None
+    announce_to = announce_to_raw or official_directory_url
     announce_url_raw = os.environ.get("OPENPOSTER_ANNOUNCE_URL", "").strip().rstrip("/")
     announce_url = announce_url_raw or None
 
@@ -39,6 +47,8 @@ def load_config() -> Config:
         operator_name=operator_name,
         operator_contact=operator_contact,
         mirrors=mirrors,
+        official_directory_url=official_directory_url,
+        bootstrap_seeds=bootstrap_seeds,
         announce_to=announce_to,
         announce_url=announce_url,
     )

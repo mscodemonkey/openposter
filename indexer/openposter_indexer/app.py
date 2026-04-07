@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from .lifecycle import attach_lifecycle
@@ -36,6 +37,25 @@ app.add_middleware(
 @app.get("/v1/health")
 async def health():
     return {"ok": True}
+
+
+@app.get("/dev/reset")
+async def dev_reset(token: str = ""):
+    """Wipe all indexed data for local testing. Only works when OPENPOSTER_DEV_RESET_TOKEN is set."""
+    import os
+    from sqlalchemy import text
+
+    expected = os.environ.get("OPENPOSTER_DEV_RESET_TOKEN", "")
+    if not expected or token != expected:
+        return JSONResponse(status_code=404, content={"error": {"code": "not_found", "message": "not found"}})
+
+    session = app.state.Session
+    async with session() as s:
+        for table in ("blob_mirrors", "indexed_posters", "node_cursors", "node_health"):
+            await s.execute(text(f"DELETE FROM {table}"))
+        await s.commit()
+
+    return {"ok": True, "wiped": True}
 
 attach_lifecycle(app)
 

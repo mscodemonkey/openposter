@@ -353,23 +353,34 @@ async def admin_list_themes(request: Request):
         ).group_by(Poster.theme_id)
         counts = dict((await session.execute(count_stmt)).all())
 
-        # Clean up duplicate empty "Default theme" rows that can accumulate in dev/reset flows.
+        # Clean up duplicate "Default theme" rows that can accumulate in dev/reset flows.
+        # If duplicates contain posters, merge them into the earliest theme so Studio only ever
+        # presents one default bucket per creator.
         default_themes = [t for t in themes if t.name == "Default theme"]
         if len(default_themes) > 1:
+            primary = default_themes[0]
             removed_any = False
             for dup in default_themes[1:]:
-                if counts.get(dup.theme_id, 0) == 0 and not dup.cover_hash:
-                    dup.deleted_at = now = _now_rfc3339()
-                    dup.updated_at = now
-                    removed_any = True
+                if primary.cover_hash is None and dup.cover_hash is not None:
+                    primary.cover_hash = dup.cover_hash
+                    primary.updated_at = _now_rfc3339()
+                await session.execute(
+                    Poster.__table__.update()
+                    .where(Poster.theme_id == dup.theme_id)
+                    .values(theme_id=primary.theme_id)
+                )
+                dup.deleted_at = now = _now_rfc3339()
+                dup.updated_at = now
+                removed_any = True
             if removed_any:
                 await session.commit()
                 themes = [t for t in themes if t.deleted_at is None]
-                counts = {
-                    theme_id: count
-                    for theme_id, count in counts.items()
-                    if any(t.theme_id == theme_id for t in themes)
-                }
+                count_stmt = select(Poster.theme_id, func.count(Poster.poster_id)).where(
+                    Poster.creator_id == creator_id,
+                    Poster.deleted_at.is_(None),
+                    Poster.theme_id.is_not(None),
+                ).group_by(Poster.theme_id)
+                counts = dict((await session.execute(count_stmt)).all())
 
     cfg = request.app.state.cfg
 

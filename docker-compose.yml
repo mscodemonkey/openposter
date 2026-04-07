@@ -60,12 +60,13 @@ services:
     environment:
       PORT: "8080"
       OPENPOSTER_BASE_URL: "http://localhost:8081"
+      OPENPOSTER_OFFICIAL_DIRECTORY_URL: "http://directory:8080"
       OPENPOSTER_NODE_NAME: "Node A (Creator)"
       OPENPOSTER_OPERATOR_NAME: "OpenPoster Dev"
       OPENPOSTER_OPERATOR_CONTACT: "mailto:dev@openposter.local"
       OPENPOSTER_ADMIN_TOKEN: "dev-admin"
       OPENPOSTER_ALLOW_PRIVATE_NODES: "true"
-      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
       # Announce to directory using Docker-internal URL (directory validates this)
       OPENPOSTER_ANNOUNCE_TO: "http://directory:8080"
@@ -92,6 +93,7 @@ services:
     environment:
       PORT: "8080"
       OPENPOSTER_BASE_URL: "http://localhost:8082"
+      OPENPOSTER_OFFICIAL_DIRECTORY_URL: "http://directory:8080"
       OPENPOSTER_NODE_NAME: "Node B (Consumer)"
       OPENPOSTER_OPERATOR_NAME: "OpenPoster Dev"
       OPENPOSTER_OPERATOR_CONTACT: "mailto:dev@openposter.local"
@@ -123,6 +125,7 @@ services:
       - "8090:8090"
     environment:
       PORT: "8090"
+      OPENPOSTER_OFFICIAL_DIRECTORY_URL: "http://directory:8080"
       # Seed from directory — mirrors production topology
       OPENPOSTER_INDEXER_SEEDS: "http://directory:8080"
       OPENPOSTER_INDEXER_POLL_SECONDS: "10"

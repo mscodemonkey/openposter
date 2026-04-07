@@ -55,13 +55,12 @@ test("my media can apply OpenPoster collection logo artwork", async ({ page }) =
   await expect(page.getByRole("heading", { name: /James Bond/i })).toBeVisible();
 
   const collectionLogoCard = page.getByRole("button", {
-    name: "View alternate logos and other options",
+    name: "James Bond Collection logo options",
   }).first();
-  const logoContainer = collectionLogoCard.locator("xpath=..");
 
   await collectionLogoCard.click();
-  const selectLogoButton = logoContainer.getByRole("button", {
-    name: "Select a logo from an OpenPoster creator",
+  const selectLogoButton = page.getByRole("menuitem", {
+    name: "Choose a logo from OpenPoster",
   });
   await expect(selectLogoButton).toBeEnabled({ timeout: 30_000 });
   await selectLogoButton.click();

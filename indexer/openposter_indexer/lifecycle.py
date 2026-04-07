@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 from datetime import datetime, timezone
 
 import httpx
@@ -51,13 +52,17 @@ async def crawl_once(app: FastAPI) -> None:
     Session = app.state.Session
 
     # Build node set from seeds + discovered node lists.
-    nodes: set[str] = set(cfg.seed_nodes)
+    seed_list = list(dict.fromkeys(cfg.seed_nodes))
+    random.shuffle(seed_list)
+    if cfg.official_directory_url and cfg.official_directory_url not in seed_list:
+        seed_list.append(cfg.official_directory_url)
+    nodes: set[str] = set(seed_list)
     issuer_cache: dict[str, dict] = getattr(app.state, "node_desc_cache", {})
     signing_key_cache: dict[str, str] = getattr(app.state, "node_signing_key_cache", {})
 
     async with httpx.AsyncClient(timeout=8.0) as client:
         # discovery via /v1/nodes
-        for seed in list(nodes):
+        for seed in seed_list:
             try:
                 data = await _fetch_json(client, seed + "/v1/nodes")
                 for n in data.get("nodes", []):

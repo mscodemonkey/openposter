@@ -54,12 +54,11 @@ test("my media can apply OpenPoster show logo artwork", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /ted/i })).toBeVisible();
 
   const logoCard = page.getByRole("button", {
-    name: "View logo options",
+    name: "ted logo options",
   }).first();
-  const logoContainer = logoCard.locator("xpath=..");
   await logoCard.click();
-  await logoContainer.getByRole("button", {
-    name: "Select a logo from an OpenPoster creator",
+  await page.getByRole("menuitem", {
+    name: "Choose a logo from OpenPoster",
   }).click();
 
   const drawer = page.getByRole("presentation").filter({

@@ -441,32 +441,16 @@ async def media_servers_list(request: Request):
 
 @router.post("/admin/media-servers")
 async def media_servers_add(request: Request, body: MediaServerAddRequest):
-    """Add or update a media server. Validates the connection before saving."""
+    """Add or update a media server.
+
+    Connection validation happens earlier in the setup flow, so this endpoint
+    should stay fast and only persist the chosen configuration.
+    """
     await require_admin(request)
     cfg = request.app.state.cfg
 
     base_url = body.base_url.rstrip("/")
     server_id = body.id or str(uuid.uuid4())
-
-    # Validate connection for Plex servers
-    if body.type == "plex":
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                sections = await _get_sections(client, base_url, body.token)
-        except httpx.HTTPStatusError as e:
-            raise http_error(400, "plex_error", f"Plex returned {e.response.status_code}")
-        except Exception as e:
-            raise http_error(400, "plex_error", f"Could not reach server: {e}")
-
-        section_titles = {s.get("title") for s in sections}
-        all_requested = set(body.tv_libraries) | set(body.movie_libraries)
-        missing = all_requested - section_titles
-        if missing:
-            raise http_error(
-                400, "plex_error",
-                f"Library not found: {', '.join(sorted(missing))}. "
-                f"Available: {', '.join(sorted(section_titles))}",
-            )
 
     servers = _load_servers(cfg.data_dir)
     existing_idx = next((i for i, s in enumerate(servers) if s["id"] == server_id), None)

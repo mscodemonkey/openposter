@@ -50,11 +50,11 @@ test("my media does not auto-update tracked artwork when auto-update is disabled
   await expect(page.getByRole("heading", { name: /Dr\. No/i })).toBeVisible();
 
   const movieCard = page.getByRole("button", {
-    name: "View alternate artwork and other options",
+    name: "Dr. No poster options",
   }).first();
   await movieCard.click();
-  await movieCard.getByRole("button", {
-    name: "Select a new poster from an OpenPoster creator",
+  await page.getByRole("menuitem", {
+    name: "Choose a poster from OpenPoster",
   }).click();
 
   const drawer = page.getByRole("presentation").filter({
