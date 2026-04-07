@@ -106,3 +106,13 @@ jobs:
       - name: Shut down Docker stack
         if: always()
         run: docker compose down -v
+
+      - name: Restore workspace permissions
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" \
+            reference-node/data-a \
+            reference-node/data-b \
+            reference-node/data-directory \
+            issuer/data \
+            indexer/data || true
