@@ -4071,34 +4071,21 @@ export default function StudioWorkspace() {
         overscrollBehaviorY: "none",
       }}
     >
-      {nav.view === "list" && (
-        <Box
-          sx={{
-            position: "absolute",
-            inset: 0,
-            opacity: 0.08,
-            pointerEvents: "none",
-            zIndex: 0,
-            backgroundImage: (theme) => {
-              const c = theme.palette.mode === "dark" ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.30)";
-              return `linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%), linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%)`;
-            },
-            backgroundSize: "200px 200px",
-            backgroundPosition: "0 0, 100px 100px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            pl: { xs: 0, md: "220px" },
-          }}
-        >
-          <Box
-            component="img"
-            src="/op-logo-small.svg"
-            alt=""
-            sx={{ width: 600, height: 600, filter: "grayscale(1) drop-shadow(0 0 24px rgba(255,255,255,1))" }}
-          />
-        </Box>
-      )}
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          opacity: 0.08,
+          pointerEvents: "none",
+          zIndex: 0,
+          backgroundImage: (theme) => {
+            const c = theme.palette.mode === "dark" ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.30)";
+            return `linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%), linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%)`;
+          },
+          backgroundSize: "200px 200px",
+          backgroundPosition: "0 0, 100px 100px",
+        }}
+      />
       {studioHeroBackdropUrl && (
         <Box sx={{ position: "fixed", top: 64, left: 0, right: 0, height: "75vh", zIndex: 0, overflow: "hidden", pointerEvents: "none" }}>
           <Box

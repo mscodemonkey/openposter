@@ -1,28 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import CircularProgress from "@mui/material/CircularProgress";
 import Container from "@mui/material/Container";
 import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 
 import ImageIcon from "@mui/icons-material/Image";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 
 import ArtworkCardFrame from "@/components/ArtworkCardFrame";
-import { fetchTmdbMovie } from "@/lib/tmdb";
+import { CardMenuButton, type CardMenuItem } from "@/components/MediaCard";
 import { POSTER_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
 
 type TmdbTrendingItem = {
@@ -32,6 +27,10 @@ type TmdbTrendingItem = {
   poster_path?: string | null;
   release_date?: string;
   first_air_date?: string;
+  belongs_to_collection?: {
+    id: number;
+    name: string;
+  } | null;
 };
 
 export type TrendingActions = {
@@ -45,97 +44,64 @@ export type TrendingActions = {
 };
 
 // ─── TrendingCardMenu ──────────────────────────────────────────────────────────
-// Defined at module level — never inside a parent component.
 
-type MovieResolution =
-  | { kind: "collection"; collectionId: number; collectionName: string }
-  | { kind: "standalone" };
-
-function TrendingCardMenu({ tmdbId, mediaType, title, year, actions, preloadedMovieRes }: {
+function TrendingCardMenu({ tmdbId, mediaType, title, year, actions, collectionInfo }: {
   tmdbId: number;
   mediaType: "movie" | "tv";
   title: string;
   year: string;
   actions: TrendingActions;
-  preloadedMovieRes?: MovieResolution | null;
+  collectionInfo?: {
+    id: number;
+    name: string;
+  } | null;
 }) {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [movieRes, setMovieRes] = useState<MovieResolution | null>(preloadedMovieRes ?? null);
-  const [loading, setLoading] = useState(false);
+  const collectionPinned = !!collectionInfo && actions.pinnedCollections.some((c) => c.tmdbId === collectionInfo.id);
+  const moviePinned = actions.pinnedMovies.some((m) => m.tmdbId === tmdbId);
+  const movieTitle = year ? `${title} (${year})` : title;
 
-  function handleOpen(e: React.MouseEvent<HTMLElement>) {
-    e.stopPropagation();
-    setAnchorEl(e.currentTarget);
-    if (mediaType === "movie" && !movieRes && !loading) {
-      setLoading(true);
-      fetchTmdbMovie(tmdbId)
-        .then((data) => {
-          if (data?.belongs_to_collection?.id) {
-            setMovieRes({ kind: "collection", collectionId: data.belongs_to_collection.id, collectionName: data.belongs_to_collection.name });
-          } else {
-            setMovieRes({ kind: "standalone" });
-          }
-        })
-        .catch(() => setMovieRes({ kind: "standalone" }))
-        .finally(() => setLoading(false));
-    }
-  }
-
-  function handleClose() { setAnchorEl(null); }
-
-  let menuLabel: string | null = null;
-  let menuAction: (() => void) | null = null;
+  const items: CardMenuItem[] = [];
 
   if (mediaType === "tv") {
-    menuLabel = "Add TV show to My Studio";
-    menuAction = () => { actions.onAddShow(tmdbId, title); handleClose(); };
-  } else if (movieRes) {
-    if (movieRes.kind === "collection") {
-      const alreadyPinned = actions.pinnedCollections.some((c) => c.tmdbId === movieRes.collectionId);
-      if (alreadyPinned) {
-        menuLabel = "View collection in Studio";
-        menuAction = () => { actions.onNavigate(`collection:${movieRes.collectionId}`); handleClose(); };
-      } else {
-        menuLabel = "Add collection to My Studio";
-        menuAction = () => { actions.onAddCollection(movieRes.collectionId, movieRes.collectionName); handleClose(); };
-      }
-    } else {
-      const alreadyPinned = actions.pinnedMovies.some((m) => m.tmdbId === tmdbId);
-      if (alreadyPinned) {
-        menuLabel = "View in Studio";
-        menuAction = () => { actions.onNavigate(`movie:${tmdbId}`); handleClose(); };
-      } else {
-        menuLabel = "Add movie to My Studio";
-        menuAction = () => { actions.onAddMovie(tmdbId, year ? `${title} (${year})` : title); handleClose(); };
-      }
-    }
+    items.push({
+      label: "Add TV show to My Studio",
+      onClick: () => actions.onAddShow(tmdbId, title),
+    });
+  } else if (collectionInfo) {
+    items.push({
+      label: moviePinned ? "View movie in Studio" : "Add movie to My Studio",
+      onClick: () => {
+        if (moviePinned) {
+          actions.onNavigate(`movie:${tmdbId}`);
+        } else {
+          actions.onAddMovie(tmdbId, movieTitle);
+        }
+      },
+    });
+    items.push({
+      label: collectionPinned ? "View collection in Studio" : "Add collection to My Studio",
+      onClick: () => {
+        if (collectionPinned) {
+          actions.onNavigate(`collection:${collectionInfo.id}`);
+        } else {
+          actions.onAddCollection(collectionInfo.id, collectionInfo.name);
+        }
+      },
+    });
+  } else {
+    items.push({
+      label: moviePinned ? "View in Studio" : "Add movie to My Studio",
+      onClick: () => {
+        if (moviePinned) {
+          actions.onNavigate(`movie:${tmdbId}`);
+        } else {
+          actions.onAddMovie(tmdbId, movieTitle);
+        }
+      },
+    });
   }
 
-  return (
-    <>
-      <IconButton
-        size="small"
-        onClick={handleOpen}
-        sx={{
-          position: "absolute", top: 4, right: 4,
-          bgcolor: "rgba(0,0,0,0.55)", color: "common.white",
-          "&:hover": { bgcolor: "rgba(0,0,0,0.8)" },
-          width: 28, height: 28,
-        }}
-      >
-        <MoreVertIcon sx={{ fontSize: "1rem" }} />
-      </IconButton>
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
-        {loading ? (
-          <MenuItem disabled>
-            <CircularProgress size={14} sx={{ mr: 1 }} /> Loading…
-          </MenuItem>
-        ) : menuLabel ? (
-          <MenuItem onClick={menuAction ?? undefined}>{menuLabel}</MenuItem>
-        ) : null}
-      </Menu>
-    </>
-  );
+  return <CardMenuButton ariaLabel={`${title} options`} items={items} />;
 }
 
 // ─── TrendingCard ─────────────────────────────────────────────────────────────
@@ -148,26 +114,9 @@ function TrendingCard({ item, mediaType, actions }: {
   const label = item.title ?? item.name ?? "";
   const year = (item.release_date ?? item.first_air_date ?? "").slice(0, 4);
   const imgUrl = item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null;
-
-  // Pre-fetch collection membership for movie cards so we can detect "in studio via collection"
-  const [movieRes, setMovieRes] = useState<MovieResolution | null>(null);
-  const needsCollectionCheck = mediaType === "movie" && !!actions && actions.pinnedCollections.length > 0
-    && !actions.pinnedMovies.some((m) => m.tmdbId === item.id);
-  useEffect(() => {
-    if (!needsCollectionCheck) return;
-    let cancelled = false;
-    fetchTmdbMovie(item.id)
-      .then((data) => {
-        if (cancelled) return;
-        if (data?.belongs_to_collection?.id) {
-          setMovieRes({ kind: "collection", collectionId: data.belongs_to_collection.id, collectionName: data.belongs_to_collection.name });
-        } else {
-          setMovieRes({ kind: "standalone" });
-        }
-      })
-      .catch(() => { if (!cancelled) setMovieRes({ kind: "standalone" }); });
-    return () => { cancelled = true; };
-  }, [item.id, needsCollectionCheck]);
+  const collectionInfo = mediaType === "movie" ? item.belongs_to_collection ?? null : null;
+  const collectionPinned = !!actions && !!collectionInfo && actions.pinnedCollections.some((c) => c.tmdbId === collectionInfo.id);
+  const moviePinned = !!actions && actions.pinnedMovies.some((m) => m.tmdbId === item.id);
 
   // Determine if this item is already in Studio
   let inStudioKey: string | null = null;
@@ -175,13 +124,56 @@ function TrendingCard({ item, mediaType, actions }: {
     if (mediaType === "tv" && actions.pinnedTvShows.some((s) => s.tmdbId === item.id)) {
       inStudioKey = `show:${item.id}`;
     } else if (mediaType === "movie") {
-      if (actions.pinnedMovies.some((m) => m.tmdbId === item.id)) {
+      if (moviePinned) {
         inStudioKey = `movie:${item.id}`;
-      } else if (movieRes?.kind === "collection" && actions.pinnedCollections.some((c) => c.tmdbId === movieRes.collectionId)) {
-        inStudioKey = `collection:${movieRes.collectionId}`;
+      } else if (collectionInfo && collectionPinned) {
+        inStudioKey = `collection:${collectionInfo.id}`;
       }
     }
   }
+
+  const showMenu = !!actions && (!inStudioKey || (mediaType === "movie" && !!collectionInfo));
+
+  const subtitleSlot = useMemo(() => {
+    if (mediaType !== "movie" || !collectionInfo) {
+      return undefined;
+    }
+
+    return (
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0.5, flexWrap: "wrap" }}>
+        {year ? (
+          <Typography variant="caption" noWrap sx={{ color: "text.secondary", lineHeight: 1.4 }}>
+            {year}
+          </Typography>
+        ) : null}
+        <Typography variant="caption" noWrap sx={{ color: "text.secondary", lineHeight: 1.4 }}>
+          Part of {collectionInfo.name}
+        </Typography>
+        {actions && !collectionPinned ? (
+          <Button
+            size="small"
+            variant="text"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              actions.onAddCollection(collectionInfo.id, collectionInfo.name);
+            }}
+            sx={{
+              minWidth: 0,
+              px: 0.5,
+              py: 0,
+              fontSize: "0.625rem",
+              fontWeight: 800,
+              letterSpacing: "0.04em",
+              lineHeight: 1.4,
+            }}
+          >
+            ADD COLLECTION
+          </Button>
+        ) : null}
+      </Box>
+    );
+  }, [actions, collectionInfo, collectionPinned, mediaType, year]);
 
   const imageArea = (
     <Box sx={{ position: "relative", aspectRatio: "2/3", overflow: "hidden", bgcolor: "transparent" }}>
@@ -219,9 +211,10 @@ function TrendingCard({ item, mediaType, actions }: {
         <ArtworkCardFrame
           media={imageArea}
           title={label}
-          subtitle={year || undefined}
-          menuSlot={actions && !inStudioKey ? (
-            <TrendingCardMenu tmdbId={item.id} mediaType={mediaType} title={label} year={year} actions={actions} preloadedMovieRes={movieRes} />
+          subtitle={collectionInfo ? undefined : year || undefined}
+          subtitleSlot={subtitleSlot}
+          menuSlot={showMenu ? (
+            <TrendingCardMenu tmdbId={item.id} mediaType={mediaType} title={label} year={year} actions={actions!} collectionInfo={collectionInfo} />
           ) : undefined}
           onClick={inStudioKey ? () => actions!.onNavigate(inStudioKey) : undefined}
         />
@@ -353,7 +346,22 @@ export default function StudioWelcome({
   }
 
   return (
-    <Box sx={{ bgcolor: "background.default", pb: 10 }}>
+    <Box sx={{ bgcolor: "background.default", pb: 10, position: "relative" }}>
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          opacity: 0.08,
+          pointerEvents: "none",
+          zIndex: 0,
+          backgroundImage: (theme) => {
+            const c = theme.palette.mode === "dark" ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.30)";
+            return `linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%), linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%)`;
+          },
+          backgroundSize: "200px 200px",
+          backgroundPosition: "0 0, 100px 100px",
+        }}
+      />
       {sessionExpired && (
         <Container maxWidth="md" sx={{ pt: 4 }}>
           <Alert severity="warning">
