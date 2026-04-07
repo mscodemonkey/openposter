@@ -13,6 +13,7 @@ import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import Container from "@mui/material/Container";
 import Snackbar from "@mui/material/Snackbar";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -47,6 +48,7 @@ import Tooltip from "@mui/material/Tooltip";
 import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
 
 import PlexMark from "@/components/PlexMark";
+import MediaServerWizard from "@/components/MediaServerWizard";
 import ArtworkMetadataTooltip from "@/components/ArtworkMetadataTooltip";
 import type { ArtworkMeta } from "@/components/ArtworkMetadataTooltip";
 import PosterCard from "@/components/PosterCard";
@@ -58,7 +60,7 @@ import { CollectionCard, TVShowCard } from "@/components/SectionedPosterView";
 import type { CollectionGroup, TVShowGroup } from "@/components/SectionedPosterView";
 import type { PosterEntry } from "@/lib/types";
 import { loadCreatorConnection } from "@/lib/storage";
-import { fetchMediaLibrary, fetchMediaChildren, thumbUrl, clearThumbCache, bustThumbs } from "@/lib/media-server";
+import { fetchMediaLibrary, fetchMediaChildren, fetchSyncStatus, thumbUrl, clearThumbCache, bustThumbs } from "@/lib/media-server";
 import type { MediaItem, MediaLibrary } from "@/lib/media-server";
 import { listMediaServers } from "@/lib/media-servers";
 import type { MediaServerConfig } from "@/lib/media-servers";
@@ -276,10 +278,10 @@ function makeTVShowGroup(item: MediaItem, src: string, failed = false, creatorNa
 // ---------------------------------------------------------------------------
 
 type Nav =
-  | { view: "collections" | "movies" | "shows"; library?: string | null }
-  | { view: "collection" | "show"; id: string; title: string; library?: string | null }
-  | { view: "season"; showId: string; showTitle: string; showTmdbId: number | null; seasonId: string; seasonIndex: number | null; title: string; library?: string | null }
-  | { view: "movie"; item: MediaItem; fromCollectionId?: string; fromCollectionTitle?: string; library?: string | null };
+  | { view: "collections" | "movies" | "shows"; library?: string | null; server?: string | null }
+  | { view: "collection" | "show"; id: string; title: string; library?: string | null; server?: string | null }
+  | { view: "season"; showId: string; showTitle: string; showTmdbId: number | null; seasonId: string; seasonIndex: number | null; title: string; library?: string | null; server?: string | null }
+  | { view: "movie"; item: MediaItem; fromCollectionId?: string; fromCollectionTitle?: string; library?: string | null; server?: string | null };
 
 // ---------------------------------------------------------------------------
 // URL ↔ Nav serialisation (module-level, no hooks)
@@ -290,11 +292,12 @@ type RawSearchParams = ReturnType<typeof useSearchParams>;
 function navFromParams(p: RawSearchParams): Nav {
   const view = p.get("view") ?? "movies";
   const library = p.get("library");
+  const server = p.get("server");
   switch (view) {
-    case "collections":        return { view: "collections", library };
-    case "shows":              return { view: "shows", library };
-    case "collection":         return { view: "collection", id: p.get("id") ?? "", title: p.get("title") ?? "", library };
-    case "show":               return { view: "show", id: p.get("id") ?? "", title: p.get("title") ?? "", library };
+    case "collections":        return { view: "collections", library, server };
+    case "shows":              return { view: "shows", library, server };
+    case "collection":         return { view: "collection", id: p.get("id") ?? "", title: p.get("title") ?? "", library, server };
+    case "show":               return { view: "show", id: p.get("id") ?? "", title: p.get("title") ?? "", library, server };
     case "season": {
       const showTmdbStr = p.get("showTmdbId");
       const seasonIdxStr = p.get("seasonIndex");
@@ -307,6 +310,7 @@ function navFromParams(p: RawSearchParams): Nav {
         seasonIndex: seasonIdxStr ? parseInt(seasonIdxStr, 10) : null,
         title: p.get("title") ?? "",
         library,
+        server,
       };
     }
     case "movie": {
@@ -329,9 +333,10 @@ function navFromParams(p: RawSearchParams): Nav {
         fromCollectionId: p.get("fromCollectionId") ?? undefined,
         fromCollectionTitle: p.get("fromCollectionTitle") ?? undefined,
         library,
+        server,
       };
     }
-    default: return { view: "movies", library };
+    default: return { view: "movies", library, server };
   }
 }
 
@@ -339,11 +344,13 @@ function navToSearch(nav: Nav): string {
   const p = new URLSearchParams();
   switch (nav.view) {
     case "movies":
+      if (nav.server) p.set("server", nav.server);
       if (nav.library) p.set("library", nav.library);
       break; // clean default URL
     case "collections":
     case "shows":
       p.set("view", nav.view);
+      if (nav.server) p.set("server", nav.server);
       if (nav.library) p.set("library", nav.library);
       break;
     case "collection":
@@ -351,12 +358,14 @@ function navToSearch(nav: Nav): string {
       p.set("view", nav.view);
       p.set("id", nav.id);
       p.set("title", nav.title);
+      if (nav.server) p.set("server", nav.server);
       if (nav.library) p.set("library", nav.library);
       break;
     case "season":
       p.set("view", "season");
       p.set("showId", nav.showId);
       p.set("showTitle", nav.showTitle);
+      if (nav.server) p.set("server", nav.server);
       if (nav.showTmdbId != null) p.set("showTmdbId", String(nav.showTmdbId));
       p.set("seasonId", nav.seasonId);
       if (nav.seasonIndex != null) p.set("seasonIndex", String(nav.seasonIndex));
@@ -367,6 +376,7 @@ function navToSearch(nav: Nav): string {
       p.set("view", "movie");
       p.set("id", nav.item.id);
       p.set("title", nav.item.title);
+      if (nav.server) p.set("server", nav.server);
       if (nav.item.year != null) p.set("year", String(nav.item.year));
       if (nav.item.tmdb_id != null) p.set("tmdbId", String(nav.item.tmdb_id));
       if (nav.item.collection_ids?.length) p.set("collectionIds", JSON.stringify(nav.item.collection_ids));
@@ -465,20 +475,197 @@ function CardManageMenu({ onReset }: { onReset: () => void }) {
 // No-servers welcome page
 // ---------------------------------------------------------------------------
 
-function NoMediaServersPage() {
+function NoMediaServersPage({
+  canLaunchWizard,
+  onLaunchWizard,
+}: {
+  canLaunchWizard: boolean;
+  onLaunchWizard?: () => void;
+}) {
   const t = useTranslations("myMedia");
   return (
-    <Container maxWidth="sm">
-      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", py: 12, gap: 3 }}>
-        <StorageOutlinedIcon sx={{ fontSize: "5rem", color: "text.disabled" }} />
-        <Box>
-          <Typography variant="h4" fontWeight={900} gutterBottom>{t("noServersTitle")}</Typography>
-          <Typography variant="h6" color="text.secondary" fontWeight={400} sx={{ maxWidth: 480, mx: "auto", mb: 4 }}>
-            {t("noServersDescription")}
-          </Typography>
-          <Button variant="contained" size="large" component={Link} href="/settings">
-            {t("goToSettings")}
-          </Button>
+    <Container maxWidth="md" sx={{ py: { xs: 8, md: 12 } }}>
+      <Box
+        sx={{
+          position: "relative",
+          overflow: "hidden",
+          borderRadius: 4,
+          border: 1,
+          borderColor: "divider",
+          px: { xs: 3, md: 6 },
+          py: { xs: 6, md: 8 },
+          textAlign: "center",
+          background: (theme) =>
+            theme.palette.mode === "light"
+              ? "radial-gradient(circle at top, rgba(245,158,11,0.12), rgba(255,255,255,0) 42%), linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,0.92))"
+              : "radial-gradient(circle at top, rgba(245,158,11,0.16), rgba(10,10,10,0) 42%), linear-gradient(180deg, rgba(18,18,20,0.95), rgba(10,10,12,0.94))",
+          boxShadow: (theme) =>
+            theme.palette.mode === "light"
+              ? "0 24px 64px rgba(15,23,42,0.08)"
+              : "0 24px 64px rgba(0,0,0,0.36)",
+        }}
+      >
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            opacity: 0.12,
+            pointerEvents: "none",
+            backgroundImage: (theme) => {
+              const c = theme.palette.mode === "dark" ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.28)";
+              return `linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%), linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%)`;
+            },
+            backgroundSize: "160px 160px",
+            backgroundPosition: "0 0, 80px 80px",
+          }}
+        />
+        <Box sx={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+          <Box
+            sx={{
+              width: 92,
+              height: 92,
+              borderRadius: "50%",
+              display: "grid",
+              placeItems: "center",
+              bgcolor: (theme) => alpha(theme.palette.warning.main, theme.palette.mode === "light" ? 0.12 : 0.18),
+              border: 1,
+              borderColor: (theme) => alpha(theme.palette.warning.main, 0.28),
+            }}
+          >
+            <StorageOutlinedIcon sx={{ fontSize: "3rem", color: "warning.main" }} />
+          </Box>
+          <Box>
+            <Typography variant="h4" fontWeight={900} gutterBottom>{t("noServersTitle")}</Typography>
+            <Typography variant="h6" color="text.secondary" fontWeight={400} sx={{ maxWidth: 700, mx: "auto", mb: 3 }}>
+              {t("noServersDescription")}
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 620, mx: "auto" }}>
+              {t("noServersSettingsHint")}
+            </Typography>
+          </Box>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.25}
+            useFlexGap
+            justifyContent="center"
+            alignItems="center"
+            sx={{ mt: 1 }}
+          >
+            <Chip
+              icon={<PlexMark height={18} />}
+              label="Plex"
+              variant="outlined"
+              sx={{ pl: 0.75, pr: 1, height: 38, borderRadius: 999 }}
+            />
+            <Chip
+              label="Jellyfin"
+              variant="outlined"
+              sx={{
+                height: 38,
+                borderRadius: 999,
+                fontWeight: 700,
+                color: "#8b5cf6",
+                borderColor: alpha("#8b5cf6", 0.55),
+                bgcolor: alpha("#8b5cf6", 0.08),
+              }}
+            />
+            <Chip
+              label="Emby"
+              variant="outlined"
+              sx={{
+                height: 38,
+                borderRadius: 999,
+                fontWeight: 700,
+                color: "#10b981",
+                borderColor: alpha("#10b981", 0.55),
+                bgcolor: alpha("#10b981", 0.08),
+              }}
+            />
+          </Stack>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ mt: 1 }}>
+            {canLaunchWizard ? (
+              <Button variant="contained" size="large" onClick={onLaunchWizard}>
+                {t("addMediaServer")}
+              </Button>
+            ) : (
+              <Button variant="contained" size="large" component={Link} href="/settings">
+                {t("goToSettings")}
+              </Button>
+            )}
+          </Stack>
+        </Box>
+      </Box>
+    </Container>
+  );
+}
+
+function MediaLibraryPreparingPage() {
+  const t = useTranslations("myMedia");
+
+  return (
+    <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+      <Box
+        sx={{
+          position: "relative",
+          overflow: "hidden",
+          borderRadius: 5,
+          border: 1,
+          borderColor: (theme) => alpha(theme.palette.warning.main, 0.18),
+          background:
+            "linear-gradient(135deg, rgba(255,170,0,0.12) 0%, rgba(255,170,0,0.04) 30%, rgba(255,255,255,0.02) 100%)",
+          boxShadow: (theme) => `0 30px 80px ${alpha(theme.palette.common.black, 0.28)}`,
+        }}
+      >
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
+            backgroundSize: "80px 80px",
+            opacity: 0.3,
+            pointerEvents: "none",
+          }}
+        />
+        <Box
+          sx={{
+            position: "relative",
+            minHeight: { xs: 420, md: 520 },
+            display: "grid",
+            placeItems: "center",
+            px: 3,
+            py: 6,
+            textAlign: "center",
+          }}
+        >
+          <Stack spacing={3} alignItems="center" sx={{ maxWidth: 760 }}>
+            <Box
+              sx={{
+                width: 92,
+                height: 92,
+                borderRadius: "50%",
+                display: "grid",
+                placeItems: "center",
+                bgcolor: (theme) => alpha(theme.palette.warning.main, theme.palette.mode === "light" ? 0.12 : 0.18),
+                border: 1,
+                borderColor: (theme) => alpha(theme.palette.warning.main, 0.28),
+              }}
+            >
+              <SyncIcon sx={{ fontSize: "3rem", color: "warning.main" }} />
+            </Box>
+            <Box>
+              <Typography variant="h4" fontWeight={900} gutterBottom>{t("preparingLibraryTitle")}</Typography>
+              <Typography variant="h6" color="text.secondary" fontWeight={400} sx={{ maxWidth: 700, mx: "auto", mb: 3 }}>
+                {t("preparingLibraryDescription")}
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 620, mx: "auto" }}>
+                {t("preparingLibraryHint")}
+              </Typography>
+            </Box>
+            <Box sx={{ width: "100%", maxWidth: 520 }}>
+              <LinearProgress />
+            </Box>
+          </Stack>
         </Box>
       </Box>
     </Container>
@@ -497,7 +684,11 @@ export default function MyMediaContent() {
 
   const nav = useMemo(() => navFromParams(searchParams), [searchParams]);
   function navigate(next: Nav) {
-    router.push(`/my-media${navToSearch(next)}`);
+    const nextWithServer: Nav = {
+      ...next,
+      server: next.server ?? nav.server ?? null,
+    };
+    router.push(`/my-media${navToSearch(nextWithServer)}`);
   }
 
   const scrollContainerRef = useRef<HTMLElement>(null);
@@ -506,6 +697,7 @@ export default function MyMediaContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [servers, setServers] = useState<MediaServerConfig[]>([]);
+  const [mediaServerWizardOpen, setMediaServerWizardOpen] = useState(false);
 
   const [children, setChildren] = useState<MediaItem[]>([]);
   const [childrenForId, setChildrenForId] = useState<string | null>(null);
@@ -514,6 +706,7 @@ export default function MyMediaContent() {
   // Incrementing refreshKey causes the init effect to re-run (manual refresh).
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [pendingServerSync, setPendingServerSync] = useState<{ serverId: string; startedAt: number } | null>(null);
   // Incremented after clearing thumb cache — causes all thumbUrl() calls to return new URLs.
   const [thumbVersion, setThumbVersion] = useState(0);
   // media_item_id → TrackedArtwork (loaded in parallel with library)
@@ -529,6 +722,21 @@ export default function MyMediaContent() {
   const [tmdbSeasonEpisodes, setTmdbSeasonEpisodes] = useState<{ episode_number: number; air_date: string | null }[] | null>(null);
   const [tmdbSeasonLoading, setTmdbSeasonLoading] = useState(false);
   const searchDebounceRef = useRef<number | null>(null);
+
+  function handleMediaServerAdded(added: MediaServerConfig) {
+    setServers((prev) => {
+      const idx = prev.findIndex((s) => s.id === added.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = added;
+        return next;
+      }
+      return [...prev, added];
+    });
+    setPendingServerSync({ serverId: added.id, startedAt: Date.now() });
+    setLibrary(null);
+    navigate({ view: "movies", library: null, server: added.id });
+  }
 
   function markFailed(id: string) {
     setFailedThumbs((prev) => prev.has(id) ? prev : new Set([...prev, id]));
@@ -587,15 +795,22 @@ export default function MyMediaContent() {
         if (isRefresh) setRefreshing(false);
         return;
       }
-      Promise.all([
-        fetchMediaLibrary(),
-        getTrackedArtwork(connection.nodeUrl, connection.adminToken),
-        listMediaServers(connection.nodeUrl, connection.adminToken).catch(() => [] as typeof servers),
-      ])
+      listMediaServers(connection.nodeUrl, connection.adminToken)
+        .catch(() => [] as typeof servers)
+        .then((srvList) => {
+          const resolvedServerId = pendingServerSync?.serverId ?? nav.server ?? srvList[0]?.id ?? null;
+          return Promise.all([
+            fetchMediaLibrary(resolvedServerId),
+            getTrackedArtwork(connection.nodeUrl, connection.adminToken),
+            Promise.resolve(srvList),
+          ]);
+        })
         .then(([lib, tracked, srvList]) => {
           if (cancelled) return;
           setServers(srvList);
-          setLibrary(lib);
+          if (!pendingServerSync || pendingServerSync.serverId !== (nav.server ?? srvList[0]?.id ?? null)) {
+            setLibrary(lib);
+          }
           const artworkMap = new Map(tracked.map((t) => [t.media_item_id, t]));
           setTrackedArtwork(artworkMap);
 
@@ -668,7 +883,52 @@ export default function MyMediaContent() {
       cancelAnimationFrame(frameId);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
+  }, [refreshKey, nav.server, pendingServerSync]);
+
+  useEffect(() => {
+    if (!conn || !pendingServerSync) return;
+
+    let cancelled = false;
+
+    async function pollPendingServerSync() {
+      try {
+        const [status, lib] = await Promise.all([
+          fetchSyncStatus(conn.nodeUrl, conn.adminToken, pendingServerSync.serverId),
+          fetchMediaLibrary(pendingServerSync.serverId),
+        ]);
+        if (cancelled) return;
+
+        const itemCount = lib.movies.length + lib.shows.length + lib.collections.length;
+        const finishedAfterStart =
+          !!status.last_synced_at &&
+          new Date(status.last_synced_at).getTime() >= pendingServerSync.startedAt - 1000;
+
+        if (status.is_syncing) {
+          return;
+        }
+
+        if (itemCount > 0 || finishedAfterStart) {
+          setLibrary(lib);
+          setPendingServerSync(null);
+          setLoading(false);
+        }
+      } catch {
+        // Keep the preparing state visible while the newly added server settles.
+      }
+    }
+
+    void pollPendingServerSync();
+    const intervalId = window.setInterval(() => void pollPendingServerSync(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [conn, pendingServerSync]);
+
+  type SidebarLibrary = { serverId: string; serverName: string; name: string; type: "movie" | "show"; hasCollections: boolean };
+
+  const activeServerId = useMemo(() => nav.server ?? servers[0]?.id ?? null, [nav.server, servers]);
+  const activeServer = useMemo(() => servers.find((srv) => srv.id === activeServerId) ?? servers[0] ?? null, [servers, activeServerId]);
 
   useEffect(() => {
     if (!conn) return;
@@ -677,10 +937,10 @@ export default function MyMediaContent() {
     else if (nav.view === "season") itemId = nav.seasonId;
     if (!itemId) return;
     const id = itemId;
-    fetchMediaChildren(conn.nodeUrl, conn.adminToken, id)
+    fetchMediaChildren(conn.nodeUrl, conn.adminToken, id, activeServerId)
       .then((items) => { setChildren(items); setChildrenForId(id); })
       .catch(() => { setChildren([]); setChildrenForId(id); });
-  }, [nav, conn]);
+  }, [nav, conn, activeServerId]);
 
   const seasonShowTmdbId = nav.view === "season" ? nav.showTmdbId : null;
   const seasonSeasonIndex = nav.view === "season" ? nav.seasonIndex : null;
@@ -709,39 +969,36 @@ export default function MyMediaContent() {
     [library?.collections],
   );
 
-  type SidebarLibrary = { name: string; type: "movie" | "show"; hasCollections: boolean };
-
   const sidebarLibraries = useMemo((): SidebarLibrary[] => {
-    const srv = servers[0];
-    if (!srv || !library) return [];
-    // Movie libraries: has collections if any movie in that library has collection_ids.
-    // This is reliable even before library_title is populated on collection items.
     const movieLibsWithCollections = new Set<string>();
-    for (const movie of library.movies) {
+    for (const movie of library?.movies ?? []) {
       if (movie.library_title && (movie.collection_ids?.length ?? 0) > 0) {
         movieLibsWithCollections.add(movie.library_title);
       }
     }
     const collectionLibs = new Set(
-      library.collections.map((c) => c.library_title).filter(Boolean) as string[],
+      (library?.collections ?? []).map((c) => c.library_title).filter(Boolean) as string[],
     );
-    // TV libraries: has collections if any collection item has a matching library_title.
     const tvCollectionLibs = new Set(
-      library.collections.map((c) => c.library_title).filter(Boolean) as string[]
+      (library?.collections ?? []).map((c) => c.library_title).filter(Boolean) as string[]
     );
-    return [
+    return servers.flatMap((srv) => [
       ...srv.movie_libraries.map((name) => ({
+        serverId: srv.id,
+        serverName: srv.name,
         name,
         type: "movie" as const,
-        hasCollections: movieLibsWithCollections.has(name) || collectionLibs.has(name),
+        hasCollections: srv.id === activeServerId && (movieLibsWithCollections.has(name) || collectionLibs.has(name)),
       })),
       ...srv.tv_libraries.map((name) => ({
+        serverId: srv.id,
+        serverName: srv.name,
         name,
         type: "show" as const,
-        hasCollections: tvCollectionLibs.has(name),
+        hasCollections: srv.id === activeServerId && tvCollectionLibs.has(name),
       })),
-    ];
-  }, [servers, library]);
+    ]);
+  }, [servers, library, activeServerId]);
 
   const activeLibrary = useMemo(() => {
     if (nav.library) return nav.library;
@@ -844,11 +1101,11 @@ export default function MyMediaContent() {
   const showListSearch = showAZRail;
 
   function goToLibrary(lib: SidebarLibrary) {
-    navigate({ view: lib.type === "movie" ? "movies" : "shows", library: lib.name });
+    navigate({ view: lib.type === "movie" ? "movies" : "shows", library: lib.name, server: lib.serverId });
   }
 
   function goToLibraryCollections(lib: SidebarLibrary) {
-    navigate({ view: "collections", library: lib.name });
+    navigate({ view: "collections", library: lib.name, server: lib.serverId });
   }
 
   function clearListFilter() {
@@ -863,21 +1120,51 @@ export default function MyMediaContent() {
   }
 
   if (!conn) {
-    return <Alert severity="info" sx={{ m: 3 }}>{t("noConnection")}</Alert>;
+    return <NoMediaServersPage canLaunchWizard={false} />;
   }
   if (loading) {
     return (
-      <Stack alignItems="center" spacing={2} sx={{ py: 8 }}>
-        <CircularProgress />
-        <Typography color="text.secondary">{t("loading")}</Typography>
-      </Stack>
+      <>
+        <MediaServerWizard
+          open={mediaServerWizardOpen}
+          connection={conn}
+          onClose={() => setMediaServerWizardOpen(false)}
+          onAdded={handleMediaServerAdded}
+        />
+        <Stack alignItems="center" spacing={2} sx={{ py: 8 }}>
+          <CircularProgress />
+          <Typography color="text.secondary">{t("loading")}</Typography>
+        </Stack>
+      </>
     );
   }
   if (error) return <Alert severity="error" sx={{ m: 3 }}>{error}</Alert>;
   if (servers.length === 0) {
-    return <NoMediaServersPage />;
+    return (
+      <>
+        <MediaServerWizard
+          open={mediaServerWizardOpen}
+          connection={conn}
+          onClose={() => setMediaServerWizardOpen(false)}
+          onAdded={handleMediaServerAdded}
+        />
+        <NoMediaServersPage canLaunchWizard onLaunchWizard={() => setMediaServerWizardOpen(true)} />
+      </>
+    );
   }
-  if (!library) return <Alert severity="warning" sx={{ m: 3 }}>{t("notConfigured")}</Alert>;
+  if (!library) {
+    return (
+      <>
+        <MediaServerWizard
+          open={mediaServerWizardOpen}
+          connection={conn}
+          onClose={() => setMediaServerWizardOpen(false)}
+          onAdded={handleMediaServerAdded}
+        />
+        <MediaLibraryPreparingPage />
+      </>
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -972,7 +1259,7 @@ export default function MyMediaContent() {
         : nav.view === "shows"
           ? t("tvShows").toUpperCase()
           : t("collections").toUpperCase();
-      const serverLabel = (servers[0]?.name ?? t("title")).toUpperCase();
+      const serverLabel = (activeServer?.name ?? t("title")).toUpperCase();
       const hasActiveFilter = listSearch.trim().length > 0;
 
       return hasActiveFilter ? (
@@ -1048,7 +1335,7 @@ export default function MyMediaContent() {
           {t("showLibrarySubheading", {
             seasons: showItem.child_count ?? 0,
             episodes: showItem.leaf_count ?? 0,
-            server: servers[0]?.name ?? "",
+            server: activeServer?.name ?? "",
           })}
         </Typography>
       );
@@ -1059,7 +1346,7 @@ export default function MyMediaContent() {
     }
 
     if (nav.view === "season" && !childrenLoading && children.length > 0) {
-      const serverLabel = servers[0]?.name ?? t("title");
+      const serverLabel = activeServer?.name ?? t("title");
       if (tmdbSeasonLoading) {
         return (
           <Stack direction="row" alignItems="center" spacing={1}>
@@ -1182,7 +1469,7 @@ export default function MyMediaContent() {
           <MovieMediaDetail
             item={nav.item}
             conn={conn!}
-            serverName={servers[0]?.name}
+            serverName={activeServer?.name}
           />
         );
 
@@ -1202,7 +1489,7 @@ export default function MyMediaContent() {
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
             onTrack={(id, artwork) => setTrackedArtwork((prev) => new Map(prev).set(id, artwork))}
             onNavigateToMovie={(movie) => navigate({ view: "movie", item: movie, fromCollectionId: nav.id, fromCollectionTitle: nav.title, library: activeLibrary })}
-            serverName={servers[0]?.name}
+            serverName={activeServer?.name}
             onHeaderStatusChange={setCollectionHeaderStatus}
           />
         ) : <Typography color="text.secondary">{noItems}</Typography>;
@@ -1223,7 +1510,7 @@ export default function MyMediaContent() {
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
             onTrack={(id, artwork) => setTrackedArtwork((prev) => new Map(prev).set(id, artwork))}
             onViewEpisodes={(season) => navigate({ view: "season", showId: nav.id, showTitle: nav.title, showTmdbId: showItem.tmdb_id, seasonId: season.id, seasonIndex: season.index, title: season.title, library: activeLibrary })}
-            serverName={servers[0]?.name}
+            serverName={activeServer?.name}
           />
         ) : <Typography color="text.secondary">{noItems}</Typography>;
       }
@@ -1246,7 +1533,7 @@ export default function MyMediaContent() {
             onMarkRetry={markRetry}
             onUntrack={(id) => setTrackedArtwork((prev) => { const next = new Map(prev); next.delete(id); return next; })}
             onTrack={(id, artwork) => setTrackedArtwork((prev) => new Map(prev).set(id, artwork))}
-            serverName={servers[0]?.name}
+            serverName={activeServer?.name}
             tmdbEpisodes={tmdbSeasonEpisodes}
             tmdbEpisodesLoading={tmdbSeasonLoading}
           />
@@ -1258,6 +1545,12 @@ export default function MyMediaContent() {
 
   return (
     <>
+    <MediaServerWizard
+      open={mediaServerWizardOpen}
+      connection={conn}
+      onClose={() => setMediaServerWizardOpen(false)}
+      onAdded={handleMediaServerAdded}
+    />
     <Box sx={{
       display: "flex",
       flexDirection: "column",
@@ -1317,7 +1610,7 @@ export default function MyMediaContent() {
           sx={{
             position: "absolute",
             inset: 0,
-            opacity: 0.04,
+            opacity: 0.08,
             pointerEvents: "none",
             zIndex: 0,
             backgroundImage: (theme) => {
@@ -1411,7 +1704,8 @@ export default function MyMediaContent() {
             <AccordionDetails sx={{ p: 0 }}>
               <List dense disablePadding>
                 {sidebarLibraries.map((lib) => {
-                  const isActive = activeLibrary === lib.name;
+                  if (lib.serverId !== srv.id) return null;
+                  const isActive = activeServerId === lib.serverId && activeLibrary === lib.name;
                   const isLibraryView =
                     nav.view === "movies" ||
                     nav.view === "shows" ||
@@ -1425,7 +1719,7 @@ export default function MyMediaContent() {
                     ? <MovieOutlinedIcon fontSize="small" />
                     : <TvOutlinedIcon fontSize="small" />;
                   return (
-                    <Fragment key={lib.name}>
+                    <Fragment key={`${lib.serverId}:${lib.type}:${lib.name}`}>
                       <ListItem disablePadding>
                         <ListItemButton
                           selected={isActive && (!lib.hasCollections ? isLibraryView || isCollectionView : false)}

@@ -2106,10 +2106,13 @@ export default function StudioWorkspace() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nav = useMemo(() => navFromParams(searchParams), [searchParams]);
-  const activeThemeId = searchParams.get("themeFilter") ?? "";
+  const rawNav = useMemo(() => navFromParams(searchParams), [searchParams]);
+  const rawThemeFilter = searchParams.get("themeFilter") ?? "";
+  const activeThemeId = rawThemeFilter && themes.some((theme) => theme.theme_id === rawThemeFilter)
+    ? rawThemeFilter
+    : (themes[0]?.theme_id ?? "");
   function setActiveThemeId(id: string) {
-    router.push(`/studio${navToSearch(nav, id || undefined)}`);
+    router.push(`/studio${navToSearch(rawNav, id || undefined)}`);
   }
   const navigate = useCallback((next: NavState) => {
     // Sync the theme filter when entering a theme or list view; otherwise preserve the current filter.
@@ -2140,8 +2143,8 @@ export default function StudioWorkspace() {
   const [detailHeaderExtra, setDetailHeaderExtra] = useState<React.ReactNode | null>(null);
 
   useEffect(() => {
-    if (nav.view !== "media") setDetailHeaderExtra(null);
-  }, [nav.view]);
+    if (rawNav.view !== "media") setDetailHeaderExtra(null);
+  }, [rawNav.view]);
 
   // Pinned collections — persisted on the node so they're available on any device
   const [pinnedCollections, setPinnedCollections] = useState<{ tmdbId: number; title: string }[]>([]);
@@ -2160,9 +2163,37 @@ export default function StudioWorkspace() {
   }
 
   const [pinnedMovies, setPinnedMovies] = useState<{ tmdbId: number; title: string }[]>([]);
+  const pinnedMoviesRef = { current: pinnedMovies };
+  pinnedMoviesRef.current = pinnedMovies;
   function savePinnedMovies(next: { tmdbId: number; title: string }[], c = conn) {
     setPinnedMovies(next);
     if (c) void saveSetting(c.nodeUrl, c.adminToken, c.creatorId, "studio_pinned_movies", next);
+  }
+
+  function savePinnedCollectionAndAbsorbMovies(
+    collection: { tmdbId: number; title: string },
+    options?: { absorbMovieId?: number }
+  ) {
+    const nextCollections = pinnedCollections.filter((c) => c.tmdbId !== collection.tmdbId);
+    nextCollections.push(collection);
+    savePinnedCollections(nextCollections);
+
+    const absorbMovieId = options?.absorbMovieId;
+    if (absorbMovieId != null) {
+      const filtered = pinnedMoviesRef.current.filter((m) => m.tmdbId !== absorbMovieId);
+      if (filtered.length !== pinnedMoviesRef.current.length) {
+        savePinnedMovies(filtered);
+      }
+    }
+
+    void fetchTmdbCollection(collection.tmdbId).then((data) => {
+      const partIds = new Set((data?.parts ?? []).map((part) => part.id));
+      if (partIds.size === 0) return;
+      const filtered = pinnedMoviesRef.current.filter((m) => !partIds.has(m.tmdbId));
+      if (filtered.length !== pinnedMoviesRef.current.length) {
+        savePinnedMovies(filtered);
+      }
+    }).catch(() => undefined);
   }
 
   // Delete media group confirmation
@@ -2180,7 +2211,7 @@ export default function StudioWorkspace() {
     } else if (group.type === "movie") {
       savePinnedMovies(pinnedMovies.filter((pm) => pm.tmdbId !== group.tmdbId));
     }
-    if (nav.view === "media" && nav.mediaKey === group.key) navigate({ view: "root" });
+    if (rawNav.view === "media" && rawNav.mediaKey === group.key) navigate({ view: "root" });
     setUnpinConfirm(null);
   }
 
@@ -2202,7 +2233,7 @@ export default function StudioWorkspace() {
     } else if (group.type === "movie") {
       savePinnedMovies(pinnedMovies.filter((pm) => pm.tmdbId !== group.tmdbId));
     }
-    if (nav.view === "media" && nav.mediaKey === group.key) navigate({ view: "root" });
+    if (rawNav.view === "media" && rawNav.mediaKey === group.key) navigate({ view: "root" });
     setDeleteGroupConfirm(null);
     await loadData();
   }
@@ -2222,7 +2253,7 @@ export default function StudioWorkspace() {
     const observer = new ResizeObserver(() => update());
     observer.observe(node);
     return () => observer.disconnect();
-  }, [nav.view, searchParams, tmdbCollectionData, tmdbTvShowData, tmdbMovieData, themes]);
+  }, [rawNav.view, searchParams, tmdbCollectionData, tmdbTvShowData, tmdbMovieData, themes]);
 
   async function handleLookupShow() {
     const raw = addShowInput.trim();
@@ -2323,9 +2354,10 @@ export default function StudioWorkspace() {
   function handleAddMovie() {
     if (!addMovieResult) return;
     if (addMovieResult.kind === "collection") {
-      const next = pinnedCollections.filter((c) => c.tmdbId !== addMovieResult.collectionId);
-      next.push({ tmdbId: addMovieResult.collectionId, title: addMovieResult.collectionName });
-      savePinnedCollections(next);
+      savePinnedCollectionAndAbsorbMovies({
+        tmdbId: addMovieResult.collectionId,
+        title: addMovieResult.collectionName,
+      });
       navigate({ view: "media", mediaKey: `collection:${addMovieResult.collectionId}` });
     } else {
       const next = pinnedMovies.filter((m) => m.tmdbId !== addMovieResult.movieId);
@@ -2381,9 +2413,7 @@ export default function StudioWorkspace() {
 
   function handleAddCollection() {
     if (!addCollectionLookup) return;
-    const next = pinnedCollections.filter((c) => c.tmdbId !== addCollectionLookup.tmdbId);
-    next.push({ tmdbId: addCollectionLookup.tmdbId, title: addCollectionLookup.title });
-    savePinnedCollections(next);
+    savePinnedCollectionAndAbsorbMovies(addCollectionLookup);
     navigate({ view: "media", mediaKey: `collection:${addCollectionLookup.tmdbId}` });
     closeAddCollection();
   }
@@ -2710,12 +2740,12 @@ export default function StudioWorkspace() {
 
   // Fetch TMDB collection data when navigating into a collection view and pass it as a prop.
   useEffect(() => {
-    if (nav.view !== "media" || !nav.mediaKey.startsWith("collection:")) {
+    if (rawNav.view !== "media" || !rawNav.mediaKey.startsWith("collection:")) {
       setTmdbCollectionData(null);
       setTmdbCollectionState("idle");
       return;
     }
-    const collId = Number(nav.mediaKey.split(":")[1]);
+    const collId = Number(rawNav.mediaKey.split(":")[1]);
     setTmdbCollectionData(null);
     setTmdbCollectionState("loading");
     let cancelled = false;
@@ -2726,16 +2756,16 @@ export default function StudioWorkspace() {
       }
     });
     return () => { cancelled = true; };
-  }, [nav]);
+  }, [rawNav]);
 
   // Fetch TMDB TV show data when navigating into a show view
   useEffect(() => {
-    if (nav.view !== "media" || !nav.mediaKey.startsWith("show:")) {
+    if (rawNav.view !== "media" || !rawNav.mediaKey.startsWith("show:")) {
       setTmdbTvShowData(null);
       setTmdbTvShowState("idle");
       return;
     }
-    const showId = Number(nav.mediaKey.split(":")[1]);
+    const showId = Number(rawNav.mediaKey.split(":")[1]);
     setTmdbTvShowData(null);
     setTmdbTvShowState("loading");
     let cancelled = false;
@@ -2757,16 +2787,16 @@ export default function StudioWorkspace() {
       }
     });
     return () => { cancelled = true; };
-  }, [nav]);
+  }, [rawNav]);
 
   // Fetch TMDB movie data when navigating into a standalone movie view
   useEffect(() => {
-    if (nav.view !== "media" || !nav.mediaKey.startsWith("movie:")) {
+    if (rawNav.view !== "media" || !rawNav.mediaKey.startsWith("movie:")) {
       setTmdbMovieData(null);
       setTmdbMovieState("idle");
       return;
     }
-    const movieId = Number(nav.mediaKey.split(":")[1]);
+    const movieId = Number(rawNav.mediaKey.split(":")[1]);
     setTmdbMovieData(null);
     setTmdbMovieState("loading");
     let cancelled = false;
@@ -2777,7 +2807,7 @@ export default function StudioWorkspace() {
       }
     });
     return () => { cancelled = true; };
-  }, [nav]);
+  }, [rawNav]);
 
   // Sidebar is purely the pinned list — poster counts + previews merged in from actual poster data
   const sidebarCollections: MediaGroup[] = pinnedCollections.map((pc) => {
@@ -2815,6 +2845,88 @@ export default function StudioWorkspace() {
       posterCount: derived?.posterCount ?? 0,
     };
   }).sort((a, b) => a.title.localeCompare(b.title));
+
+  const nav = useMemo<NavState>(() => {
+    const themeIds = new Set(themes.map((theme) => theme.theme_id));
+    const knownKeys = new Set([
+      ...sidebarCollections.map((group) => group.key),
+      ...sidebarTvShows.map((group) => group.key),
+      ...sidebarMovies.map((group) => group.key),
+      ...mediaGroups.map((group) => group.key),
+    ]);
+
+    if (rawNav.view === "theme") {
+      return themeIds.has(rawNav.themeId) ? rawNav : { view: "root" };
+    }
+
+    if (rawNav.view === "list") {
+      return themeIds.has(rawNav.themeId) ? rawNav : { view: "root" };
+    }
+
+    if (rawNav.view === "media") {
+      return knownKeys.has(rawNav.mediaKey) ? rawNav : { view: "root" };
+    }
+
+    return rawNav;
+  }, [mediaGroups, rawNav, sidebarCollections, sidebarMovies, sidebarTvShows, themes]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const themeIds = new Set(themes.map((theme) => theme.theme_id));
+    const params = new URLSearchParams(searchParams.toString());
+    let changed = false;
+
+    const scrubThemeParam = (name: "themeId" | "themeFilter" | "fromListThemeId") => {
+      const value = params.get(name);
+      if (value && !themeIds.has(value)) {
+        params.delete(name);
+        changed = true;
+      }
+    };
+
+    scrubThemeParam("themeId");
+    scrubThemeParam("themeFilter");
+    scrubThemeParam("fromListThemeId");
+
+    if (rawNav.view === "theme" && !themeIds.has(rawNav.themeId)) {
+      params.delete("view");
+      params.delete("themeId");
+      changed = true;
+    }
+
+    if (rawNav.view === "list" && !themeIds.has(rawNav.themeId)) {
+      params.delete("view");
+      params.delete("type");
+      params.delete("themeId");
+      params.delete("fromListType");
+      params.delete("fromListThemeId");
+      changed = true;
+    }
+
+    if (rawNav.view === "media") {
+      const knownKeys = new Set([
+        ...sidebarCollections.map((group) => group.key),
+        ...sidebarTvShows.map((group) => group.key),
+        ...sidebarMovies.map((group) => group.key),
+        ...mediaGroups.map((group) => group.key),
+      ]);
+
+      if (!knownKeys.has(rawNav.mediaKey)) {
+        params.delete("view");
+        params.delete("key");
+        params.delete("season");
+        params.delete("fromListType");
+        params.delete("fromListThemeId");
+        changed = true;
+      }
+    }
+
+    if (!changed) return;
+
+    const next = params.toString();
+    router.replace(next ? `/studio?${next}` : "/studio");
+  }, [loading, mediaGroups, rawNav, rawThemeFilter, router, searchParams, sidebarCollections, sidebarMovies, sidebarTvShows, themes]);
 
   // Batch-fetch TMDB collection data for all pinned collections when the collections list view is shown
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3141,9 +3253,7 @@ export default function StudioWorkspace() {
             pinnedMovies,
             pinnedTvShows,
             onAddCollection: (id, title) => {
-              const next = pinnedCollections.filter((c) => c.tmdbId !== id);
-              next.push({ tmdbId: id, title });
-              savePinnedCollections(next);
+              savePinnedCollectionAndAbsorbMovies({ tmdbId: id, title });
               navigate({ view: "media", mediaKey: `collection:${id}` });
             },
             onAddMovie: (id, title) => {
@@ -3966,7 +4076,7 @@ export default function StudioWorkspace() {
           sx={{
             position: "absolute",
             inset: 0,
-            opacity: 0.04,
+            opacity: 0.08,
             pointerEvents: "none",
             zIndex: 0,
             backgroundImage: (theme) => {
