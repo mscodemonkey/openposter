@@ -10,6 +10,38 @@ export type IssuerUser = {
 
 export type SignupResponse = { user: IssuerUser; token: string };
 export type LoginResponse = { user: IssuerUser; token: string };
+export type InspectNodeResponse = {
+  node: {
+    node_id: string;
+    status: "unclaimed" | "owned_by_you" | "owned_by_other";
+    owner_user_id: string | null;
+    owner_name: string | null;
+  };
+  node_info: {
+    name?: string;
+    operator?: { name?: string; display_name?: string | null };
+  } | null;
+};
+export type ClaimNodeResponse = {
+  node: {
+    node_id: string;
+    owner_user_id: string;
+    owner_name: string | null;
+  };
+  node_info: unknown;
+};
+export type CheckPublicUrlResponse = {
+  public_url: string;
+  reachable: boolean;
+  matches_node: boolean;
+  details?: {
+    url?: string;
+    status?: number;
+    fetched_node_id?: string;
+    name?: string;
+    error?: string;
+  };
+};
 
 export function issuerBase(): string {
   return ISSUER_BASE_URL.replace(/\/+$/, "");
@@ -90,8 +122,8 @@ export async function issuerClaimHandle(token: string, handle: string): Promise<
 
 export async function issuerClaimNode(
   token: string,
-  params: { local_url: string; node_admin_token: string }
-): Promise<unknown> {
+  params: { local_url: string; node_admin_token: string; owner_name?: string }
+): Promise<ClaimNodeResponse> {
   const r = await fetch(`${issuerBase()}/v1/nodes/claim`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
@@ -100,34 +132,37 @@ export async function issuerClaimNode(
   if (!r.ok) {
     throw new Error(await readErrorMessage(r, `claim node failed: ${r.status}`));
   }
-  return (await r.json()) as unknown;
+  return (await r.json()) as ClaimNodeResponse;
 }
 
-export async function issuerStartUrlClaim(token: string, public_url: string): Promise<unknown> {
-  const r = await fetch(`${issuerBase()}/v1/url_claims/start`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify({ public_url }),
-  });
-  if (!r.ok) {
-    throw new Error(await readErrorMessage(r, `start url claim failed: ${r.status}`));
-  }
-  return (await r.json()) as unknown;
-}
-
-export async function issuerVerifyUrlClaim(
+export async function issuerInspectNode(
   token: string,
-  params: { public_url: string; method: "dns" | "http" }
-): Promise<unknown> {
-  const r = await fetch(`${issuerBase()}/v1/url_claims/verify`, {
+  params: { local_url: string; node_admin_token: string }
+): Promise<InspectNodeResponse> {
+  const r = await fetch(`${issuerBase()}/v1/nodes/inspect`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify(params),
   });
   if (!r.ok) {
-    throw new Error(await readErrorMessage(r, `verify url claim failed: ${r.status}`));
+    throw new Error(await readErrorMessage(r, `inspect node failed: ${r.status}`));
   }
-  return (await r.json()) as unknown;
+  return (await r.json()) as InspectNodeResponse;
+}
+
+export async function issuerCheckPublicUrl(
+  token: string,
+  params: { node_id: string; public_url: string }
+): Promise<CheckPublicUrlResponse> {
+  const r = await fetch(`${issuerBase()}/v1/nodes/check_public_url`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify(params),
+  });
+  if (!r.ok) {
+    throw new Error(await readErrorMessage(r, `check public url failed: ${r.status}`));
+  }
+  return (await r.json()) as CheckPublicUrlResponse;
 }
 
 export async function issuerAttachUrl(

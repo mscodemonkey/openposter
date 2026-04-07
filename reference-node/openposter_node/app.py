@@ -65,6 +65,13 @@ async def dev_reset(request: Request, token: str = ""):
     seed_file = data_dir / "seed.json"
     if seed_file.exists():
         seed_file.unlink()
+
+    cfg = request.app.state.cfg
+    if cfg.announce_to:
+        from .announce import schedule_announce
+
+        schedule_announce(request.app, cfg.announce_to, cfg.announce_url or cfg.base_url)
+
     return {"ok": True, "wiped": True}
 
 attach_lifecycle(app)

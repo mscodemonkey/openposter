@@ -30,7 +30,7 @@ const RESET_URLS = [
 ].map((url, index) => {
   if (index <= 2) return url;
   return `${url}/dev/reset?token=${encodeURIComponent(process.env.OPENPOSTER_TEST_RESET_TOKEN ?? "dev-reset")}`;
-});
+}).concat("http://localhost:32401/dev/reset?token=dev-reset");
 
 const HEALTH_URLS = [
   process.env.OPENPOSTER_DIRECTORY_URL ?? "http://localhost:8084/v1/health",

@@ -48,7 +48,7 @@ jobs:
           if [ -n "${OPENPOSTER_E2E_PLEX_BASE_URL}" ] && [ -n "${OPENPOSTER_E2E_PLEX_TOKEN}" ]; then
             echo "OPENPOSTER_E2E_HAS_PLEX=true" >> "$GITHUB_ENV"
             echo "Plex-backed My Media E2E coverage: enabled (env)" >> "$GITHUB_STEP_SUMMARY"
-          elif [ -f "reference-node/data-a/plex_settings.json" ] || [ -f "reference-node/data-a/media_servers.json" ]; then
+          elif [ -f "e2e/fixtures/plex_settings.json" ] || [ -f "e2e/fixtures/media_servers.json" ]; then
             echo "OPENPOSTER_E2E_HAS_PLEX=true" >> "$GITHUB_ENV"
             echo "Plex-backed My Media E2E coverage: enabled (fixture file)" >> "$GITHUB_STEP_SUMMARY"
           else

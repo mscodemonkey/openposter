@@ -30,7 +30,20 @@ test("collection ZIP import reuses the collection poster slot cleanly", async ({
     mediaType: "collection",
     tmdbId: 645,
     collectionTmdbId: 645,
-    title: "James Bond Collection",
+    title: "Existing collection poster name",
+    themeId: theme.theme_id,
+    language: "en",
+    published: true,
+    mimeType: "image/jpeg",
+  });
+
+  await uploadPoster({
+    fileBuffer: extractZipEntry(BOND_COLLECTION_ZIP, "James Bond Collection  - Backdrop.jpg"),
+    fileName: "James Bond Collection  - Backdrop.jpg",
+    mediaType: "backdrop",
+    tmdbId: 645,
+    collectionTmdbId: 645,
+    title: "Existing collection backdrop name",
     themeId: theme.theme_id,
     language: "en",
     published: true,
@@ -48,7 +61,7 @@ test("collection ZIP import reuses the collection poster slot cleanly", async ({
   await importButton.click();
   await expect(importDialog).toBeHidden({ timeout: 120_000 });
 
-  await expect(page.getByRole("link", { name: "James Bond Collection", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "James Bond Collection", exact: true })).toBeVisible();
 
   const collectionPosters = (await listPosters()).filter((poster) =>
     poster.media.type === "collection"
@@ -59,6 +72,18 @@ test("collection ZIP import reuses the collection poster slot cleanly", async ({
   );
 
   expect(collectionPosters).toHaveLength(1);
-  expect(collectionPosters[0]?.media.title).toBe("James Bond Collection");
+  expect(collectionPosters[0]?.media.title).toBe("Existing collection poster name");
   expect(collectionPosters[0]?.published).toBe(false);
+
+  const collectionBackdrops = (await listPosters()).filter((poster) =>
+    poster.media.type === "backdrop"
+    && poster.kind === "background"
+    && poster.media.tmdb_id === 645
+    && poster.media.theme_id === theme.theme_id
+    && poster.language === "en",
+  );
+
+  expect(collectionBackdrops).toHaveLength(1);
+  expect(collectionBackdrops[0]?.media.title).toBe("Existing collection backdrop name");
+  expect(collectionBackdrops[0]?.published).toBe(false);
 });

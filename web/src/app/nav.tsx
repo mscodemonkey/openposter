@@ -26,7 +26,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import MenuIcon from "@mui/icons-material/Menu";
 import SettingsIcon from "@mui/icons-material/Settings";
 
-import { loadCreatorConnection } from "@/lib/storage";
+import { loadCreatorConnection, validateCreatorConnection } from "@/lib/storage";
 import { fetchSyncStatus } from "@/lib/media-server";
 import OPLogo from "@/components/OPLogo";
 
@@ -46,15 +46,21 @@ export default function Nav() {
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
-    function refresh() {
-      const conn = loadCreatorConnection();
+    let active = true;
+
+    async function refresh() {
+      const conn = await validateCreatorConnection();
+      if (!active) return;
       setConnected(Boolean(conn));
       setNodeUrl(conn?.nodeUrl ?? null);
       if (!conn) setIsSyncing(false);
     }
-    refresh();
-    const timer = setInterval(refresh, 2000);
-    return () => clearInterval(timer);
+    void refresh();
+    const timer = setInterval(() => { void refresh(); }, 2000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, []);
 
   // Poll Plex sync status — fast while syncing, slow at idle

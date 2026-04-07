@@ -53,8 +53,8 @@ test("my media can apply OpenPoster movie square artwork", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Dr\. No/i })).toBeVisible();
 
   const squareCard = page.getByRole("button", {
-    name: "Dr. No square options",
-  }).first();
+    name: "Card options",
+  }).nth(2);
   await squareCard.click();
   await page.getByRole("menuitem", {
     name: "Choose square artwork from OpenPoster",

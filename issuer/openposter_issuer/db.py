@@ -24,6 +24,44 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class EmailChallenge(Base):
+    __tablename__ = "email_challenges"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    email: Mapped[str] = mapped_column(String, index=True)
+    code_hash: Mapped[str] = mapped_column(String)
+    purpose: Mapped[str] = mapped_column(String)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    attempt_count: Mapped[str] = mapped_column(String, default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class PasskeyCredential(Base):
+    __tablename__ = "passkey_credentials"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.user_id"), index=True)
+    credential_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    credential_data: Mapped[str] = mapped_column(String)
+    label: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class WebauthnChallenge(Base):
+    __tablename__ = "webauthn_challenges"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    email: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.user_id"), nullable=True, index=True)
+    purpose: Mapped[str] = mapped_column(String)
+    state_json: Mapped[str] = mapped_column(String)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class CreatorHandle(Base):
     __tablename__ = "creator_handles"
 
@@ -38,6 +76,7 @@ class Node(Base):
 
     node_id: Mapped[str] = mapped_column(String, primary_key=True)  # UUID
     owner_user_id: Mapped[str] = mapped_column(String, ForeignKey("users.user_id"), index=True)
+    owner_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

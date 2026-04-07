@@ -11,7 +11,11 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
-import Divider from "@mui/material/Divider";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 import Container from "@mui/material/Container";
 import MenuItem from "@mui/material/MenuItem";
@@ -20,7 +24,6 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
-import PlexMark from "@/components/PlexMark";
 import MediaServerWizard from "@/components/MediaServerWizard";
 
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -31,7 +34,7 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { ISSUER_BASE_URL } from "@/lib/issuer";
 import { applyPosterSize, getPosterSize, type PosterSize } from "@/lib/grid-sizes";
 import { clearIssuerSession, loadIssuerUser } from "@/lib/issuer_storage";
-import { clearCreatorConnection, loadCreatorConnection, saveCreatorConnection } from "@/lib/storage";
+import { clearCreatorConnection, loadCreatorConnection, validateCreatorConnection, type CreatorConnection } from "@/lib/storage";
 import { adminUploadCreatorBackdrop } from "@/lib/themes";
 import { fetchSyncStatus, triggerSync, type SyncStatus } from "@/lib/media-server";
 import { listMediaServers, removeMediaServer, type MediaServerConfig } from "@/lib/media-servers";
@@ -44,10 +47,11 @@ export default function SettingsPage() {
   const tms = useTranslations("mediaServers");
   const ts = useTranslations("studio");
   const locale = useLocale();
-  const [nodeUrl, setNodeUrl] = useState("http://localhost:8081");
   const [adminToken, setAdminToken] = useState("");
   const [connStatus, setConnStatus] = useState<string | null>(null);
   const [issuerUser, setIssuerUser] = useState<ReturnType<typeof loadIssuerUser>>(null);
+  const [creatorConnection, setCreatorConnection] = useState<CreatorConnection | null>(null);
+  const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false);
 
   // Media servers state
   const [servers, setServers] = useState<MediaServerConfig[]>([]);
@@ -66,33 +70,54 @@ export default function SettingsPage() {
   const [addPlexLabels, setAddPlexLabels] = useState(true);
   const [removingLabels, setRemovingLabels] = useState(false);
   const [defaultLanguage, setDefaultLanguage] = useState("en");
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   useEffect(() => {
-    setPosterSize(getPosterSize());
-    const conn = loadCreatorConnection();
-    if (conn) {
-      setNodeUrl(conn.nodeUrl);
-      setAdminToken(conn.adminToken);
-    }
-    setIssuerUser(loadIssuerUser());
+    let active = true;
 
-    if (!conn) return;
-    getArtworkSettings(conn.nodeUrl, conn.adminToken).then((s) => {
-      setAutoUpdateArtwork(s.auto_update_artwork);
-      setAddPlexLabels(s.add_plex_labels);
-    });
-    const cid = conn.creatorId ?? "";
-    fetchSetting<string>(conn.nodeUrl, conn.adminToken, cid, "studio_default_language").then((lang) => {
-      setDefaultLanguage(lang ?? "en");
-    });
-    listMediaServers(conn.nodeUrl, conn.adminToken).then((list) => {
-      setServers(list);
-      list.forEach((srv) => {
-        fetchSyncStatus(conn.nodeUrl, conn.adminToken)
-          .then((status) => setSyncStatuses((prev) => ({ ...prev, [srv.id]: status })))
-          .catch(() => undefined);
+    async function hydrate() {
+      setPosterSize(getPosterSize());
+      const conn = await validateCreatorConnection();
+      if (!active) return;
+
+      if (conn) {
+        setAdminToken(conn.adminToken);
+        setCreatorConnection(conn);
+      } else {
+        setAdminToken("");
+        setCreatorConnection(null);
+        setServers([]);
+        setSyncStatuses({});
+      }
+      setIssuerUser(loadIssuerUser());
+
+      if (!conn) return;
+      getArtworkSettings(conn.nodeUrl, conn.adminToken).then((s) => {
+        if (!active) return;
+        setAutoUpdateArtwork(s.auto_update_artwork);
+        setAddPlexLabels(s.add_plex_labels);
       });
-    });
+      const cid = conn.creatorId ?? "";
+      fetchSetting<string>(conn.nodeUrl, conn.adminToken, cid, "studio_default_language").then((lang) => {
+        if (!active) return;
+        setDefaultLanguage(lang ?? "en");
+      });
+      listMediaServers(conn.nodeUrl, conn.adminToken).then((list) => {
+        if (!active) return;
+        setServers(list);
+        list.forEach((srv) => {
+          fetchSyncStatus(conn.nodeUrl, conn.adminToken)
+            .then((status) => {
+              if (!active) return;
+              setSyncStatuses((prev) => ({ ...prev, [srv.id]: status }));
+            })
+            .catch(() => undefined);
+        });
+      });
+    }
+
+    void hydrate();
+    return () => { active = false; };
   }, []);
 
   // Poll sync status for each server — faster while syncing
@@ -111,6 +136,11 @@ export default function SettingsPage() {
     }, interval);
     return () => clearInterval(id);
   }, [adminToken, servers, syncStatuses]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNowTs(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   async function handleRemoveServer(serverId: string) {
     const conn = loadCreatorConnection();
@@ -142,7 +172,7 @@ export default function SettingsPage() {
   }
 
   function syncTimeAgo(isoString: string): string {
-    const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+    const diff = Math.floor((nowTs - new Date(isoString).getTime()) / 1000);
     if (diff < 60) return `${diff}s`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
@@ -192,16 +222,12 @@ export default function SettingsPage() {
     }
   }
 
-  async function testConnection() {
-    setConnStatus(t("testing"));
-    try {
-      const base = nodeUrl.replace(/\/+$/, "");
-      const r = await fetch(base + "/v1/health");
-      if (!r.ok) throw new Error(`Health failed: ${r.status}`);
-      setConnStatus(t("testOk"));
-    } catch (e: unknown) {
-      setConnStatus(e instanceof Error ? e.message : String(e));
-    }
+  function disconnectNode() {
+    clearCreatorConnection();
+    setCreatorConnection(null);
+    setAdminToken("");
+    setDisconnectConfirmOpen(false);
+    setConnStatus(t("disconnected"));
   }
 
   return (
@@ -272,50 +298,40 @@ export default function SettingsPage() {
               {t("nodeAdminSession")}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {t("nodeAdminDesc")} <Link href="/onboarding">{tn("onboarding")}</Link>.
+              {t("nodeAdminDesc")}
             </Typography>
-
-            <TextField
-              label={t("localUrl")}
-              value={nodeUrl}
-              onChange={(e) => setNodeUrl(e.target.value)}
-              placeholder="http://192.168.1.10:8080"
-            />
-
-            <TextField
-              label={t("nodeAdminToken")}
-              value={adminToken}
-              onChange={(e) => setAdminToken(e.target.value)}
-              placeholder={t("nodeAdminTokenPlaceholder")}
-              type="password"
-            />
+            {creatorConnection && (
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                <Stack spacing={1}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    {t("connectedNow")}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {t("connectedNode", { url: creatorConnection.nodeUrl })}
+                  </Typography>
+                  {creatorConnection.creatorId && (
+                    <Typography variant="body2" color="text.secondary">
+                      {t("connectedCreator", { creatorId: creatorConnection.creatorId })}
+                    </Typography>
+                  )}
+                </Stack>
+              </Paper>
+            )}
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
               <Button
-                onClick={() => {
-                  saveCreatorConnection({ nodeUrl: nodeUrl.replace(/\/+$/, ""), adminToken, creatorId: issuerUser?.handle ?? "" });
-                  setConnStatus(t("saved"));
-                }}
-              >
-                {tc("save")}
-              </Button>
-              <Button variant="outlined" onClick={() => void testConnection()}>
-                {t("test")}
-              </Button>
-              <Button
                 color="error"
                 variant="outlined"
-                onClick={() => {
-                  clearCreatorConnection();
-                  setAdminToken("");
-                  setConnStatus(t("disconnected"));
-                }}
+                onClick={() => setDisconnectConfirmOpen(true)}
               >
                 {tn("disconnect")}
               </Button>
+              <Button component={Link} href="/onboarding" variant="text">
+                {t("reconnectViaOnboarding")}
+              </Button>
             </Stack>
 
-            {connStatus && <Alert severity={connStatus.startsWith("OK") ? "success" : "info"}>{connStatus}</Alert>}
+            {connStatus && <Alert severity="info">{connStatus}</Alert>}
           </Stack>
         </Paper>
 
@@ -488,9 +504,23 @@ export default function SettingsPage() {
           </Paper>
         )}
       </Stack>
+      <Dialog open={disconnectConfirmOpen} onClose={() => setDisconnectConfirmOpen(false)}>
+        <DialogTitle>{t("disconnectConfirmTitle")}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {t("disconnectConfirmBody")}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDisconnectConfirmOpen(false)}>{tc("cancel")}</Button>
+          <Button color="error" onClick={disconnectNode}>
+            {tn("disconnect")}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <MediaServerWizard
         open={mediaServerWizardOpen}
-        connection={adminToken ? { nodeUrl, adminToken } : null}
+        connection={creatorConnection && adminToken ? { nodeUrl: creatorConnection.nodeUrl, adminToken } : null}
         onClose={() => setMediaServerWizardOpen(false)}
         onAdded={(added) => {
           setServers((prev) => {

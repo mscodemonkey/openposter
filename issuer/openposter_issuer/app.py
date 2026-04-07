@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,8 +11,10 @@ from .routes.creator_routes import router as creator_router
 from .routes.nodes_routes import router as nodes_router
 from .routes.url_claim_routes import router as url_claim_router
 from .routes.subscription_routes import router as subscription_router
+from .routes.ui_routes import router as ui_router
 
 app = FastAPI(title="OpenPoster Issuer", version="0.1.0")
+app.mount("/static", StaticFiles(directory="/app/openposter_issuer/static"), name="static")
 
 # CORS: allow the local web UI to call the issuer from the browser.
 # (MVP: permissive; tighten later.)
@@ -46,7 +49,7 @@ async def dev_reset(request: Request, token: str = ""):
         return JSONResponse(status_code=404, content={"error": {"code": "not_found", "message": "not found"}})
     session = request.app.state.Session
     async with session() as s:
-        for table in ("theme_subscriptions", "collection_subscriptions", "tv_show_subscriptions", "favourite_creators", "user_preferences", "url_claims", "node_admins", "node_urls", "nodes", "creator_handles", "users"):
+        for table in ("webauthn_challenges", "passkey_credentials", "email_challenges", "theme_subscriptions", "collection_subscriptions", "tv_show_subscriptions", "favourite_creators", "user_preferences", "url_claims", "node_admins", "node_urls", "nodes", "creator_handles", "users"):
             await s.execute(text(f"DELETE FROM {table}"))
         await s.commit()
     return {"ok": True, "wiped": True}
@@ -76,6 +79,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 app.include_router(auth_router)
+app.include_router(ui_router)
 app.include_router(creator_router)
 app.include_router(nodes_router)
 app.include_router(url_claim_router)

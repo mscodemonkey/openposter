@@ -56,8 +56,8 @@ test("my media can subscribe to the creator of applied artwork", async ({ page }
   await expect(page.getByRole("heading", { name: /Dr\. No/i })).toBeVisible();
 
   const movieCard = page.getByRole("button", {
-    name: "Dr. No poster options",
-  }).first();
+    name: "Card options",
+  }).nth(0);
   await movieCard.click();
   await page.getByRole("menuitem", {
     name: "Choose a poster from OpenPoster",
@@ -97,10 +97,12 @@ test("my media can subscribe to the creator of applied artwork", async ({ page }
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden({ timeout: 15_000 });
 
-  const creatorSubscriptionButton = page.getByTestId(`creator-subscription-${fixtureCreatorId}`).first();
-  await expect(creatorSubscriptionButton).toBeVisible();
-  await creatorSubscriptionButton.click();
-  await page.getByRole("menuitem", { name: "Subscribe" }).click();
+  await movieCard.click();
+  const subscribeMenuItem = page.getByTestId(`creator-subscription-${fixtureCreatorId}`).first();
+  await expect(subscribeMenuItem).toBeVisible();
+  await subscribeMenuItem.evaluate((item) => {
+    (item as HTMLElement).click();
+  });
 
   await expect
     .poll(async () => {

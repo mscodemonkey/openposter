@@ -394,24 +394,23 @@ async function uploadItem(
     form.append("media_type", "collection");
     form.append("tmdb_id", String(k.tmdbId));
     form.append("collection_tmdb_id", String(k.collectionTmdbId));
-    form.append("title", k.title);
   } else if (k.tag === "collectionBackdrop") {
     form.append("media_type", "backdrop");
+    form.append("kind", "background");
     form.append("tmdb_id", String(k.tmdbId));
     form.append("collection_tmdb_id", String(k.collectionTmdbId));
   } else if (k.tag === "movie") {
     form.append("media_type", "movie");
     form.append("tmdb_id", String(k.tmdbId));
     form.append("collection_tmdb_id", String(k.collectionTmdbId));
-    form.append("title", k.title);
     form.append("year", String(k.year));
   } else if (k.tag === "showPoster") {
     form.append("media_type", "show");
     form.append("tmdb_id", String(k.tmdbId));
-    form.append("title", k.title);
     form.append("year", String(k.year));
   } else if (k.tag === "showBackdrop") {
     form.append("media_type", "backdrop");
+    form.append("kind", "background");
     form.append("tmdb_id", String(k.tmdbId));
     form.append("show_tmdb_id", String(k.showTmdbId));
   } else if (k.tag === "season") {

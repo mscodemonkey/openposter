@@ -108,9 +108,16 @@ test("my media can apply and reset an OpenPoster show backdrop", async ({ page }
     })
     .toBe(uploaded.poster_id);
 
-  const resetBackdropButton = page.getByRole("button", { name: "Reset to default backdrop" }).first();
+  await selectedBackdropCard.evaluate((button) => {
+    (button as HTMLButtonElement).click();
+  });
+  const resetBackdropButton = page.getByRole("menuitem", {
+    name: "Reset to default backdrop",
+  }).first();
   await expect(resetBackdropButton).toBeVisible();
-  await resetBackdropButton.click();
+  await resetBackdropButton.evaluate((item) => {
+    (item as HTMLElement).click();
+  });
 
   await expect
     .poll(async () => {

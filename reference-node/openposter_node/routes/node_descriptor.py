@@ -8,7 +8,8 @@ router = APIRouter()
 @router.get("/.well-known/openposter-node")
 async def node_descriptor(request: Request):
     cfg = request.app.state.cfg
-    node_id = request.app.state.node_id
+    node_id = request.app.state.node_uuid
+    legacy_node_id = request.app.state.node_id
     signing_info = request.app.state.signing_info
 
     base_url = cfg.base_url or str(request.base_url).rstrip("/")
@@ -17,6 +18,7 @@ async def node_descriptor(request: Request):
         "protocol": "openposter",
         "api_versions": ["v1"],
         "node_id": node_id,
+        "legacy_node_id": legacy_node_id,
         "name": cfg.node_name,
         "base_url": base_url,
         "operator": {

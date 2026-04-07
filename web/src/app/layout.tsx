@@ -4,9 +4,9 @@ import { Roboto } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
+import AppShell from "./AppShell";
 import EmotionCacheProvider from "./EmotionCacheProvider";
 import MuiProviders from "./mui-providers";
-import Nav from "./nav";
 import PosterSizeBootstrap from "./PosterSizeBootstrap";
 
 const roboto = Roboto({
@@ -36,8 +36,7 @@ export default async function RootLayout({
           <EmotionCacheProvider>
             <MuiProviders>
               <PosterSizeBootstrap />
-              <Nav />
-              {children}
+              <AppShell>{children}</AppShell>
             </MuiProviders>
           </EmotionCacheProvider>
         </NextIntlClientProvider>

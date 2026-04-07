@@ -50,8 +50,8 @@ test("my media can apply an OpenPoster movie backdrop", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Dr\. No/i })).toBeVisible();
 
   const selectedBackdropCard = page.getByRole("button", {
-    name: "Dr. No backdrop options",
-  }).first();
+    name: "Card options",
+  }).nth(1);
 
   await selectedBackdropCard.click();
   await page.getByRole("menuitem", {

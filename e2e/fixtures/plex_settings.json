@@ -1,0 +1,6 @@
+{
+  "base_url": "http://plex:32400",
+  "token": "dev-plex-token",
+  "tv_libraries": ["TV Shows"],
+  "movie_libraries": ["Movies"]
+}

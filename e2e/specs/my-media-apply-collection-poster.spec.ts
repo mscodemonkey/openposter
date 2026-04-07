@@ -9,6 +9,7 @@ import {
   resetDevStack,
   skipIfPlexUnavailable,
   uploadPoster,
+  waitForIndexedPoster,
 } from "../helpers/openposter";
 
 skipIfPlexUnavailable(test);
@@ -33,6 +34,13 @@ test("my media can apply an OpenPoster collection poster", async ({ page }) => {
     published: true,
     creatorDisplayName: fixtureCreatorDisplayName,
   });
+
+  await waitForIndexedPoster(
+    645,
+    "collection",
+    (poster) => poster.poster_id === uploaded.poster_id,
+    120_000,
+  );
 
   const library = await ensureMediaLibrarySynced();
   const collection = library.collections.find((item) => /James Bond/i.test(item.title));

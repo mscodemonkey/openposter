@@ -50,8 +50,8 @@ test("my media can apply an OpenPoster movie poster", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Dr\. No/i })).toBeVisible();
 
   const movieCard = page.getByRole("button", {
-    name: "Dr. No poster options",
-  }).first();
+    name: "Card options",
+  }).nth(0);
   await movieCard.click();
   await page.getByRole("menuitem", {
     name: "Choose a poster from OpenPoster",

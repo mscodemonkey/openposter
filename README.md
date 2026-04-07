@@ -112,6 +112,12 @@ Services:
 - Directory (bootstrap node list): http://localhost:8084
 - Indexer: http://localhost:8090
 
+Factory reset for a clean `directory` + `node-a` + `node-b` + `indexer` slate:
+
+```bash
+./scripts/factory-reset-nodes.sh
+```
+
 Then open:
 - `http://localhost:8080/.well-known/openposter-node`
 

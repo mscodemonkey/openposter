@@ -24,6 +24,22 @@
 
 services:
 
+  # ── Mock Plex (disposable E2E media server) ──────────────────────────────
+  plex:
+    build: ./plex-mock
+    ports:
+      - "32401:32400"
+    environment:
+      PLEX_TOKEN: "dev-plex-token"
+      OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
+      PLEX_SERVER_NAME: "OpenPoster Plex Mock"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:32400/healthz').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   # ── Directory (bootstrap gossip node) ────────────────────────────────────
   # Plain reference-node instance whose sole job is to accept node registrations
   # and serve GET /v1/nodes for gossip bootstrap. The indexer seeds from here,
@@ -78,6 +94,8 @@ services:
     depends_on:
       directory:
         condition: service_healthy
+      plex:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read()"]
@@ -111,6 +129,8 @@ services:
     depends_on:
       directory:
         condition: service_healthy
+      plex:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read()"]
@@ -125,6 +145,7 @@ services:
       - "8090:8090"
     environment:
       PORT: "8090"
+      OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
       OPENPOSTER_OFFICIAL_DIRECTORY_URL: "http://directory:8080"
       # Seed from directory — mirrors production topology
       OPENPOSTER_INDEXER_SEEDS: "http://directory:8080"

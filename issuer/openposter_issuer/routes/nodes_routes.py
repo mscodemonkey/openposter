@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from ..auth import require_user_id
-from ..db import Node, NodeAdmin, NodeUrl, UrlClaim, new_uuid
+from ..db import Node, NodeAdmin, NodeUrl, new_uuid
 from ..util import canonicalize_public_url
 
 router = APIRouter()
@@ -36,29 +36,19 @@ def _normalize_base(url: str) -> str:
 class ClaimNodeReq(BaseModel):
     local_url: str
     node_admin_token: str
+    owner_name: str | None = None
 
 
-@router.post("/v1/nodes/claim")
-async def claim_node(req: ClaimNodeReq, request: Request):
-    """Claim a node as admin.
-
-    MVP: issuer verifies admin rights by calling the node's local URL using the provided
-    node_admin_token (obtained from node bootstrap claim flow).
-    """
-
-    cfg = request.app.state.cfg
-    user_id = require_user_id(cfg, request.headers.get("authorization"))
-
-    local_base = _normalize_base(req.local_url)
+async def _resolve_node_admin(local_url: str, node_admin_token: str) -> tuple[str, dict[str, Any] | None]:
+    local_base = _normalize_base(local_url)
     if not local_base.startswith("http://") and not local_base.startswith("https://"):
         _bad("invalid_url", "local_url must start with http:// or https://")
 
-    token = (req.node_admin_token or "").strip()
+    token = (node_admin_token or "").strip()
     if not token:
         _bad("invalid_request", "missing node_admin_token")
 
     async with httpx.AsyncClient(timeout=5.0) as client:
-        # Verify admin token works and obtain node_id.
         try:
             who = await client.get(
                 f"{local_base}/v1/admin/whoami",
@@ -74,7 +64,6 @@ async def claim_node(req: ClaimNodeReq, request: Request):
         if not isinstance(node_id, str) or not node_id:
             _bad("node_admin_failed", "node did not return node_id")
 
-        # Fetch public node info (optional but handy for UI)
         node_info: dict[str, Any] | None = None
         try:
             ni = await client.get(f"{local_base}/v1/node")
@@ -83,19 +72,75 @@ async def claim_node(req: ClaimNodeReq, request: Request):
         except Exception:
             node_info = None
 
+    return node_id, node_info
+
+
+@router.post("/v1/nodes/inspect")
+async def inspect_node(req: ClaimNodeReq, request: Request):
+    cfg = request.app.state.cfg
+    user_id = require_user_id(cfg, request.headers.get("authorization"))
+
+    node_id, node_info = await _resolve_node_admin(req.local_url, req.node_admin_token)
+
+    session = request.app.state.Session
+    async with session() as s:
+        n = (await s.execute(select(Node).where(Node.node_id == node_id))).scalar_one_or_none()
+
+    if n is None:
+        status = "unclaimed"
+        owner_user_id = None
+        owner_name = None
+    elif n.owner_user_id == user_id:
+        status = "owned_by_you"
+        owner_user_id = n.owner_user_id
+        owner_name = n.owner_name
+    else:
+        status = "owned_by_other"
+        owner_user_id = n.owner_user_id
+        owner_name = n.owner_name
+
+    return {
+        "node": {
+            "node_id": node_id,
+            "status": status,
+            "owner_user_id": owner_user_id,
+            "owner_name": owner_name,
+        },
+        "node_info": node_info,
+    }
+
+
+@router.post("/v1/nodes/claim")
+async def claim_node(req: ClaimNodeReq, request: Request):
+    """Claim a node as admin.
+
+    MVP: issuer verifies admin rights by calling the node's local URL using the provided
+    node_admin_token (obtained from node bootstrap claim flow).
+    """
+
+    cfg = request.app.state.cfg
+    user_id = require_user_id(cfg, request.headers.get("authorization"))
+
+    node_id, node_info = await _resolve_node_admin(req.local_url, req.node_admin_token)
+
     session = request.app.state.Session
     async with session() as s:
         n = (await s.execute(select(Node).where(Node.node_id == node_id))).scalar_one_or_none()
         if n is None:
-            n = Node(node_id=node_id, owner_user_id=user_id)
+            owner_name = (req.owner_name or "").strip()
+            if not owner_name:
+                _bad("invalid_request", "owner_name is required when claiming an unowned node")
+            n = Node(node_id=node_id, owner_user_id=user_id, owner_name=owner_name)
             s.add(n)
         else:
             # If the node already exists, only the owner can (re-)claim admin.
             if n.owner_user_id != user_id:
                 raise HTTPException(
                     status_code=403,
-                    detail={"error": {"code": "not_owner", "message": "node is owned by another user"}},
+                    detail={"error": {"code": "not_owner", "message": f"node is owned by {n.owner_name or 'another user'}"}},
                 )
+            if not n.owner_name and (req.owner_name or "").strip():
+                n.owner_name = (req.owner_name or "").strip()
 
         # Ensure user is recorded as admin of the node.
         existing_admin = (
@@ -112,6 +157,7 @@ async def claim_node(req: ClaimNodeReq, request: Request):
         "node": {
             "node_id": node_id,
             "owner_user_id": user_id,
+            "owner_name": n.owner_name,
         },
         "node_info": node_info,
     }
@@ -120,6 +166,51 @@ async def claim_node(req: ClaimNodeReq, request: Request):
 class AttachUrlReq(BaseModel):
     node_id: str
     public_url: str
+
+
+class CheckPublicUrlReq(BaseModel):
+    node_id: str
+    public_url: str
+
+
+@router.post("/v1/nodes/check_public_url")
+async def check_public_url(req: CheckPublicUrlReq, request: Request):
+    cfg = request.app.state.cfg
+    user_id = require_user_id(cfg, request.headers.get("authorization"))
+
+    node_id = (req.node_id or "").strip()
+    if not node_id:
+        _bad("invalid_request", "missing node_id")
+
+    url = canonicalize_public_url(req.public_url)
+    if not url:
+        _bad("invalid_url", "invalid public_url")
+
+    session = request.app.state.Session
+    async with session() as s:
+        n = (await s.execute(select(Node).where(Node.node_id == node_id))).scalar_one_or_none()
+        if n is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "not_found", "message": "node not found"}})
+        if n.owner_user_id != user_id:
+            raise HTTPException(status_code=403, detail={"error": {"code": "not_owner", "message": "not node owner"}})
+
+    well_known = f"{url}/.well-known/openposter-node"
+    details: dict[str, Any] = {"url": well_known}
+    try:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            r = await client.get(well_known)
+        details["status"] = r.status_code
+        if r.status_code != 200:
+            return {"public_url": url, "reachable": False, "matches_node": False, "details": details}
+        descriptor = r.json()
+        fetched_node_id = descriptor.get("node_id")
+        details["fetched_node_id"] = fetched_node_id
+        details["name"] = descriptor.get("name")
+        matches = isinstance(fetched_node_id, str) and fetched_node_id == node_id
+        return {"public_url": url, "reachable": True, "matches_node": matches, "details": details}
+    except Exception as e:
+        details["error"] = str(e)
+        return {"public_url": url, "reachable": False, "matches_node": False, "details": details}
 
 
 @router.post("/v1/nodes/attach_url")
@@ -147,38 +238,6 @@ async def attach_url(req: AttachUrlReq, request: Request):
 
         existing = (await s.execute(select(NodeUrl).where(NodeUrl.public_url == url))).scalar_one_or_none()
         if existing is None:
-            # Require URL claim verification (except for localhost/private/IP dev URLs).
-            from urllib.parse import urlparse
-            import ipaddress
-
-            host = (urlparse(url).hostname or "").lower()
-            skip_verify = False
-            if host == "localhost":
-                skip_verify = True
-            else:
-                try:
-                    ip = ipaddress.ip_address(host)
-                    if ip.is_private or ip.is_loopback:
-                        skip_verify = True
-                except Exception:
-                    skip_verify = False
-
-            if not skip_verify:
-                claim = (
-                    await s.execute(
-                        select(UrlClaim).where(
-                            UrlClaim.public_url == url,
-                            UrlClaim.owner_user_id == user_id,
-                            UrlClaim.verified_at.is_not(None),
-                        )
-                    )
-                ).scalar_one_or_none()
-                if claim is None:
-                    raise HTTPException(
-                        status_code=403,
-                        detail={"error": {"code": "url_not_verified", "message": "public URL not verified"}},
-                    )
-
             s.add(NodeUrl(public_url=url, node_id=node_id, owner_user_id=user_id))
             await s.commit()
             return {"public_url": url, "node_id": node_id, "replaced": False}
@@ -214,6 +273,7 @@ async def list_nodes(request: Request):
             {
                 "node_id": n.node_id,
                 "owner_user_id": n.owner_user_id,
+                "owner_name": n.owner_name,
                 "public_urls": sorted(urls_by_node.get(n.node_id, [])),
             }
             for n in nodes

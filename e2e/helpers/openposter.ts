@@ -57,7 +57,7 @@ export const TED_SHOW_ZIP = path.resolve(
 
 const PLEX_SETTINGS_FIXTURE = path.resolve(
   process.cwd(),
-  "reference-node/data-a/plex_settings.json",
+  "e2e/fixtures/plex_settings.json",
 );
 
 export const HAS_PLEX =
@@ -70,7 +70,7 @@ export const HAS_PLEX =
         && Boolean(process.env.OPENPOSTER_E2E_PLEX_TOKEN)
       )
       || existsSync(PLEX_SETTINGS_FIXTURE)
-      || existsSync(path.resolve(process.cwd(), "reference-node/data-a/media_servers.json"))
+      || existsSync(path.resolve(process.cwd(), "e2e/fixtures/media_servers.json"))
     )
   );
 
@@ -222,6 +222,7 @@ export async function resetDevStack(): Promise<void> {
     `${process.env.OPENPOSTER_TEST_NODE_B_URL ?? "http://localhost:8082"}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
     `${TEST_INDEXER_URL}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
     `${process.env.OPENPOSTER_TEST_ISSUER_URL ?? "http://localhost:8085"}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
+    `http://localhost:32401/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
   ];
 
   for (const url of resetTargets) {

@@ -1,104 +1,86 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import {
   ISSUER_BASE_URL,
   issuerAttachUrl,
-  issuerClaimHandle,
+  issuerCheckPublicUrl,
+  issuerInspectNode,
   issuerClaimNode,
-  issuerHandleAvailability,
-  issuerLogin,
-  issuerMe,
-  issuerSignup,
-  issuerStartUrlClaim,
-  issuerVerifyUrlClaim,
+  type CheckPublicUrlResponse,
+  type LoginResponse,
+  type InspectNodeResponse,
+  type SignupResponse,
 } from "@/lib/issuer";
 import { clearIssuerSession, loadIssuerToken, loadIssuerUser, saveIssuerSession } from "@/lib/issuer_storage";
-import { saveCreatorConnection } from "@/lib/storage";
+import { loadCreatorConnection, saveCreatorConnection } from "@/lib/storage";
 import { adminCreateTheme } from "@/lib/themes";
+import IssuerAuthCard from "@/components/IssuerAuthCard";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Container from "@mui/material/Container";
 import Divider from "@mui/material/Divider";
+import LinkIcon from "@mui/icons-material/Link";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
-import Step from "@mui/material/Step";
-import StepLabel from "@mui/material/StepLabel";
-import Stepper from "@mui/material/Stepper";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { alpha, useTheme } from "@mui/material/styles";
 
-type StepKey = "welcome" | "account" | "creator" | "claim" | "public_url" | "done";
+type StepKey = "welcome" | "account" | "claim" | "public_url" | "done";
 
 export default function OnboardingPage() {
   const t = useTranslations("onboarding");
   const tc = useTranslations("common");
   const tn = useTranslations("nav");
+  const theme = useTheme();
   const issuer = useMemo(() => ISSUER_BASE_URL, []);
+  const initialUser = typeof window === "undefined" ? null : loadIssuerUser();
+  const initialToken = typeof window === "undefined" ? "" : (loadIssuerToken() || "");
+  const initialConn = typeof window === "undefined" ? null : loadCreatorConnection();
+  const initialStep: StepKey = initialToken && initialUser
+    ? "claim"
+    : initialConn
+      ? "account"
+      : (() => {
+        try {
+          return typeof window !== "undefined" && window.localStorage.getItem("openposter.onboarded.v1") === "browsing"
+            ? "done"
+            : "welcome";
+        } catch {
+          return "welcome";
+        }
+      })();
 
   // issuer session — initialise with safe SSR defaults, then hydrate from
   // localStorage in a useEffect to avoid server/client mismatch.
-  const [token, setToken] = useState<string>("");
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [step, setStep] = useState<StepKey>("welcome");
+  const [token, setToken] = useState<string>(initialToken);
+  const [userEmail, setUserEmail] = useState<string>(initialUser?.email ?? "");
+  const [userDisplayName, setUserDisplayName] = useState<string>(initialUser?.display_name ?? "");
+  const [step, setStep] = useState<StepKey>(initialStep);
 
-  useEffect(() => {
-    const t = loadIssuerToken() || "";
-    const u = loadIssuerUser();
-    if (t) setToken(t);
-    if (u?.email) setUserEmail(u.email);
-    if (u?.handle) setHandle(u.handle);
-    if (t && u) {
-      setStep(u.handle ? "claim" : "creator");
-      return;
-    }
-    try {
-      if (window.localStorage.getItem("openposter.onboarded.v1") === "browsing") {
-        setStep("done");
-      }
-    } catch { /* ignore */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // account
-  const [accountMode, setAccountMode] = useState<"login" | "signup">("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [status, setStatus] = useState<string | null>(null);
 
-  // creator
-  const [handle, setHandle] = useState("");
-  const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null);
-
   // node claim
-  const [localUrl, setLocalUrl] = useState("http://localhost:8081");
-  const [pairCode, setPairCode] = useState("");
-  // stored via saveCreatorConnection; we don't currently show it in the UI
-  const [nodeAdminToken, setNodeAdminToken] = useState<string>("");
+  const [localUrl] = useState(initialConn?.nodeUrl ?? "http://localhost:8081");
+  const [nodeAdminToken] = useState<string>(initialConn?.adminToken ?? "");
   const [claimedNodeId, setClaimedNodeId] = useState<string>("");
+  const [ownerName, setOwnerName] = useState(initialUser?.display_name ?? "");
+  const [nodeInspection, setNodeInspection] = useState<InspectNodeResponse | null>(null);
 
   // public url attach
   const [publicUrl, setPublicUrl] = useState<string>("");
-  const [claimInfo, setClaimInfo] = useState<
-    | null
-    | {
-        already_owned?: boolean;
-        dns?: { name?: string; value?: string };
-        http?: { url?: string; body?: string };
-      }
-  >(null);
-  const [verifyMethod, setVerifyMethod] = useState<"dns" | "http">("dns");
+  const [publicUrlCheck, setPublicUrlCheck] = useState<CheckPublicUrlResponse | null>(null);
 
   const steps: Array<{ key: StepKey; label: string }> = [
     { key: "welcome", label: t("stepWelcome") },
     { key: "account", label: t("stepAccount") },
-    { key: "creator", label: t("stepCreator") },
     { key: "claim", label: t("stepClaim") },
     { key: "public_url", label: t("stepPublicUrl") },
     { key: "done", label: t("stepDone") },
@@ -108,107 +90,101 @@ export default function OnboardingPage() {
     0,
     steps.findIndex((s) => s.key === step)
   );
-
-  async function doLogin() {
-    setStatus(t("loggingIn"));
-    const res = await issuerLogin({ email, password });
-    saveIssuerSession(res.token, res.user);
-    setToken(res.token);
-    setUserEmail(res.user.email);
-    setStatus(null);
-    setStep("creator");
-  }
-
-  async function doSignup() {
-    setStatus(t("creatingAccount"));
-    const res = await issuerSignup({ email, password, display_name: displayName || undefined });
-    saveIssuerSession(res.token, res.user);
-    setToken(res.token);
-    setUserEmail(res.user.email);
-    setStatus(null);
-    setStep("creator");
-  }
-
-  async function checkHandle() {
-    setHandleAvailable(null);
-    const ok = await issuerHandleAvailability(handle.trim().toLowerCase());
-    setHandleAvailable(ok);
-  }
-
-  async function claimCreatorHandle() {
-    if (!token) throw new Error("Not logged in");
-    setStatus(t("savingHandle"));
-    await issuerClaimHandle(token, handle.trim().toLowerCase());
-    // Re-fetch /v1/me so the handle is included in the stored issuer session
-    const updatedUser = await issuerMe(token).catch(() => null);
-    if (updatedUser) {
-      saveIssuerSession(token, updatedUser);
+  const currentStep = steps[activeStep] ?? steps[0];
+  const publicTargetHint = useMemo(() => {
+    try {
+      const parsed = new URL(localUrl);
+      const isLoopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1";
+      const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+      if (isLoopback) {
+        return t("publicUrlConnectionHintGeneric", { port });
+      }
+      return t("publicUrlConnectionHintSpecific", { target: localUrl });
+    } catch {
+      return t("publicUrlConnectionHintGeneric", { port: "8081" });
     }
+  }, [localUrl, t]);
+  const logoCardBg = alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.72 : 0.68);
+  const shellBg = theme.palette.mode === "dark"
+    ? `linear-gradient(180deg, ${theme.palette.grey[900]} 0%, ${theme.palette.background.default} 38%, ${alpha(theme.palette.common.black, 0.92)} 100%)`
+    : `linear-gradient(180deg, ${theme.palette.grey[100]} 0%, #f8f5ee 30%, ${theme.palette.background.default} 100%)`;
+  const shellGlow = theme.palette.mode === "dark"
+    ? `radial-gradient(circle at top left, ${alpha(theme.palette.error.main, 0.22)}, transparent 30%), radial-gradient(circle at bottom right, ${alpha(theme.palette.success.main, 0.18)}, transparent 28%)`
+    : "radial-gradient(circle at top left, rgba(255,26,26,0.16), transparent 30%), radial-gradient(circle at bottom right, rgba(11,83,69,0.16), transparent 28%)";
+  const panelBg = alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.8 : 0.82);
+  const panelBorder = alpha(theme.palette.divider, theme.palette.mode === "dark" ? 0.4 : 0.8);
+  const panelShadow = theme.palette.mode === "dark"
+    ? "0 24px 80px rgba(0,0,0,0.38)"
+    : "0 24px 80px rgba(42,31,18,0.10)";
+  const infoCardBg = alpha(theme.palette.background.default, theme.palette.mode === "dark" ? 0.9 : 0.68);
+
+  async function handleAuthSuccess(res: LoginResponse | SignupResponse) {
+    saveIssuerSession(res.token, res.user);
+    setToken(res.token);
+    setUserEmail(res.user.email);
+    setUserDisplayName(res.user.display_name ?? "");
+    setOwnerName((current) => current || res.user.display_name || "");
     setStatus(null);
     setStep("claim");
   }
 
-  async function claimNodeAdmin() {
-    setStatus(t("connectingToNode"));
-    const base = localUrl.replace(/\/+$/, "");
-    const r = await fetch(`${base}/v1/admin/pair`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pair_code: pairCode }),
+  const inspectNodeClaim = useCallback(async () => {
+    if (!token) throw new Error("Not logged in");
+    if (!nodeAdminToken || !localUrl) throw new Error(t("connectNodeFirst"));
+    setStatus(t("checkingNodeOwnership"));
+    const out = await issuerInspectNode(token, {
+      local_url: localUrl,
+      node_admin_token: nodeAdminToken,
     });
-    if (!r.ok) throw new Error(`node pair failed: ${r.status}`);
-    const json = (await r.json()) as { admin: { token: string } };
-    setNodeAdminToken(json.admin.token);
+    setNodeInspection(out);
+    setClaimedNodeId(out.node.node_id);
+    if (out.node.owner_name) {
+      setOwnerName(out.node.owner_name);
+    } else if (out.node.status === "unclaimed") {
+      setOwnerName((current) => current || userDisplayName || "");
+    }
+    setStatus(null);
+  }, [token, nodeAdminToken, localUrl, t, userDisplayName]);
 
-    // Persist for upload/library/admin tooling.
-    const issuerUser = loadIssuerUser();
-    const creatorId = issuerUser?.handle ?? "";
-    const nodeUrl = localUrl.replace(/\/+$/, "");
-    saveCreatorConnection({ nodeUrl, adminToken: json.admin.token, creatorId });
-
-    // Bootstrap Default theme so the creator has somewhere to assign uploads immediately.
-    if (creatorId) {
-      await adminCreateTheme(nodeUrl, json.admin.token, creatorId, "Default theme").catch(() => undefined);
+  async function claimNodeOwnership() {
+    if (!token) throw new Error("Not logged in");
+    if (!nodeAdminToken || !localUrl) throw new Error(t("connectNodeFirst"));
+    if (nodeInspection?.node.status === "unclaimed" && !ownerName.trim()) {
+      throw new Error(t("ownerNameRequired"));
     }
 
-    const out = (await issuerClaimNode(token, { local_url: localUrl, node_admin_token: json.admin.token })) as {
-      node: { node_id: string };
-    };
+    setStatus(t("claimingNode"));
+    const out = await issuerClaimNode(token, {
+      local_url: localUrl,
+      node_admin_token: nodeAdminToken,
+      owner_name: nodeInspection?.node.status === "unclaimed" ? ownerName.trim() : undefined,
+    });
+
+    const creatorId = loadIssuerUser()?.handle ?? "";
+    const nodeUrl = localUrl.replace(/\/+$/, "");
+    saveCreatorConnection({ nodeUrl, adminToken: nodeAdminToken, creatorId });
+    if (creatorId) {
+      await adminCreateTheme(nodeUrl, nodeAdminToken, creatorId, "Default theme").catch(() => undefined);
+    }
+
     setClaimedNodeId(out.node.node_id);
     setStatus(null);
     setStep("public_url");
   }
 
-  async function startUrlClaim() {
-    setStatus(t("generatingVerification"));
-    const info = (await issuerStartUrlClaim(token, publicUrl)) as {
-      already_owned?: boolean;
-      challenge?: string;
-      dns?: { name?: string; value?: string };
-      http?: { url?: string; body?: string };
-    };
-    setClaimInfo(info);
-    // Push the challenge token to the node so it can serve /.well-known/openposter-claim.txt
-    if (info.challenge && nodeAdminToken && localUrl) {
-      await fetch(`${localUrl.replace(/\/+$/, "")}/v1/admin/claim-token`, {
-        method: "PUT",
-        headers: { "content-type": "application/json", authorization: `Bearer ${nodeAdminToken}` },
-        body: JSON.stringify({ token: info.challenge }),
-      }).catch(() => undefined);
-    }
-    setStatus(null);
-  }
-
-  async function verifyUrlClaim() {
-    setStatus(t("checkingVerification"));
-    const res = (await issuerVerifyUrlClaim(token, { public_url: publicUrl, method: verifyMethod })) as {
-      verified?: boolean;
-    };
-    if (!res.verified) {
-      setStatus(t("notVerified"));
+  async function checkPublicUrl() {
+    setStatus(t("checkingConnectivity"));
+    const res = await issuerCheckPublicUrl(token, { node_id: claimedNodeId, public_url: publicUrl });
+    setPublicUrlCheck(res);
+    if (!res.reachable) {
+      setStatus(t("publicUrlNotReachable"));
       return;
     }
-    setStatus(t("verified"));
+    if (!res.matches_node) {
+      setStatus(t("publicUrlWrongNode"));
+      return;
+    }
+    setStatus(t("publicUrlReachable"));
   }
 
   async function attachUrl() {
@@ -218,52 +194,135 @@ export default function OnboardingPage() {
     setStep("done");
   }
 
+  useEffect(() => {
+    if (step !== "claim" || !token || !nodeAdminToken) return;
+    void (async () => {
+      try {
+        await inspectNodeClaim();
+      } catch (e: unknown) {
+        setStatus(e instanceof Error ? e.message : String(e));
+      }
+    })();
+  }, [step, token, nodeAdminToken, inspectNodeClaim]);
+
   return (
-    <Container maxWidth="sm" sx={{ py: 3 }}>
-      <Stack spacing={2.5}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            {t("title")}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {tc("issuerLabel", { url: issuer })}
-          </Typography>
-        </Box>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        background: shellBg,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          background: shellGlow,
+          pointerEvents: "none",
+        }}
+      />
+      <Container maxWidth="md" sx={{ position: "relative", py: { xs: 5, md: 8 } }}>
+        <Stack spacing={3.5} alignItems="center">
+          <Stack spacing={1.5} alignItems="center" textAlign="center" sx={{ maxWidth: 720 }}>
+            <Box
+              sx={{
+                width: 88,
+                height: 88,
+                borderRadius: "28px",
+                background: logoCardBg,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: panelShadow,
+                backdropFilter: "blur(10px)",
+                border: `1px solid ${panelBorder}`,
+              }}
+            >
+              <Box
+                component="img"
+                src="/op-logo-small.svg"
+                alt="OpenPoster"
+                sx={{ width: 50, height: 50, display: "block" }}
+              />
+            </Box>
+            <Typography variant="h3" sx={{ fontWeight: 900, letterSpacing: -1.2 }}>
+              {t("title")}
+            </Typography>
+            <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>
+              {currentStep.label}
+            </Typography>
+          </Stack>
 
-        <Stepper activeStep={activeStep} alternativeLabel>
-          {steps.map((s) => (
-            <Step key={s.key}>
-              <StepLabel>{s.label}</StepLabel>
-            </Step>
-          ))}
-        </Stepper>
-
-        {status && <Alert severity={status.toLowerCase().includes("failed") ? "error" : "info"}>{status}</Alert>}
-
-        {token ? (
-          <Paper sx={{ p: 2 }}>
-            <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
-              <Typography variant="body2" color="text.secondary">
-                {t("loggedInAs", { email: userEmail })}
-              </Typography>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => {
-                  clearIssuerSession();
-                  setToken("");
-                  setUserEmail("");
-                  setStep("account");
-                }}
+          <Paper
+            elevation={0}
+            sx={{
+              width: "100%",
+              maxWidth: 920,
+              p: { xs: 2.5, md: 4 },
+              borderRadius: 6,
+              border: `1px solid ${panelBorder}`,
+              background: panelBg,
+              backdropFilter: "blur(14px)",
+              boxShadow: panelShadow,
+            }}
+          >
+            <Stack spacing={3}>
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={1.5}
+                justifyContent="space-between"
+                alignItems={{ xs: "flex-start", md: "center" }}
               >
-                {t("logOut")}
-              </Button>
-            </Stack>
-          </Paper>
-        ) : null}
+                <Box>
+                  <Typography variant="overline" sx={{ letterSpacing: "0.18em", color: "text.secondary" }}>
+                    {`${activeStep + 1} / ${steps.length}`}
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 850 }}>
+                    {currentStep.label}
+                  </Typography>
+                  <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+                    {tc("issuerLabel", { url: issuer })}
+                  </Typography>
+                </Box>
+
+                {token ? (
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 4,
+                      backgroundColor: infoCardBg,
+                      minWidth: { md: 280 },
+                    }}
+                  >
+                    <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+                      <Typography variant="body2" color="text.secondary">
+                        {t("loggedInAs", { email: userEmail })}
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() => {
+                          clearIssuerSession();
+                          setToken("");
+                          setUserEmail("");
+                          setUserDisplayName("");
+                          setOwnerName("");
+                          setStep("account");
+                        }}
+                      >
+                        {t("logOut")}
+                      </Button>
+                    </Stack>
+                  </Paper>
+                ) : null}
+              </Stack>
+
+              {status && <Alert severity={status.toLowerCase().includes("failed") ? "error" : "info"} sx={{ borderRadius: 3 }}>{status}</Alert>}
 
         {step === "welcome" && (
-          <Paper sx={{ p: 3 }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 4, backgroundColor: infoCardBg }}>
             <Stack spacing={2}>
               <Typography variant="h5" sx={{ fontWeight: 800 }}>
                 {t("welcomeTitle")}
@@ -293,181 +352,107 @@ export default function OnboardingPage() {
                 >
                   {t("justBrowsing")}
                 </Button>
-                <Button onClick={() => setStep("account")}>{t("imACreator")}</Button>
+                <Button variant="contained" onClick={() => setStep("account")}>{t("imACreator")}</Button>
               </Stack>
             </Stack>
           </Paper>
         )}
 
         {step === "account" && (
-          <Paper sx={{ p: 3 }}>
-            <Stack spacing={2}>
-              <Typography variant="h4" sx={{ fontWeight: 900 }}>
-                {t("welcomeCreator")}
-              </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                {t("letsLogin")}
-              </Typography>
-              <Typography color="text.secondary">
-                {t("creatorsThankYou")}
-              </Typography>
-
-              <Typography sx={{ fontWeight: 800, mt: 1 }}>
-                {t("haveAccountQuestion")}
-              </Typography>
-
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                <Button variant={accountMode === "login" ? "contained" : "outlined"} onClick={() => setAccountMode("login")}>
-                  {t("haveAccountLogin")}
-                </Button>
-                <Button variant={accountMode === "signup" ? "contained" : "outlined"} onClick={() => setAccountMode("signup")}>
-                  {t("newSignup")}
-                </Button>
-              </Stack>
-
-              <Stack spacing={1.5} sx={{ mt: 1 }}>
-                {accountMode === "signup" && (
-                  <TextField
-                    label={t("displayName")}
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    helperText={t("displayNameHint")}
-                  />
-                )}
-
-                <TextField label={t("email")} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-                <TextField
-                  label={t("password")}
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete={accountMode === "signup" ? "new-password" : "current-password"}
-                />
-
-                {accountMode === "login" ? (
-                  <Button onClick={() => void doLogin().catch((e) => setStatus(e?.message || String(e)))}>{t("logMeIn")}</Button>
-                ) : (
-                  <Button
-                    onClick={() =>
-                      void doSignup().catch((e) => {
-                        const msg = e?.message || String(e);
-                        if (String(msg).toLowerCase().includes("already registered")) {
-                          setStatus(t("alreadyRegistered"));
-                        } else {
-                          setStatus(msg);
-                        }
-                        setAccountMode("login");
-                      })
-                    }
-                  >
-                    {t("signMeUp")}
-                  </Button>
-                )}
-              </Stack>
-            </Stack>
-          </Paper>
-        )}
-
-        {step === "creator" && (
-          <Paper sx={{ p: 3 }}>
-            <Stack spacing={2}>
-              <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                {t("pickCreatorName")}
-              </Typography>
-              <Typography color="text.secondary">
-                {t("creatorHandleDesc")}
-              </Typography>
-              <Typography color="text.secondary">{t("creatorHandleRules")}</Typography>
-
-              <TextField
-                label={t("creatorHandle")}
-                value={handle}
-                onChange={(e) => {
-                  setHandle(e.target.value);
-                  setHandleAvailable(null);
-                }}
-                placeholder="e.g. martinjsteven"
-              />
-
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
-                <Button variant="outlined" onClick={() => void checkHandle().catch((e) => setStatus(e?.message || String(e)))}>
-                  {t("checkName")}
-                </Button>
-                {handleAvailable === true ? (
-                  <Typography color="success.main">{t("nameAvailable")}</Typography>
-                ) : handleAvailable === false ? (
-                  <Typography color="error.main">{t("nameTaken")}</Typography>
-                ) : (
-                  <Typography color="text.secondary"> </Typography>
-                )}
-              </Stack>
-
-              <Button
-                disabled={!handle || handleAvailable === false}
-                onClick={() => void claimCreatorHandle().catch((e) => setStatus(e?.message || String(e)))}
-              >
-                {t("lockItIn")}
-              </Button>
-            </Stack>
-          </Paper>
+          <Box sx={{ maxWidth: 720 }}>
+            <IssuerAuthCard
+              title={t("accountTitle")}
+              subtitle={t("accountSubtitle")}
+              body={nodeAdminToken ? t("authAfterPairing") : t("creatorsThankYou")}
+              onSuccess={(res) => void handleAuthSuccess(res)}
+              onError={(message) => setStatus(message)}
+            />
+          </Box>
         )}
 
         {step === "claim" && (
-          <Paper sx={{ p: 3 }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 4, backgroundColor: infoCardBg }}>
             <Stack spacing={2}>
               <Typography variant="h5" sx={{ fontWeight: 900 }}>
                 {t("nextUpNode")}
               </Typography>
               <Typography color="text.secondary">
-                {t("sameWifiHint")}
+                {t("ownershipStepBody")}
               </Typography>
-              <Alert severity="info">
-                {t("pairingCodeInfo")}
-              </Alert>
 
-              <TextField
-                label={t("localUrl")}
-                value={localUrl}
-                onChange={(e) => setLocalUrl(e.target.value)}
-                placeholder="http://192.168.1.10:8080"
-              />
+              {nodeAdminToken ? (
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 4 }}>
+                  <Stack spacing={1}>
+                    <Typography sx={{ fontWeight: 800 }}>{t("pairedNode")}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {t("pairedNodeUrl", { url: localUrl })}
+                    </Typography>
+                    {claimedNodeId && (
+                      <Typography variant="body2" color="text.secondary">
+                        {t("connectedNodeId", { nodeId: claimedNodeId })}
+                      </Typography>
+                    )}
+                  </Stack>
+                </Paper>
+              ) : (
+                <Alert severity="warning">
+                  {t("connectNodeFirst")} <Link href="/">{t("goBackToConnect")}</Link>
+                </Alert>
+              )}
 
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+              {nodeInspection?.node.status === "unclaimed" && (
+                <>
+                  <Alert severity="success">{t("nodeUnclaimed")}</Alert>
+                  <TextField
+                    label={t("ownerName")}
+                    value={ownerName}
+                    onChange={(e) => setOwnerName(e.target.value)}
+                    placeholder={t("ownerNamePlaceholder")}
+                    helperText={t("ownerNameHint")}
+                  />
+                </>
+              )}
+
+              {nodeInspection?.node.status === "owned_by_you" && (
+                <Alert severity="info">
+                  {t("nodeOwnedByYou", { ownerName: nodeInspection.node.owner_name || userEmail })}
+                </Alert>
+              )}
+
+              {nodeInspection?.node.status === "owned_by_other" && (
+                <Alert severity="warning">
+                  {t("nodeOwnedByOther", { ownerName: nodeInspection.node.owner_name || t("anotherOwner") })}
+                </Alert>
+              )}
+
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1}
+                justifyContent="space-between"
+                alignItems={{ sm: "center" }}
+              >
                 <Button
                   variant="outlined"
-                  onClick={() => {
-                    const base = localUrl.replace(/\/+$/, "");
-                    window.open(`${base}/admin/pair`, "_blank", "noopener,noreferrer");
-                  }}
+                  startIcon={<RefreshIcon />}
+                  onClick={() => void inspectNodeClaim().catch((e) => setStatus(e?.message || String(e)))}
+                  disabled={!nodeAdminToken}
                 >
-                  {t("openPairingPage")}
+                  {t("refreshOwnership")}
+                </Button>
+                <Button
+                  variant="contained"
+                  disabled={!nodeAdminToken || !nodeInspection || nodeInspection.node.status === "owned_by_other"}
+                  onClick={() => void claimNodeOwnership().catch((e) => setStatus(e?.message || String(e)))}
+                >
+                  {nodeInspection?.node.status === "owned_by_you" ? t("continueAsOwner") : t("claimThisNode")}
                 </Button>
               </Stack>
-
-              <TextField
-                label={t("pairingCode")}
-                value={pairCode}
-                onChange={(e) => setPairCode(e.target.value)}
-                placeholder="e.g. 123456"
-              />
-
-              <Button onClick={() => void claimNodeAdmin().catch((e) => setStatus(e?.message || String(e)))}>
-                {t("connectMyNode")}
-              </Button>
-
-              {claimedNodeId ? (
-                <Alert severity="success">{t("connectedNodeId", { nodeId: claimedNodeId })}</Alert>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  {t("pairingTip")}
-                </Typography>
-              )}
             </Stack>
           </Paper>
         )}
 
         {step === "public_url" && (
-          <Paper sx={{ p: 3 }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 4, backgroundColor: infoCardBg }}>
             <Stack spacing={2}>
               <Typography variant="h5" sx={{ fontWeight: 900 }}>
                 {t("addPublicUrl")}
@@ -482,94 +467,77 @@ export default function OnboardingPage() {
                 value={publicUrl}
                 onChange={(e) => {
                   setPublicUrl(e.target.value);
-                  setClaimInfo(null);
+                  setPublicUrlCheck(null);
                 }}
                 placeholder="https://posters.example.com"
               />
 
-              <Button variant="outlined" onClick={() => void startUrlClaim().catch((e) => setStatus(e?.message || String(e)))}>
-                {t("getVerification")}
-              </Button>
+              <Alert severity="info" icon={<LinkIcon />}>
+                {publicTargetHint}
+              </Alert>
 
-              {claimInfo && !claimInfo.already_owned && (
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Stack spacing={1}>
-                    <Typography sx={{ fontWeight: 800 }}>{t("dnsTxtOption")}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {t("addTxtRecord")}
-                    </Typography>
-                    <Typography variant="body2">
-                      {t("name", { value: claimInfo.dns?.name ?? "" })}
-                    </Typography>
-                    <Typography variant="body2">
-                      {t("value", { value: claimInfo.dns?.value ?? "" })}
-                    </Typography>
-
-                    <Divider sx={{ my: 1 }} />
-
-                    <Typography sx={{ fontWeight: 800 }}>{t("fileOption")}</Typography>
-                    <Typography variant="body2">
-                      {t("fileUrl", { value: claimInfo.http?.url ?? "" })}
-                    </Typography>
-                    <Typography variant="body2">
-                      {t("fileBody", { value: claimInfo.http?.body ?? "" })}
-                    </Typography>
-                  </Stack>
-                </Paper>
+              {publicUrlCheck && (
+                publicUrlCheck.reachable && publicUrlCheck.matches_node ? (
+                  <Alert severity="success">
+                    {t("publicUrlCheckSuccess")}
+                  </Alert>
+                ) : publicUrlCheck.reachable ? (
+                  <Alert severity="warning">
+                    {t("publicUrlCheckWrongNode", { nodeId: publicUrlCheck.details?.fetched_node_id || t("unknownNodeId") })}
+                  </Alert>
+                ) : (
+                  <Alert severity="warning">
+                    {t("publicUrlCheckFailed")}
+                  </Alert>
+                )
               )}
 
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
-                <TextField
-                  select
-                  label={t("verifyUsing")}
-                  value={verifyMethod}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setVerifyMethod(v === "http" ? "http" : "dns");
-                  }}
-                  SelectProps={{ native: true }}
-                  sx={{ minWidth: 220 }}
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" alignItems={{ sm: "center" }}>
+                <Button variant="outlined" onClick={() => void checkPublicUrl().catch((e) => setStatus(e?.message || String(e)))}>
+                  {t("checkConnectivity")}
+                </Button>
+                <Button
+                  variant="contained"
+                  disabled={!claimedNodeId || !publicUrl || !publicUrlCheck?.reachable || !publicUrlCheck?.matches_node}
+                  onClick={() => void attachUrl().catch((e) => setStatus(e?.message || String(e)))}
                 >
-                  <option value="dns">{t("dns")}</option>
-                  <option value="http">{t("file")}</option>
-                </TextField>
-                <Button variant="outlined" onClick={() => void verifyUrlClaim().catch((e) => setStatus(e?.message || String(e)))}>
-                  {t("checkNow")}
+                  {t("savePublicUrl")}
                 </Button>
               </Stack>
-
-              <Button disabled={!claimedNodeId || !publicUrl} onClick={() => void attachUrl().catch((e) => setStatus(e?.message || String(e)))}>
-                {t("savePublicUrl")}
+              <Button variant="text" onClick={() => setStep("done")}>
+                {t("skipForNow")}
               </Button>
             </Stack>
           </Paper>
         )}
 
         {step === "done" && (
-          <Paper sx={{ p: 3 }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 4, backgroundColor: infoCardBg }}>
             <Stack spacing={2}>
               <Typography variant="h4" sx={{ fontWeight: 900 }}>
                 {t("allSet")}
               </Typography>
-              <Typography color="text.secondary">{t("nextUpload")}</Typography>
+              <Typography color="text.secondary">{t("nextBrowse")}</Typography>
+              <Typography color="text.secondary">{t("creatorOptional")}</Typography>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                <Button component={Link} href="/upload">
-                  {t("goToUpload")}
+                <Button component={Link} href="/">
+                  {t("goToLibrary")}
                 </Button>
                 <Button component={Link} href="/settings" variant="outlined">
                   {tn("settings")}
+                </Button>
+                <Button component={Link} href="/studio" variant="outlined">
+                  {t("setupCreatorLater")}
                 </Button>
               </Stack>
             </Stack>
           </Paper>
         )}
 
-        <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
-            {t("debugStep", { step })}
-          </Typography>
-        </Box>
-      </Stack>
-    </Container>
+            </Stack>
+          </Paper>
+        </Stack>
+      </Container>
+    </Box>
   );
 }
