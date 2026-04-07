@@ -76,8 +76,8 @@ async def pair_page(request: Request):
   </head>
   <body>
     <div class=\"card\">
-      <h1>Pair this node with OpenPoster</h1>
-      <p>On your OpenPoster setup screen, enter this pairing code:</p>
+      <h1>Your pairing code</h1>
+      <p>Take control of your locally hosted node.</p>
       <div class=\"code\">{code}</div>
       <div class=\"meta\">Expires: {expires_at}</div>
       <p class=\"meta\">This page only works on your local network.</p>
