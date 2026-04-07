@@ -197,6 +197,8 @@ services:
     build: ./web
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # NEXT_PUBLIC_ vars are browser-visible — must use localhost so client fetches work
       NEXT_PUBLIC_INDEXER_BASE_URL: "http://localhost:8090"
@@ -224,6 +226,8 @@ services:
     build: ./web
     ports:
       - "3002:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NEXT_PUBLIC_INDEXER_BASE_URL: "http://localhost:8090"
       NEXT_PUBLIC_ISSUER_BASE_URL: "http://localhost:8085"
