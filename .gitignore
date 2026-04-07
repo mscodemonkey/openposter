@@ -18,6 +18,9 @@ USER.md
 CLAUDE.md
 CARDS.md
 memory/
+THOUGHTS.md
+DIAGNOSTICS_PLAN.md
+.DS_Store
 
 # Reference-node local dev artifacts
 reference-node/data*/
@@ -29,6 +32,8 @@ reference-node/**/nodes.json
 reference-node/data-indexer/
 indexer/.venv/
 indexer/**/__pycache__/
+indexer/data/
+issuer/data/
 reference-node/tmp-upload/
 
 # Next.js
