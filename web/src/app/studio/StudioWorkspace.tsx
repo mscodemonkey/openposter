@@ -3033,7 +3033,7 @@ export default function StudioWorkspace() {
   // ─── Breadcrumb ──────────────────────────────────────────────────────────────
 
   function Breadcrumb() {
-    const crumbs: Array<{ label: string; nav: NavState }> = [{ label: conn?.creatorDisplayName || t("title"), nav: { view: "root" } }];
+    const crumbs: Array<{ label: string; nav: NavState }> = [{ label: conn?.creatorId || t("title"), nav: { view: "root" } }];
     if (nav.view === "theme") {
       const theme = themes.find((t) => t.theme_id === nav.themeId);
       crumbs.push({ label: theme?.name ?? nav.themeId, nav: { view: "theme", themeId: nav.themeId } });
@@ -4122,7 +4122,7 @@ export default function StudioWorkspace() {
           py: 0.75,
           minHeight: 56,
         }}>
-            {(conn?.creatorDisplayName || conn?.creatorId) && (
+            {conn?.creatorId && (
               <Typography
                 variant="caption"
                 sx={{
@@ -4132,7 +4132,7 @@ export default function StudioWorkspace() {
                   color: "text.secondary",
                 }}
               >
-                {conn.creatorDisplayName || conn.creatorId}
+                {conn.creatorId}
               </Typography>
             )}
             <Box sx={{ flex: 1 }} />
