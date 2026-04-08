@@ -7,10 +7,6 @@ import { useTranslations } from "next-intl";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Card from "@mui/material/Card";
-import CardActions from "@mui/material/CardActions";
-import CardContent from "@mui/material/CardContent";
-import CardMedia from "@mui/material/CardMedia";
 import Container from "@mui/material/Container";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
@@ -21,9 +17,10 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import Grid from "@mui/material/GridLegacy";
 
+import PosterCard from "@/components/PosterCard";
 import { INDEXER_BASE_URL } from "@/lib/config";
+import { POSTER_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
 import type { IndexerNodesResponse, PosterEntry, SearchResponse } from "@/lib/types";
 
 type RecentResponse = { results: PosterEntry[]; next_cursor?: string | null };
@@ -36,42 +33,16 @@ type StatsResponse = {
 const MEDIA_TYPES = ["", "movie", "show", "season", "episode", "collection"];
 
 function PosterGrid({ items }: { items: PosterEntry[] }) {
-  const tc = useTranslations("common");
-  const t = useTranslations("home");
   return (
-    <Grid container spacing={2} sx={{ mt: 0.5 }}>
+    <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP, mt: 0.5 }}>
       {items.map((r) => (
-        <Grid key={r.poster_id} item xs={12} sm={6} md={4} lg={3}>
-          <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-            <Link href={`/p/${encodeURIComponent(r.poster_id)}`} style={{ textDecoration: "none" }}>
-              <CardMedia
-                component="img"
-                height={320}
-                image={r.assets.preview.url}
-                alt={r.media.title || r.poster_id}
-                sx={{ objectFit: "cover" }}
-              />
-            </Link>
-            <CardContent sx={{ flex: 1 }}>
-              <Typography sx={{ fontWeight: 800 }} noWrap>
-                {r.media.title || tc("untitled")}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" noWrap>
-                {r.creator.creator_id}
-              </Typography>
-            </CardContent>
-            <CardActions>
-              <Button size="small" variant="text" href={r.assets.full.url} target="_blank" rel="noreferrer">
-                {tc("download")}
-              </Button>
-              <Button size="small" variant="text" component={Link} href={`/creator/${encodeURIComponent(r.creator.creator_id)}`}>
-                {t("creator")}
-              </Button>
-            </CardActions>
-          </Card>
-        </Grid>
+        <PosterCard
+          key={r.poster_id}
+          poster={r}
+          onClick={() => { window.location.href = `/p/${encodeURIComponent(r.poster_id)}`; }}
+        />
       ))}
-    </Grid>
+    </Box>
   );
 }
 
