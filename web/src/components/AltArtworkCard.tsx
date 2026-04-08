@@ -66,7 +66,7 @@ export default function AltArtworkCard({
           poster.creator.creator_id ? (
             <PosterSubscribeMenu
               creatorId={poster.creator.creator_id}
-              creatorDisplayName={poster.creator.display_name}
+              creatorDisplayName={poster.creator.creator_id}
               themeId={themeId}
               themeName={themeLabel}
               coverUrl={poster.assets.preview.url}

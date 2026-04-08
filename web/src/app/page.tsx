@@ -57,7 +57,7 @@ function PosterGrid({ items }: { items: PosterEntry[] }) {
                 {r.media.title || tc("untitled")}
               </Typography>
               <Typography variant="body2" color="text.secondary" noWrap>
-                {r.creator.display_name}
+                {r.creator.creator_id}
               </Typography>
             </CardContent>
             <CardActions>

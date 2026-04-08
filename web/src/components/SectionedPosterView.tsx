@@ -115,7 +115,7 @@ function groupContent(items: PosterEntry[]) {
   for (const p of items) {
     const t = p.media.type;
     const cid = p.creator.creator_id;
-    const cname = p.creator.display_name;
+    const cname = p.creator.creator_id;
 
     if (t === "collection") {
       const collId = p.media.tmdb_id!;

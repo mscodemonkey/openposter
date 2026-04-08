@@ -170,11 +170,11 @@ export default function PosterCard({
   const subtitleParts = isEpisode
     ? [
         poster.media.episode_number != null ? `Episode ${String(poster.media.episode_number).padStart(2, "0")}` : null,
-        !hideCreator ? (poster.creator.display_name || null) : null,
+        !hideCreator ? (poster.creator.creator_id || null) : null,
       ].filter(Boolean)
     : [
         !isSeason && poster.media.year ? String(poster.media.year) : null,
-        !hideCreator ? (poster.creator.display_name || null) : null,
+        !hideCreator ? (poster.creator.creator_id || null) : null,
       ].filter(Boolean);
   const subtitleLine = subtitle ?? subtitleParts.join(" · ");
 
