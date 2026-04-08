@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -45,7 +44,8 @@ type StatsResponse = { posters: number; nodes: { total: number; up: number } };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// Maps NavType → the search `type` param. "all" sends no type param.
+const VALID_TYPES = new Set<NavType>(["all", "collection", "movie", "show", "episode"]);
+
 const TYPE_SEARCH_PARAM: Partial<Record<NavType, string>> = {
   collection: "collection",
   movie: "movie",
@@ -53,7 +53,6 @@ const TYPE_SEARCH_PARAM: Partial<Record<NavType, string>> = {
   episode: "episode",
 };
 
-// Label key in the "home" i18n namespace for each nav type
 const TYPE_LABEL_KEY: Record<NavType, string> = {
   all: "allArtwork",
   collection: "collections",
@@ -62,7 +61,6 @@ const TYPE_LABEL_KEY: Record<NavType, string> = {
   episode: "episodeCards",
 };
 
-// Icons for artwork types — defined at module level (never inside a component)
 const TYPE_ICONS: Record<NavType, React.ReactNode> = {
   all: <AppsIcon fontSize="small" />,
   collection: <CollectionsBookmarkOutlinedIcon fontSize="small" />,
@@ -107,34 +105,46 @@ const GLASS_SIDEBAR_SX = {
   backdropFilter: "blur(16px) saturate(150%)",
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── BrowseContent (needs Suspense wrapper for useSearchParams) ───────────────
 
-export default function Home() {
+function BrowseContent() {
   const t = useTranslations("home");
   const tc = useTranslations("common");
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // ── Navigation state ──
-  const [navType, setNavType] = useState<NavType>("all");
-  // selectedGenre is reserved for when indexer genre support is added
+  // ── Initialise state from URL ──
+  const initialType = (() => {
+    const raw = searchParams.get("type") ?? "all";
+    return VALID_TYPES.has(raw as NavType) ? (raw as NavType) : "all";
+  })();
+  const initialQuery = searchParams.get("q") ?? "";
+
+  const [navType, setNavType] = useState<NavType>(initialType);
   const [selectedGenre, setSelectedGenre] = useState<TmdbGenre | null>(null);
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
 
-  // ── Search ──
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── Poster data ──
   const [posters, setPosters] = useState<PosterEntry[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // ── Sidebar data ──
   const [genres, setGenres] = useState<TmdbGenre[]>([]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
 
-  // ── Debounce search ──
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Sync state → URL (replace so filter changes don't clog history) ──
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (navType !== "all") params.set("type", navType);
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+    const qs = params.toString();
+    router.replace(qs ? `/?${qs}` : "/", { scroll: false });
+  }, [navType, debouncedQuery, router]);
+
+  // ── Debounce search input ──
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => setDebouncedQuery(searchQuery), 350);
@@ -153,7 +163,7 @@ export default function Home() {
     return u.toString();
   }, [navType, debouncedQuery]);
 
-  // ── Load first page when nav or query changes ──
+  // ── Load first page when filter changes ──
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -198,7 +208,7 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  // ── Helpers ──
+  // ── Nav helpers ──
   function selectType(type: NavType) {
     setNavType(type);
     setSelectedGenre(null);
@@ -287,7 +297,7 @@ export default function Home() {
             </AccordionDetails>
           </Accordion>
 
-          {/* GENRES — genre filtering requires indexer genre support (TODO) */}
+          {/* GENRES — non-interactive pending indexer genre support */}
           <Accordion
             defaultExpanded
             disableGutters
@@ -345,7 +355,7 @@ export default function Home() {
           )}
         </Box>
 
-        {/* ── Main content area ── */}
+        {/* ── Main content ── */}
         <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
           {/* Toolbar */}
@@ -360,6 +370,7 @@ export default function Home() {
                 <Box
                   component="button"
                   onClick={goHome}
+                  aria-label={t("allArtwork")}
                   sx={{
                     display: "flex",
                     alignItems: "center",
@@ -439,18 +450,11 @@ export default function Home() {
 
                 <Box sx={{ pt: 3, pb: 1, display: "flex", justifyContent: "center" }}>
                   {cursor ? (
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={() => void loadMore()}
-                      disabled={loadingMore}
-                    >
+                    <Button variant="outlined" size="small" onClick={() => void loadMore()} disabled={loadingMore}>
                       {loadingMore ? tc("loadingMore") : tc("loadMore")}
                     </Button>
                   ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      {tc("endOfList")}
-                    </Typography>
+                    <Typography variant="body2" color="text.secondary">{tc("endOfList")}</Typography>
                   )}
                 </Box>
               </>
@@ -459,5 +463,15 @@ export default function Home() {
         </Box>
       </Box>
     </Box>
+  );
+}
+
+// ─── Page export — Suspense required for useSearchParams in App Router ─────────
+
+export default function Home() {
+  return (
+    <Suspense>
+      <BrowseContent />
+    </Suspense>
   );
 }
