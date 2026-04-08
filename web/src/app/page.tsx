@@ -1,302 +1,463 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
-import Alert from "@mui/material/Alert";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
 import Box from "@mui/material/Box";
+import Breadcrumbs from "@mui/material/Breadcrumbs";
 import Button from "@mui/material/Button";
-import Container from "@mui/material/Container";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import InputBase from "@mui/material/InputBase";
+import List from "@mui/material/List";
+import ListItem from "@mui/material/ListItem";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+
+import AppsIcon from "@mui/icons-material/Apps";
+import CollectionsBookmarkOutlinedIcon from "@mui/icons-material/CollectionsBookmarkOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import HomeIcon from "@mui/icons-material/Home";
+import MovieOutlinedIcon from "@mui/icons-material/MovieOutlined";
+import NavigateNextIcon from "@mui/icons-material/NavigateNext";
+import SearchIcon from "@mui/icons-material/Search";
+import TvOutlinedIcon from "@mui/icons-material/TvOutlined";
+import ViewCarouselOutlinedIcon from "@mui/icons-material/ViewCarouselOutlined";
 
 import PosterCard from "@/components/PosterCard";
 import { INDEXER_BASE_URL } from "@/lib/config";
 import { POSTER_GRID_COLS, GRID_GAP } from "@/lib/grid-sizes";
-import type { IndexerNodesResponse, PosterEntry, SearchResponse } from "@/lib/types";
+import type { PosterEntry } from "@/lib/types";
 
-type RecentResponse = { results: PosterEntry[]; next_cursor?: string | null };
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type StatsResponse = {
-  posters: number;
-  nodes: { total: number; up: number };
+type NavType = "all" | "collection" | "movie" | "show" | "episode";
+type TmdbGenre = { id: number; name: string };
+type StatsResponse = { posters: number; nodes: { total: number; up: number } };
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+// Maps NavType → the search `type` param. "all" sends no type param.
+const TYPE_SEARCH_PARAM: Partial<Record<NavType, string>> = {
+  collection: "collection",
+  movie: "movie",
+  show: "show",
+  episode: "episode",
 };
 
-const MEDIA_TYPES = ["", "movie", "show", "season", "episode", "collection"];
+// Label key in the "home" i18n namespace for each nav type
+const TYPE_LABEL_KEY: Record<NavType, string> = {
+  all: "allArtwork",
+  collection: "collections",
+  movie: "movies",
+  show: "tvShows",
+  episode: "episodeCards",
+};
 
-function PosterGrid({ items }: { items: PosterEntry[] }) {
-  return (
-    <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP, mt: 0.5 }}>
-      {items.map((r) => (
-        <PosterCard
-          key={r.poster_id}
-          poster={r}
-          onClick={() => { window.location.href = `/p/${encodeURIComponent(r.poster_id)}`; }}
-        />
-      ))}
-    </Box>
-  );
-}
+// Icons for artwork types — defined at module level (never inside a component)
+const TYPE_ICONS: Record<NavType, React.ReactNode> = {
+  all: <AppsIcon fontSize="small" />,
+  collection: <CollectionsBookmarkOutlinedIcon fontSize="small" />,
+  movie: <MovieOutlinedIcon fontSize="small" />,
+  show: <TvOutlinedIcon fontSize="small" />,
+  episode: <ViewCarouselOutlinedIcon fontSize="small" />,
+};
+
+const NAV_TYPES: NavType[] = ["all", "collection", "movie", "show", "episode"];
+
+// ─── Shared styles ────────────────────────────────────────────────────────────
+
+const CHECKERBOARD_SX = {
+  position: "absolute" as const,
+  inset: 0,
+  opacity: 0.08,
+  pointerEvents: "none" as const,
+  zIndex: 0,
+  backgroundImage: (theme: { palette: { mode: string } }) => {
+    const c = theme.palette.mode === "dark" ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.30)";
+    return `linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%), linear-gradient(45deg, ${c} 25%, transparent 25%, transparent 75%, ${c} 75%)`;
+  },
+  backgroundSize: "200px 200px",
+  backgroundPosition: "0 0, 100px 100px",
+};
+
+const GLASS_TOOLBAR_SX = {
+  backgroundColor: (theme: { palette: { mode: string } }) =>
+    theme.palette.mode === "light" ? "rgba(255,255,255,0.5)" : "rgba(18,18,20,0.5)",
+  backdropFilter: "blur(16px) saturate(150%)",
+  borderBottom: "1px solid",
+  borderColor: "divider",
+  boxShadow: (theme: { palette: { mode: string } }) =>
+    theme.palette.mode === "light"
+      ? "inset 0 1px 0 rgba(255,255,255,0.55), 0 1px 0 rgba(15,23,42,0.08)"
+      : "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 0 rgba(0,0,0,0.3)",
+};
+
+const GLASS_SIDEBAR_SX = {
+  backgroundColor: (theme: { palette: { mode: string } }) =>
+    theme.palette.mode === "light" ? "rgba(255,255,255,0.1)" : "rgba(18,18,20,0.1)",
+  backdropFilter: "blur(16px) saturate(150%)",
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const t = useTranslations("home");
   const tc = useTranslations("common");
+  const router = useRouter();
 
-  const [tmdbId, setTmdbId] = useState<string>("");
-  const [q, setQ] = useState<string>("");
-  const [type, setType] = useState<string>("");
-  const [search, setSearch] = useState<SearchResponse | null>(null);
+  // ── Navigation state ──
+  const [navType, setNavType] = useState<NavType>("all");
+  // selectedGenre is reserved for when indexer genre support is added
+  const [selectedGenre, setSelectedGenre] = useState<TmdbGenre | null>(null);
 
-  const [recent, setRecent] = useState<RecentResponse | null>(null);
-  const [recentCursor, setRecentCursor] = useState<string | null>(null);
-  const [loadingMoreRecent, setLoadingMoreRecent] = useState(false);
+  // ── Search ──
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [nodes, setNodes] = useState<IndexerNodesResponse | null>(null);
+  // ── Poster data ──
+  const [posters, setPosters] = useState<PosterEntry[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // ── Sidebar data ──
+  const [genres, setGenres] = useState<TmdbGenre[]>([]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
 
-  const [error, setError] = useState<string | null>(null);
+  // ── Debounce search ──
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedQuery(searchQuery), 350);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchQuery]);
 
-  const searchUrl = useMemo(() => {
+  // ── Build indexer search URL ──
+  const buildUrl = useCallback((cur?: string | null) => {
     const base = INDEXER_BASE_URL.replace(/\/+$/, "");
-    const u = new URL(base + "/v1/search");
-    if (tmdbId.trim() !== "") u.searchParams.set("tmdb_id", tmdbId.trim());
-    if (q.trim() !== "") u.searchParams.set("q", q.trim());
-    if (type.trim() !== "") u.searchParams.set("type", type.trim());
+    const u = new URL(`${base}/v1/search`);
+    const typeParam = TYPE_SEARCH_PARAM[navType];
+    if (typeParam) u.searchParams.set("type", typeParam);
+    if (debouncedQuery.trim()) u.searchParams.set("q", debouncedQuery.trim());
     u.searchParams.set("limit", "40");
+    if (cur) u.searchParams.set("cursor", cur);
     return u.toString();
-  }, [tmdbId, q, type]);
+  }, [navType, debouncedQuery]);
 
-  async function runSearch() {
-    setError(null);
-    const res = await fetch(searchUrl);
-    if (!res.ok) throw new Error(`search failed: ${res.status}`);
-    setSearch((await res.json()) as SearchResponse);
-  }
+  // ── Load first page when nav or query changes ──
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setPosters([]);
+    setCursor(null);
+    fetch(buildUrl())
+      .then((r) => r.json())
+      .then((data: { results?: PosterEntry[]; next_cursor?: string | null }) => {
+        if (cancelled) return;
+        setPosters(data.results ?? []);
+        setCursor(data.next_cursor ?? null);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [buildUrl]);
 
-  async function loadNodes() {
-    const base = INDEXER_BASE_URL.replace(/\/+$/, "");
-    const res = await fetch(base + "/v1/nodes");
-    if (!res.ok) throw new Error(`nodes failed: ${res.status}`);
-    setNodes((await res.json()) as IndexerNodesResponse);
-  }
-
-  async function loadStats() {
-    const base = INDEXER_BASE_URL.replace(/\/+$/, "");
-    const res = await fetch(base + "/v1/stats");
-    if (!res.ok) throw new Error(`stats failed: ${res.status}`);
-    setStats((await res.json()) as StatsResponse);
-  }
-
-  async function loadRecent() {
-    const base = INDEXER_BASE_URL.replace(/\/+$/, "");
-    const res = await fetch(base + "/v1/recent?limit=40");
-    if (!res.ok) throw new Error(`recent failed: ${res.status}`);
-    const json = (await res.json()) as RecentResponse;
-    setRecent(json);
-    setRecentCursor(json.next_cursor || null);
-  }
-
-  async function loadMoreRecent() {
-    if (!recentCursor) return;
-    setLoadingMoreRecent(true);
-    setError(null);
+  // ── Load more ──
+  async function loadMore() {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
     try {
-      const base = INDEXER_BASE_URL.replace(/\/+$/, "");
-      const res = await fetch(base + "/v1/recent?limit=40&cursor=" + encodeURIComponent(recentCursor));
-      if (!res.ok) throw new Error(`recent failed: ${res.status}`);
-      const json = (await res.json()) as RecentResponse;
-      setRecent((prev) => ({
-        results: [...(prev?.results || []), ...(json.results || [])],
-        next_cursor: json.next_cursor || null,
-      }));
-      setRecentCursor(json.next_cursor || null);
+      const data = await fetch(buildUrl(cursor)).then((r) => r.json()) as { results?: PosterEntry[]; next_cursor?: string | null };
+      setPosters((prev) => [...prev, ...(data.results ?? [])]);
+      setCursor(data.next_cursor ?? null);
     } finally {
-      setLoadingMoreRecent(false);
+      setLoadingMore(false);
     }
   }
 
+  // ── Load genres + stats on mount ──
   useEffect(() => {
-    void (async () => {
-      try {
-        await Promise.all([loadNodes(), loadRecent(), loadStats()]);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
+    fetch("/api/tmdb/genres")
+      .then((r) => r.json())
+      .then((d: { genres?: TmdbGenre[] }) => setGenres(d.genres ?? []))
+      .catch(() => {});
+
+    const base = INDEXER_BASE_URL.replace(/\/+$/, "");
+    fetch(`${base}/v1/stats`)
+      .then((r) => r.json())
+      .then((d: StatsResponse) => setStats(d))
+      .catch(() => {});
   }, []);
 
+  // ── Helpers ──
+  function selectType(type: NavType) {
+    setNavType(type);
+    setSelectedGenre(null);
+    setSearchQuery("");
+  }
+
+  function goHome() {
+    selectType("all");
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
   return (
-    <Container maxWidth="lg" sx={{ py: 3 }}>
-      <Stack spacing={2.5}>
-        <Box>
-          <Typography variant="h3" sx={{ fontWeight: 900, letterSpacing: -0.5 }}>
-            {t("title")}
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            {t("tagline")}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {tc("indexerLabel", { url: INDEXER_BASE_URL })}
-          </Typography>
+    <Box
+      sx={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        height: "calc(100vh - 64px)",
+        overflow: "hidden",
+        overscrollBehaviorY: "none",
+      }}
+    >
+      {/* Checkerboard background */}
+      <Box sx={CHECKERBOARD_SX} />
+
+      {/* Main layout */}
+      <Box sx={{ position: "relative", zIndex: 1, flex: 1, display: "flex", overflow: "hidden" }}>
+
+        {/* ── Left sidebar ── */}
+        <Box
+          component="nav"
+          sx={{
+            width: 220,
+            flexShrink: 0,
+            display: { xs: "none", md: "flex" },
+            flexDirection: "column",
+            borderRight: 1,
+            borderColor: "divider",
+            overflowY: "auto",
+            zIndex: 2,
+            ...GLASS_SIDEBAR_SX,
+          }}
+        >
+          <Box sx={{ pt: "5px" }} />
+
+          {/* ARTWORK TYPES */}
+          <Accordion
+            defaultExpanded
+            disableGutters
+            elevation={0}
+            square
+            sx={{ bgcolor: "transparent", "&:before": { display: "none" }, borderBottom: 1, borderColor: "divider" }}
+          >
+            <AccordionSummary
+              expandIcon={<ExpandMoreIcon sx={{ fontSize: "1rem" }} />}
+              sx={{ minHeight: 36, px: 2, "& .MuiAccordionSummary-content": { my: 0.5 } }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.secondary" }}>
+                {t("artworkTypes")}
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ p: 0, pb: 1 }}>
+              <List dense disablePadding>
+                {NAV_TYPES.map((type) => {
+                  const isActive = navType === type && !selectedGenre;
+                  return (
+                    <ListItem key={type} disablePadding>
+                      <ListItemButton
+                        selected={isActive}
+                        onClick={() => selectType(type)}
+                        sx={{ borderRadius: 1, mx: 0.5, px: 1 }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 32, color: isActive ? "primary.main" : "text.secondary" }}>
+                          {TYPE_ICONS[type]}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={t(TYPE_LABEL_KEY[type] as Parameters<typeof t>[0])}
+                          primaryTypographyProps={{ variant: "body2", fontWeight: isActive ? 700 : 400, noWrap: true }}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </AccordionDetails>
+          </Accordion>
+
+          {/* GENRES — genre filtering requires indexer genre support (TODO) */}
+          <Accordion
+            defaultExpanded
+            disableGutters
+            elevation={0}
+            square
+            sx={{ bgcolor: "transparent", "&:before": { display: "none" } }}
+          >
+            <AccordionSummary
+              expandIcon={<ExpandMoreIcon sx={{ fontSize: "1rem" }} />}
+              sx={{ minHeight: 36, px: 2, "& .MuiAccordionSummary-content": { my: 0.5, alignItems: "center", gap: 1 } }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.secondary" }}>
+                {t("genres")}
+              </Typography>
+              <Chip
+                label={t("comingSoon")}
+                size="small"
+                sx={{ height: 15, fontSize: "0.55rem", fontWeight: 800, letterSpacing: "0.06em", px: 0.25 }}
+              />
+            </AccordionSummary>
+            <AccordionDetails sx={{ p: 0, pb: 1 }}>
+              {genres.length === 0 ? (
+                <Typography variant="caption" color="text.disabled" sx={{ px: 2, display: "block" }}>
+                  {t("genresUnavailable")}
+                </Typography>
+              ) : (
+                <Tooltip title={t("genresComingSoonTooltip")} placement="right" arrow>
+                  <List dense disablePadding>
+                    {genres.map((genre) => (
+                      <ListItem key={genre.id} disablePadding>
+                        <ListItemButton disabled sx={{ borderRadius: 1, mx: 0.5, px: 1, py: 0.25 }}>
+                          <ListItemText
+                            primary={genre.name}
+                            primaryTypographyProps={{ variant: "body2", noWrap: true }}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                    ))}
+                  </List>
+                </Tooltip>
+              )}
+            </AccordionDetails>
+          </Accordion>
+
+          {/* Sidebar footer */}
+          {stats && (
+            <Box sx={{ mt: "auto", px: 2, py: 1.5, borderTop: 1, borderColor: "divider" }}>
+              <Typography variant="caption" color="text.disabled" sx={{ display: "block", lineHeight: 1.6 }}>
+                {stats.posters.toLocaleString()} {t("totalPostersLabel")}
+              </Typography>
+              <Typography variant="caption" color="text.disabled" sx={{ display: "block", lineHeight: 1.6 }}>
+                {stats.nodes.up}/{stats.nodes.total} {t("nodesLabel")}
+              </Typography>
+            </Box>
+          )}
         </Box>
 
-        {/* Summary/stats block */}
-        {stats && (
-          <Paper sx={{ p: 2.5 }}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between">
-              <Box>
-                <Typography variant="overline" color="text.secondary">
-                  {t("totalPosters")}
-                </Typography>
-                <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                  {stats.posters}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="overline" color="text.secondary">
-                  {t("nodesOnline")}
-                </Typography>
-                <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                  {stats.nodes.up}/{stats.nodes.total}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="overline" color="text.secondary">
-                  {t("quickLinks")}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  <Link href="/onboarding">{t("creatorOnboarding")}</Link>
-                </Typography>
-              </Box>
-            </Stack>
-          </Paper>
-        )}
+        {/* ── Main content area ── */}
+        <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-        {error && <Alert severity="error">{error}</Alert>}
+          {/* Toolbar */}
+          <Box sx={{ flexShrink: 0, ...GLASS_TOOLBAR_SX }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, px: 2, minHeight: 48 }}>
 
-        <Paper sx={{ p: 2.5 }}>
-          <Stack spacing={1.5}>
-            <Stack direction="row" spacing={1} alignItems="baseline" justifyContent="space-between">
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                {t("searchPosters")}
-              </Typography>
-            </Stack>
-
-            <Typography variant="body2" color="text.secondary">
-              {t("searchHint")}
-            </Typography>
-
-            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-              <TextField label={t("titleContains")} value={q} onChange={(e) => setQ(e.target.value)} fullWidth />
-              <TextField
-                select
-                label={t("mediaType")}
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                SelectProps={{ native: true }}
-                sx={{ minWidth: 220 }}
+              {/* Breadcrumbs */}
+              <Breadcrumbs
+                separator={<NavigateNextIcon sx={{ fontSize: "0.9rem" }} />}
+                sx={{ flex: 1, "& .MuiBreadcrumbs-ol": { flexWrap: "nowrap" } }}
               >
-                {MEDIA_TYPES.map((mt) => (
-                  <option key={mt} value={mt}>
-                    {mt === "" ? t("any") : mt}
-                  </option>
-                ))}
-              </TextField>
-              <TextField label={t("tmdbId")} value={tmdbId} onChange={(e) => setTmdbId(e.target.value)} sx={{ minWidth: 180 }} />
-              <Button onClick={() => void runSearch().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}>
-                {tc("search")}
-              </Button>
-            </Stack>
+                <Box
+                  component="button"
+                  onClick={goHome}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    p: 0,
+                    color: navType === "all" && !selectedGenre ? "text.primary" : "text.secondary",
+                    "&:hover": { color: "text.primary" },
+                    transition: "color 0.15s",
+                  }}
+                >
+                  <HomeIcon sx={{ fontSize: "1.1rem" }} />
+                </Box>
 
-            {search && (
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  {t("resultCount", { count: search.results.length })}
-                </Typography>
-                <PosterGrid items={search.results} />
+                {navType !== "all" && (
+                  <Typography variant="body2" fontWeight={600} color="text.primary" noWrap>
+                    {t(TYPE_LABEL_KEY[navType] as Parameters<typeof t>[0])}
+                  </Typography>
+                )}
+
+                {selectedGenre && (
+                  <Typography variant="body2" fontWeight={600} color="text.primary" noWrap>
+                    {selectedGenre.name}
+                  </Typography>
+                )}
+              </Breadcrumbs>
+
+              {/* Search */}
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.75,
+                  bgcolor: (theme) => theme.palette.mode === "dark" ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                  border: 1,
+                  borderColor: "divider",
+                  borderRadius: 1.5,
+                  px: 1.25,
+                  py: 0.5,
+                  minWidth: { xs: 140, sm: 220 },
+                }}
+              >
+                <SearchIcon sx={{ fontSize: "1rem", color: "text.disabled", flexShrink: 0 }} />
+                <InputBase
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t("searchPlaceholder")}
+                  sx={{ flex: 1, fontSize: "0.85rem", "& input": { p: 0 } }}
+                  inputProps={{ "aria-label": t("searchPlaceholder") }}
+                />
               </Box>
-            )}
-          </Stack>
-        </Paper>
+            </Box>
+          </Box>
 
-        <Paper sx={{ p: 2.5 }}>
-          <Stack spacing={1.5}>
-            <Stack direction="row" spacing={1} alignItems="baseline" justifyContent="space-between">
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                {t("recentUploads")}
+          {/* Poster grid */}
+          <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
+            {loading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", pt: 8 }}>
+                <CircularProgress />
+              </Box>
+            ) : posters.length === 0 ? (
+              <Typography color="text.secondary" sx={{ pt: 6, textAlign: "center" }}>
+                {tc("noPostersFound")}
               </Typography>
-            </Stack>
-
-            {recent ? (
-              recent.results.length > 0 ? (
-                <>
-                  <PosterGrid items={recent.results} />
-                  <Box sx={{ pt: 1 }}>
-                    {recentCursor ? (
-                      <Button
-                        variant="outlined"
-                        onClick={() => void loadMoreRecent().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}
-                        disabled={loadingMoreRecent}
-                      >
-                        {loadingMoreRecent ? tc("loadingMore") : tc("loadMore")}
-                      </Button>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        {tc("endOfList")}
-                      </Typography>
-                    )}
-                  </Box>
-                </>
-              ) : (
-                <Typography color="text.secondary">{t("noRecentPosters")}</Typography>
-              )
             ) : (
-              <Typography color="text.secondary">{tc("loading")}</Typography>
-            )}
-          </Stack>
-        </Paper>
-
-        <Paper sx={{ p: 2.5 }}>
-          <Stack spacing={1.5}>
-            <Typography variant="h6" sx={{ fontWeight: 800 }}>
-              {t("indexerNodeStatus")}
-            </Typography>
-
-            {nodes ? (
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{t("url")}</TableCell>
-                    <TableCell>{t("status")}</TableCell>
-                    <TableCell>{t("lastCrawled")}</TableCell>
-                    <TableCell>{t("downSince")}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {nodes.nodes.map((n) => (
-                    <TableRow key={n.url}>
-                      <TableCell sx={{ wordBreak: "break-word" }}>{n.url}</TableCell>
-                      <TableCell>{n.status}</TableCell>
-                      <TableCell>{n.last_crawled_at || "-"}</TableCell>
-                      <TableCell>{n.down_since || "-"}</TableCell>
-                    </TableRow>
+              <>
+                <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
+                  {posters.map((p) => (
+                    <PosterCard
+                      key={p.poster_id}
+                      poster={p}
+                      onClick={() => router.push(`/p/${encodeURIComponent(p.poster_id)}`)}
+                    />
                   ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <Typography color="text.secondary">{tc("loading")}</Typography>
+                </Box>
+
+                <Box sx={{ pt: 3, pb: 1, display: "flex", justifyContent: "center" }}>
+                  {cursor ? (
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => void loadMore()}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore ? tc("loadingMore") : tc("loadMore")}
+                    </Button>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      {tc("endOfList")}
+                    </Typography>
+                  )}
+                </Box>
+              </>
             )}
-          </Stack>
-        </Paper>
-      </Stack>
-    </Container>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 }
