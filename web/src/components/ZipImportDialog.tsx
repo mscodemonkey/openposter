@@ -383,6 +383,8 @@ async function uploadItem(
   conn: { nodeUrl: string; adminToken: string; creatorId: string; creatorDisplayName: string },
   themeId?: string,
   language?: string,
+  contextTitle?: string,
+  contextYear?: number,
 ): Promise<void> {
   const fullFile = new File([item.blob], item.filename, { type: "image/jpeg" });
   const preview = await generatePreview(fullFile);
@@ -394,31 +396,39 @@ async function uploadItem(
     form.append("media_type", "collection");
     form.append("tmdb_id", String(k.tmdbId));
     form.append("collection_tmdb_id", String(k.collectionTmdbId));
+    form.append("title", k.title);
   } else if (k.tag === "collectionBackdrop") {
     form.append("media_type", "backdrop");
     form.append("kind", "background");
     form.append("tmdb_id", String(k.tmdbId));
     form.append("collection_tmdb_id", String(k.collectionTmdbId));
+    if (contextTitle) form.append("title", contextTitle);
   } else if (k.tag === "movie") {
     form.append("media_type", "movie");
     form.append("tmdb_id", String(k.tmdbId));
     form.append("collection_tmdb_id", String(k.collectionTmdbId));
+    form.append("title", k.title);
     form.append("year", String(k.year));
   } else if (k.tag === "showPoster") {
     form.append("media_type", "show");
     form.append("tmdb_id", String(k.tmdbId));
+    form.append("title", k.title);
     form.append("year", String(k.year));
   } else if (k.tag === "showBackdrop") {
     form.append("media_type", "backdrop");
     form.append("kind", "background");
     form.append("tmdb_id", String(k.tmdbId));
     form.append("show_tmdb_id", String(k.showTmdbId));
+    if (contextTitle) form.append("title", contextTitle);
+    if (contextYear) form.append("year", String(contextYear));
   } else if (k.tag === "season") {
     form.append("media_type", "season");
     // Use season TMDB ID if available, else fall back to show ID (backend needs a non-null tmdb_id)
     form.append("tmdb_id", String(k.tmdbId ?? k.showTmdbId));
     form.append("show_tmdb_id", String(k.showTmdbId));
     form.append("season_number", String(k.seasonNumber));
+    if (contextTitle) form.append("title", contextTitle);
+    if (contextYear) form.append("year", String(contextYear));
   } else if (k.tag === "episode") {
     form.append("media_type", "episode");
     // Episodes don't have their own TMDB ID in this context; use show ID as required placeholder
@@ -426,6 +436,8 @@ async function uploadItem(
     form.append("show_tmdb_id", String(k.showTmdbId));
     form.append("season_number", String(k.seasonNumber));
     form.append("episode_number", String(k.episodeNumber));
+    if (contextTitle) form.append("title", contextTitle);
+    if (contextYear) form.append("year", String(contextYear));
   }
 
   form.append("creator_id", conn.creatorId);
@@ -579,7 +591,7 @@ export default function ZipImportDialog({ open, onClose, config, conn, onComplet
     for (let i = 0; i < items.length; i++) {
       setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "uploading" } : it));
       try {
-        await uploadItem(items[i], conn, activeThemeId || undefined, activeLanguage || undefined);
+        await uploadItem(items[i], conn, activeThemeId || undefined, activeLanguage || undefined, config.contextTitle, config.contextYear);
         setItems((prev) => prev.map((it, idx) => idx === i ? { ...it, status: "done" } : it));
         done++;
       } catch (e) {
