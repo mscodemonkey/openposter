@@ -532,8 +532,8 @@ export default function SettingsPage() {
             }
             return [...prev, added];
           });
-          if (adminToken) {
-            fetchSyncStatus(nodeUrl, adminToken)
+          if (creatorConnection && adminToken) {
+            fetchSyncStatus(creatorConnection.nodeUrl, adminToken)
               .then((status) => setSyncStatuses((prev) => ({ ...prev, [added.id]: status })))
               .catch(() => undefined);
           }

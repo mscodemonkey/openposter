@@ -47,6 +47,7 @@ interface TvShowMediaDetailProps {
   onUntrack: (id: string) => void;
   onTrack: (id: string, artwork: TrackedArtwork) => void;
   onViewEpisodes?: (season: MediaItem) => void;
+  serverName?: string;
 }
 
 export default function TvShowMediaDetail({
@@ -61,6 +62,7 @@ export default function TvShowMediaDetail({
   onUntrack,
   onTrack,
   onViewEpisodes,
+  serverName: _serverName,
 }: TvShowMediaDetailProps) {
   const t = useTranslations("myMedia");
 
@@ -782,7 +784,7 @@ export default function TvShowMediaDetail({
                 menuSlot={
                   <CardMenuButton
                     items={[
-                      subscribeMenuItem(trackedArtwork.get(season.id + ":bg") ?? null, !!(trackedArtwork.get(season.id + ":bg")?.creator_id && creatorSubs.has(trackedArtwork.get(season.id + ":bg")!.creator_id))),
+                      subscribeMenuItem(trackedArtwork.get(season.id + ":bg") ?? null, !!(trackedArtwork.get(season.id + ":bg")?.creator_id && creatorSubs.has(trackedArtwork.get(season.id + ":bg")!.creator_id!))),
                       { label: t("tooltipResetToDefaultBackdrop"), kind: "reset", disabled: !trackedArtwork.get(season.id + ":bg"), onClick: () => handleResetBackdrop(season.id, "season") },
                       { label: t("tooltipUploadOwnBackdrop"), kind: "upload", onClick: () => {} },
                       { label: t("menuChooseBackdropFromOpenPoster"), kind: "select", onClick: () => openSeasonDrawer(season, "backdrop") },

@@ -375,11 +375,13 @@ export default function MediaServerWizard({
     const activeConnection = getConnection();
     if (!open || step !== "done" || !completedServer || !activeConnection || !syncTrackingActive) return;
 
+    const capturedConnection = activeConnection;
+    const capturedServer = completedServer;
     let cancelled = false;
 
     async function pollSync() {
       try {
-        const status = await fetchSyncStatus(activeConnection.nodeUrl, activeConnection.adminToken, completedServer.id);
+        const status = await fetchSyncStatus(capturedConnection.nodeUrl, capturedConnection.adminToken, capturedServer.id);
         if (cancelled || !mountedRef.current) return;
         setSyncStatus(status);
         if (status.is_syncing) {

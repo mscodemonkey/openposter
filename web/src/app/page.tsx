@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -105,6 +105,57 @@ const GLASS_SIDEBAR_SX = {
   backdropFilter: "blur(16px) saturate(150%)",
 };
 
+// ─── Poster grouping ──────────────────────────────────────────────────────────
+
+type BrowsePosterEntry = { poster: PosterEntry; hiddenCount: number };
+
+function getGroupKey(p: PosterEntry): string | null {
+  if (p.media.type === "movie" && p.media.collection_tmdb_id != null)
+    return `movie:${p.creator.creator_id}:${p.media.collection_tmdb_id}`;
+  if (p.media.type === "episode" && p.media.show_tmdb_id != null)
+    return `episode:${p.creator.creator_id}:${p.media.show_tmdb_id}:${p.media.season_number ?? 0}`;
+  return null;
+}
+
+function pickRepresentative(members: PosterEntry[]): PosterEntry {
+  return members.reduce((best, p) => {
+    const score = (x: PosterEntry) =>
+      x.media.type === "episode" ? (x.media.episode_number ?? -Infinity) : (x.media.year ?? -Infinity);
+    return score(p) > score(best) ? p : best;
+  });
+}
+
+function groupBrowsePosters(posters: PosterEntry[]): BrowsePosterEntry[] {
+  const groups = new Map<string, PosterEntry[]>();
+  const ungrouped: Array<{ poster: PosterEntry; idx: number }> = [];
+  const keyFirstIdx = new Map<string, number>();
+
+  posters.forEach((p, idx) => {
+    const key = getGroupKey(p);
+    if (!key) { ungrouped.push({ poster: p, idx }); return; }
+    if (!groups.has(key)) { groups.set(key, []); keyFirstIdx.set(key, idx); }
+    groups.get(key)!.push(p);
+  });
+
+  const result: Array<{ idx: number; entry: BrowsePosterEntry }> = [];
+  for (const [key, members] of groups) {
+    result.push({ idx: keyFirstIdx.get(key)!, entry: { poster: pickRepresentative(members), hiddenCount: members.length - 1 } });
+  }
+  for (const { poster, idx } of ungrouped) {
+    result.push({ idx, entry: { poster, hiddenCount: 0 } });
+  }
+  result.sort((a, b) => a.idx - b.idx);
+  return result.map((r) => r.entry);
+}
+
+function GroupBadge({ hiddenCount }: { hiddenCount: number }) {
+  return (
+    <Box sx={{ display: "inline-flex", alignItems: "center", bgcolor: "rgba(0,0,0,0.70)", color: "#fff", borderRadius: "6px", px: 0.75, py: 0.25 }}>
+      <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, lineHeight: 1 }}>{`+${hiddenCount}`}</Typography>
+    </Box>
+  );
+}
+
 // ─── BrowseContent (needs Suspense wrapper for useSearchParams) ───────────────
 
 function BrowseContent() {
@@ -132,6 +183,8 @@ function BrowseContent() {
 
   const [genres, setGenres] = useState<TmdbGenre[]>([]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
+
+  const groupedPosters = useMemo(() => groupBrowsePosters(posters), [posters]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -439,11 +492,12 @@ function BrowseContent() {
             ) : (
               <>
                 <Box sx={{ display: "grid", gridTemplateColumns: POSTER_GRID_COLS, gap: GRID_GAP }}>
-                  {posters.map((p) => (
+                  {groupedPosters.map(({ poster, hiddenCount }) => (
                     <PosterCard
-                      key={p.poster_id}
-                      poster={p}
-                      onClick={() => router.push(`/p/${encodeURIComponent(p.poster_id)}`)}
+                      key={poster.poster_id}
+                      poster={poster}
+                      onClick={() => router.push(`/p/${encodeURIComponent(poster.poster_id)}`)}
+                      topRightSlot={hiddenCount > 0 ? <GroupBadge hiddenCount={hiddenCount} /> : undefined}
                     />
                   ))}
                 </Box>
