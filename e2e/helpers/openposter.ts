@@ -12,6 +12,7 @@ export const TEST_WEB_B_URL = process.env.OPENPOSTER_WEB_B_BASE_URL ?? "http://l
 export const TEST_DIAG_URL = process.env.OPENPOSTER_DIAG_BASE_URL ?? "http://localhost:3001";
 export const TEST_INDEXER_URL = process.env.OPENPOSTER_INDEXER_BASE_URL ?? "http://localhost:8090";
 export const TEST_ISSUER_URL = process.env.OPENPOSTER_ISSUER_BASE_URL ?? "http://localhost:8085";
+export const TEST_PLEX_URL = process.env.OPENPOSTER_TEST_PLEX_URL ?? "http://localhost:32401";
 export const TEST_ADMIN_TOKEN = process.env.OPENPOSTER_TEST_ADMIN_TOKEN ?? "dev-admin";
 export const TEST_RESET_TOKEN = process.env.OPENPOSTER_TEST_RESET_TOKEN ?? "dev-reset";
 export const TEST_CREATOR_ID = process.env.OPENPOSTER_TEST_CREATOR_ID ?? "mcfly";
@@ -222,7 +223,7 @@ export async function resetDevStack(): Promise<void> {
     `${process.env.OPENPOSTER_TEST_NODE_B_URL ?? "http://localhost:8082"}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
     `${TEST_INDEXER_URL}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
     `${process.env.OPENPOSTER_TEST_ISSUER_URL ?? "http://localhost:8085"}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
-    `http://localhost:32401/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
+    `${TEST_PLEX_URL}/dev/reset?token=${encodeURIComponent(TEST_RESET_TOKEN)}`,
   ];
 
   for (const url of resetTargets) {

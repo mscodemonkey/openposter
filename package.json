@@ -4,7 +4,10 @@
   "scripts": {
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
-    "e2e:ui": "playwright test --ui"
+    "e2e:ui": "playwright test --ui",
+    "e2e:isolated": "./scripts/e2e-isolated.sh",
+    "e2e:isolated:headed": "./scripts/e2e-isolated.sh --headed",
+    "e2e:isolated:ui": "./scripts/e2e-isolated.sh --ui"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1"

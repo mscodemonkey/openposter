@@ -1,34 +1,12 @@
-# OpenPoster — canonical dev compose (repo root)
-#
-# This is the single compose file for the whole stack.
-# The old reference-node/compose.multi.yml is superseded by this file.
-#
-# Services:
-#   directory :8084  — bootstrap directory node (gossip, /v1/nodes)
-#   node-a    :8081  — creator node (Studio / upload)
-#   node-b    :8082  — consumer node (My Media / Plex)
-#   indexer   :8090  — crawls nodes, powers search (seeds from directory)
-#   issuer    :8085  — identity, creator handles, node registry
-#   web       :3000  — Web UI pointed at Node A (creator)
-#   web-b     :3002  — Web UI pointed at Node B (consumer testing)
-#   diag      :3001  — Diagnostics UI
-#
-# First-time setup:
-#   1. Copy .env.example to .env and fill in TMDB_READ_ACCESS_TOKEN
-#   2. docker compose up --build
-#
-# Dev reset (wipes all state):
-#   curl "http://localhost:8081/dev/reset?token=dev-reset"
-#   curl "http://localhost:8082/dev/reset?token=dev-reset"
-#   curl "http://localhost:8085/dev/reset?token=dev-reset"
+# OpenPoster isolated local E2E compose.
+# Uses alternate ports and disposable named volumes so tests can run
+# alongside the normal dev stack without sharing state.
 
 services:
-
-  # ── Mock Plex (disposable E2E media server) ──────────────────────────────
   plex:
     build: ./plex-mock
     ports:
-      - "32401:32400"
+      - "32411:32400"
     environment:
       PLEX_TOKEN: "dev-plex-token"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
@@ -40,28 +18,23 @@ services:
       timeout: 3s
       retries: 10
 
-  # ── Directory (bootstrap gossip node) ────────────────────────────────────
-  # Plain reference-node instance whose sole job is to accept node registrations
-  # and serve GET /v1/nodes for gossip bootstrap. The indexer seeds from here,
-  # mirroring production where all indexers seed from directory.openposter.art.
   directory:
     build: ./reference-node
-    user: "${UID:-1000}:${GID:-1000}"
     ports:
-      - "8084:8080"
+      - "8484:8080"
     environment:
       PORT: "8080"
-      OPENPOSTER_BASE_URL: "http://directory:8080"
+      OPENPOSTER_BASE_URL: "http://localhost:8484"
       OPENPOSTER_NODE_NAME: "OpenPoster Directory"
       OPENPOSTER_OPERATOR_NAME: "OpenPoster Dev"
       OPENPOSTER_ADMIN_TOKEN: "dev-admin"
       OPENPOSTER_ALLOW_PRIVATE_NODES: "true"
-      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3400,http://localhost:3401,http://localhost:3402"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
     volumes:
       - ./reference-node/openposter_node:/app/openposter_node
       - ./reference-node/pyproject.toml:/app/pyproject.toml:ro
-      - ./reference-node/data-directory:/data
+      - e2e-directory-data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health').read()"]
@@ -69,30 +42,27 @@ services:
       timeout: 3s
       retries: 10
 
-  # ── Node A (creator) ──────────────────────────────────────────────────────
   node-a:
     build: ./reference-node
-    user: "${UID:-1000}:${GID:-1000}"
     ports:
-      - "8081:8080"
+      - "8481:8080"
     environment:
       PORT: "8080"
-      OPENPOSTER_BASE_URL: "http://localhost:8081"
+      OPENPOSTER_BASE_URL: "http://localhost:8481"
       OPENPOSTER_OFFICIAL_DIRECTORY_URL: "http://directory:8080"
       OPENPOSTER_NODE_NAME: "Node A (Creator)"
       OPENPOSTER_OPERATOR_NAME: "OpenPoster Dev"
       OPENPOSTER_OPERATOR_CONTACT: "mailto:dev@openposter.local"
       OPENPOSTER_ADMIN_TOKEN: "dev-admin"
       OPENPOSTER_ALLOW_PRIVATE_NODES: "true"
-      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3400,http://localhost:3401,http://localhost:3402"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
-      # Announce to directory using Docker-internal URL (directory validates this)
       OPENPOSTER_ANNOUNCE_TO: "http://directory:8080"
       OPENPOSTER_ANNOUNCE_URL: "http://node-a:8080"
     volumes:
       - ./reference-node/openposter_node:/app/openposter_node
       - ./reference-node/pyproject.toml:/app/pyproject.toml:ro
-      - ./reference-node/data-a:/data
+      - e2e-node-a-data:/data
     depends_on:
       directory:
         condition: service_healthy
@@ -105,30 +75,27 @@ services:
       timeout: 3s
       retries: 10
 
-  # ── Node B (consumer) ─────────────────────────────────────────────────────
   node-b:
     build: ./reference-node
-    user: "${UID:-1000}:${GID:-1000}"
     ports:
-      - "8082:8080"
+      - "8482:8080"
     environment:
       PORT: "8080"
-      OPENPOSTER_BASE_URL: "http://localhost:8082"
+      OPENPOSTER_BASE_URL: "http://localhost:8482"
       OPENPOSTER_OFFICIAL_DIRECTORY_URL: "http://directory:8080"
       OPENPOSTER_NODE_NAME: "Node B (Consumer)"
       OPENPOSTER_OPERATOR_NAME: "OpenPoster Dev"
       OPENPOSTER_OPERATOR_CONTACT: "mailto:dev@openposter.local"
       OPENPOSTER_ADMIN_TOKEN: "dev-admin"
       OPENPOSTER_ALLOW_PRIVATE_NODES: "true"
-      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3400,http://localhost:3401,http://localhost:3402"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
-      # Announce to directory using Docker-internal URL (directory validates this)
       OPENPOSTER_ANNOUNCE_TO: "http://directory:8080"
       OPENPOSTER_ANNOUNCE_URL: "http://node-b:8080"
     volumes:
       - ./reference-node/openposter_node:/app/openposter_node
       - ./reference-node/pyproject.toml:/app/pyproject.toml:ro
-      - ./reference-node/data-b:/data
+      - e2e-node-b-data:/data
     depends_on:
       directory:
         condition: service_healthy
@@ -141,24 +108,21 @@ services:
       timeout: 3s
       retries: 10
 
-  # ── Indexer ───────────────────────────────────────────────────────────────
   indexer:
     build: ./indexer
-    user: "${UID:-1000}:${GID:-1000}"
     ports:
-      - "8090:8090"
+      - "8490:8090"
     environment:
       PORT: "8090"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
       OPENPOSTER_OFFICIAL_DIRECTORY_URL: "http://directory:8080"
-      # Seed from directory — mirrors production topology
       OPENPOSTER_INDEXER_SEEDS: "http://directory:8080"
       OPENPOSTER_INDEXER_POLL_SECONDS: "10"
-      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3400,http://localhost:3401,http://localhost:3402"
     volumes:
       - ./indexer/openposter_indexer:/app/openposter_indexer
       - ./indexer/pyproject.toml:/app/pyproject.toml:ro
-      - ./indexer/data:/data
+      - e2e-indexer-data:/data
     depends_on:
       directory:
         condition: service_healthy
@@ -173,23 +137,21 @@ services:
       timeout: 3s
       retries: 10
 
-  # ── Issuer ────────────────────────────────────────────────────────────────
   issuer:
     build: ./issuer
-    user: "${UID:-1000}:${GID:-1000}"
     ports:
-      - "8085:8085"
+      - "8485:8085"
     environment:
-      OPENPOSTER_ISSUER_BASE_URL: "http://localhost:8085"
+      OPENPOSTER_ISSUER_BASE_URL: "http://localhost:8485"
       OPENPOSTER_ISSUER_JWT_SECRET: "dev-jwt-secret-change-in-production"
       OPENPOSTER_ISSUER_JWT_ISSUER: "openposter-issuer"
       OPENPOSTER_ISSUER_JWT_EXP_SECONDS: "31536000"
       OPENPOSTER_DEV_RESET_TOKEN: "dev-reset"
-      OPENPOSTER_CORS_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+      OPENPOSTER_CORS_ORIGINS: "http://localhost:3400,http://localhost:3401,http://localhost:3402"
     volumes:
       - ./issuer/openposter_issuer:/app/openposter_issuer
       - ./issuer/pyproject.toml:/app/pyproject.toml:ro
-      - ./issuer/data:/data
+      - e2e-issuer-data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8085/v1/health').read()"]
@@ -197,18 +159,15 @@ services:
       timeout: 3s
       retries: 10
 
-  # ── Web UI (Studio + My Media) ────────────────────────────────────────────
   web:
     build: ./web
     ports:
-      - "3000:3000"
+      - "3400:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      # NEXT_PUBLIC_ vars are browser-visible — must use localhost so client fetches work
-      NEXT_PUBLIC_INDEXER_BASE_URL: "http://localhost:8090"
-      NEXT_PUBLIC_ISSUER_BASE_URL: "http://localhost:8085"
-      # Server-side vars use Docker internal DNS for server component fetches
+      NEXT_PUBLIC_INDEXER_BASE_URL: "http://localhost:8490"
+      NEXT_PUBLIC_ISSUER_BASE_URL: "http://localhost:8485"
       INDEXER_BASE_URL: "http://indexer:8090"
       ISSUER_BASE_URL: "http://issuer:8085"
       TMDB_READ_ACCESS_TOKEN: "${TMDB_READ_ACCESS_TOKEN}"
@@ -226,16 +185,15 @@ services:
       - web-next-cache:/app/.next
     restart: unless-stopped
 
-  # ── Web UI B (consumer testing — Node B) ─────────────────────────────────
   web-b:
     build: ./web
     ports:
-      - "3002:3000"
+      - "3402:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      NEXT_PUBLIC_INDEXER_BASE_URL: "http://localhost:8090"
-      NEXT_PUBLIC_ISSUER_BASE_URL: "http://localhost:8085"
+      NEXT_PUBLIC_INDEXER_BASE_URL: "http://localhost:8490"
+      NEXT_PUBLIC_ISSUER_BASE_URL: "http://localhost:8485"
       INDEXER_BASE_URL: "http://indexer:8090"
       ISSUER_BASE_URL: "http://issuer:8085"
       TMDB_READ_ACCESS_TOKEN: "${TMDB_READ_ACCESS_TOKEN}"
@@ -253,11 +211,10 @@ services:
       - web-b-next-cache:/app/.next
     restart: unless-stopped
 
-  # ── Diagnostics UI ────────────────────────────────────────────────────────
   diag:
     build: ./diagnostics-app
     ports:
-      - "3001:3001"
+      - "3401:3001"
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
     depends_on:
@@ -276,9 +233,14 @@ services:
     restart: unless-stopped
 
 volumes:
-  web-node-modules:
-  web-next-cache:
-  web-b-node-modules:
-  web-b-next-cache:
-  diag-node-modules:
   diag-next-cache:
+  diag-node-modules:
+  e2e-directory-data:
+  e2e-indexer-data:
+  e2e-issuer-data:
+  e2e-node-a-data:
+  e2e-node-b-data:
+  web-b-next-cache:
+  web-b-node-modules:
+  web-next-cache:
+  web-node-modules:

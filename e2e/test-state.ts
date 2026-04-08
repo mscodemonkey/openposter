@@ -10,6 +10,7 @@ const SNAPSHOT_ROOT = path.join(
   `openposter-e2e-state-${createHash("sha1").update(ROOT).digest("hex").slice(0, 12)}`,
 );
 const SNAPSHOT_META = path.join(SNAPSHOT_ROOT, "snapshot.json");
+const ISOLATED_E2E = /^(1|true|yes)$/i.test(process.env.OPENPOSTER_E2E_ISOLATED ?? "");
 
 const STATEFUL_SERVICES = ["directory", "node-a", "node-b", "indexer", "issuer"];
 
@@ -21,16 +22,19 @@ const STATE_DIRS = [
   { name: "issuer", dir: path.join(ROOT, "issuer/data") },
 ] as const;
 
+function toResetUrl(url: string): string {
+  if (url.includes("/dev/reset")) return url;
+  return `${url.replace(/\/+$/, "")}/dev/reset?token=${encodeURIComponent(process.env.OPENPOSTER_TEST_RESET_TOKEN ?? "dev-reset")}`;
+}
+
 const RESET_URLS = [
-  process.env.OPENPOSTER_TEST_DIRECTORY_URL ?? "http://localhost:8084/dev/reset?token=dev-reset",
-  process.env.OPENPOSTER_TEST_NODE_URL ?? "http://localhost:8081/dev/reset?token=dev-reset",
-  process.env.OPENPOSTER_TEST_NODE_B_URL ?? "http://localhost:8082/dev/reset?token=dev-reset",
+  process.env.OPENPOSTER_TEST_DIRECTORY_URL ?? "http://localhost:8084",
+  process.env.OPENPOSTER_TEST_NODE_URL ?? "http://localhost:8081",
+  process.env.OPENPOSTER_TEST_NODE_B_URL ?? "http://localhost:8082",
   process.env.OPENPOSTER_INDEXER_BASE_URL ?? "http://localhost:8090",
   process.env.OPENPOSTER_ISSUER_BASE_URL ?? "http://localhost:8085",
-].map((url, index) => {
-  if (index <= 2) return url;
-  return `${url}/dev/reset?token=${encodeURIComponent(process.env.OPENPOSTER_TEST_RESET_TOKEN ?? "dev-reset")}`;
-}).concat("http://localhost:32401/dev/reset?token=dev-reset");
+  process.env.OPENPOSTER_TEST_PLEX_URL ?? "http://localhost:32401",
+].map(toResetUrl);
 
 const HEALTH_URLS = [
   process.env.OPENPOSTER_DIRECTORY_URL ?? "http://localhost:8084/v1/health",
@@ -117,6 +121,7 @@ async function resetForTests(): Promise<void> {
 }
 
 export async function restorePreservedStateIfNeeded(): Promise<void> {
+  if (ISOLATED_E2E) return;
   if (!(await pathExists(SNAPSHOT_META))) return;
 
   const meta = JSON.parse(await readFile(SNAPSHOT_META, "utf8")) as { snapshotDir: string };
@@ -128,6 +133,11 @@ export async function restorePreservedStateIfNeeded(): Promise<void> {
 }
 
 export async function prepareIsolatedE2EState(): Promise<void> {
+  if (ISOLATED_E2E) {
+    await waitForStatefulServices();
+    await resetForTests();
+    return;
+  }
   await restorePreservedStateIfNeeded();
 
   const snapshotDir = path.join(SNAPSHOT_ROOT, "original");
@@ -143,6 +153,7 @@ export async function prepareIsolatedE2EState(): Promise<void> {
 }
 
 export async function restorePreservedState(): Promise<void> {
+  if (ISOLATED_E2E) return;
   if (!(await pathExists(SNAPSHOT_META))) return;
 
   const meta = JSON.parse(await readFile(SNAPSHOT_META, "utf8")) as { snapshotDir: string };
