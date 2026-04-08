@@ -69,6 +69,8 @@ interface PosterCardProps {
   subtitleSlot?: React.ReactNode;
   /** Optional node rendered between the image and the title strip (e.g. a status bar). */
   statusBar?: React.ReactNode;
+  /** Optional node rendered in the top-right corner of the image (e.g. a group count badge). */
+  topRightSlot?: React.ReactNode;
 }
 
 function PosterCardImage({
@@ -142,6 +144,7 @@ export default function PosterCard({
   subscribeSlot,
   hideCreator = false,
   statusBar,
+  topRightSlot,
 }: PosterCardProps) {
   const t = useTranslations("posterCard");
   const tc = useTranslations("common");
@@ -215,6 +218,7 @@ export default function PosterCard({
       subscribeSlot={subscribeSlot}
       statusBar={statusBar}
       topLeftSlot={typeChipProps ? <CardChip label={typeChipProps.label} color={typeChipProps.color} /> : undefined}
+      topRightSlot={topRightSlot}
       menuSlot={menuSlot}
       managed={managed}
       selected={selected}

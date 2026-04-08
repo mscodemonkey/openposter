@@ -802,8 +802,8 @@ export default function MyMediaContent() {
           return Promise.all([
             fetchMediaLibrary(resolvedServerId),
             getTrackedArtwork(connection.nodeUrl, connection.adminToken),
-            Promise.resolve(srvList),
-          ]);
+            Promise.resolve(srvList) as Promise<MediaServerConfig[]>,
+          ] as const);
         })
         .then(([lib, tracked, srvList]) => {
           if (cancelled) return;
@@ -888,20 +888,22 @@ export default function MyMediaContent() {
   useEffect(() => {
     if (!conn || !pendingServerSync) return;
 
+    const activeConn = conn;
+    const activeSync = pendingServerSync;
     let cancelled = false;
 
     async function pollPendingServerSync() {
       try {
         const [status, lib] = await Promise.all([
-          fetchSyncStatus(conn.nodeUrl, conn.adminToken, pendingServerSync.serverId),
-          fetchMediaLibrary(pendingServerSync.serverId),
+          fetchSyncStatus(activeConn.nodeUrl, activeConn.adminToken, activeSync.serverId),
+          fetchMediaLibrary(activeSync.serverId),
         ]);
         if (cancelled) return;
 
         const itemCount = lib.movies.length + lib.shows.length + lib.collections.length;
         const finishedAfterStart =
           !!status.last_synced_at &&
-          new Date(status.last_synced_at).getTime() >= pendingServerSync.startedAt - 1000;
+          new Date(status.last_synced_at).getTime() >= activeSync.startedAt - 1000;
 
         if (status.is_syncing) {
           return;

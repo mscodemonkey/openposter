@@ -19,6 +19,7 @@ interface ArtworkCardFrameProps {
   subscribeSlot?: ReactNode;
   statusBar?: ReactNode;
   topLeftSlot?: ReactNode;
+  topRightSlot?: ReactNode;
   menuSlot?: ReactNode;
   bottomLeftSlot?: ReactNode;
   bottomRightSlot?: ReactNode;
@@ -51,6 +52,7 @@ export default function ArtworkCardFrame({
   subscribeSlot,
   statusBar,
   topLeftSlot,
+  topRightSlot,
   menuSlot,
   bottomLeftSlot,
   bottomRightSlot,
@@ -90,6 +92,11 @@ export default function ArtworkCardFrame({
         {topLeftSlot && (
           <Box sx={{ position: "absolute", top: 0, left: 0 }}>
             {topLeftSlot}
+          </Box>
+        )}
+        {topRightSlot && (
+          <Box sx={{ position: "absolute", top: 4, right: 4, zIndex: 1, pointerEvents: "none" }}>
+            {topRightSlot}
           </Box>
         )}
         {managed && (
