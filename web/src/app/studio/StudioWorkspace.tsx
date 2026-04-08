@@ -3242,7 +3242,7 @@ export default function StudioWorkspace() {
       return (
         <StudioWelcome
           showHero={false}
-          creatorHandle={conn?.creatorDisplayName || conn?.creatorId || undefined}
+          creatorHandle={conn?.creatorId || undefined}
           collectionCount={sidebarCollections.length}
           movieCount={sidebarMovies.length}
           tvShowCount={sidebarTvShows.length}
